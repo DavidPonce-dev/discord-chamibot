@@ -5,7 +5,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const queue = musicManager.get(interaction.guildId!)
 
   if (!queue || queue.getSize() === 0) {
-    return interaction.reply({ content: "La cola está vacía", ephemeral: true })
+    return await interaction.reply({ content: "La cola está vacía", ephemeral: true })
   }
 
   const tracks = queue.getQueue()
@@ -24,5 +24,5 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     lines.push(`... y ${tracks.length - 10} más`)
   }
 
-  await interaction.reply(lines.join("\n"))
+  return await interaction.reply(lines.join("\n"))
 }
