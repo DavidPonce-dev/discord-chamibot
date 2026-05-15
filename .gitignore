@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Docker
+.docker/
+
+# Logs
+*.log
+npm-debug.log*
+
+nul
