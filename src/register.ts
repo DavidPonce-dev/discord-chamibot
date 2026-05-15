@@ -40,6 +40,10 @@ const commands = [
     name: "ap",
     description: "Activa/desactiva el autoplay",
   },
+  {
+    name: "h",
+    description: "Muestra todos los comandos disponibles",
+  },
 ]
 
 const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!)

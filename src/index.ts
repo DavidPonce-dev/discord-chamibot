@@ -7,6 +7,7 @@ import { execute as pause } from "./commands/pause"
 import { execute as resume } from "./commands/resume"
 import { execute as stop } from "./commands/stop"
 import { execute as autoplay } from "./commands/autoplay"
+import { execute as help } from "./commands/help"
 
 dotenv.config()
 
@@ -25,6 +26,7 @@ commands.set("pa", pause)
 commands.set("r", resume)
 commands.set("st", stop)
 commands.set("ap", autoplay)
+commands.set("h", help)
 
 client.once("clientReady", () => {
   console.log(`Bot conectado como ${client.user?.tag}`)
