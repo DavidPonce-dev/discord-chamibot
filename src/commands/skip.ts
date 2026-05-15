@@ -5,14 +5,15 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const queue = musicManager.get(interaction.guildId!)
 
   if (!queue) {
-    return await interaction.reply({ content: "No hay nada reproduciéndose", ephemeral: true })
-    
+    await interaction.reply({ content: "No hay nada reproduciéndose", ephemeral: true })
+    return
   }
 
   if (!queue.getCurrentTrack()) {
-    return await interaction.reply({ content: "No hay nada reproduciéndose", ephemeral: true })
+    await interaction.reply({ content: "No hay nada reproduciéndose", ephemeral: true })
+    return
   }
 
   queue.skip()
-  return await interaction.reply("⏭ Saltado")
+  await interaction.reply("⏭ Saltado")
 }

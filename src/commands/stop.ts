@@ -5,10 +5,11 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const queue = musicManager.get(interaction.guildId!)
 
   if (!queue) {
-    return await interaction.reply({ content: "No hay una sesión activa", ephemeral: true })
+    await interaction.reply({ content: "No hay una sesión activa", ephemeral: true })
+    return
   }
 
   queue.stop()
   musicManager.delete(interaction.guildId!)
-  return await interaction.reply("⏹ Detenido y cola limpiada")
+  await interaction.reply("⏹ Detenido y cola limpiada")
 }

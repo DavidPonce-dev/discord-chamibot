@@ -10,10 +10,11 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const voiceChannel = member?.voice.channel;
 
   if (!voiceChannel) {
-    return await interaction.reply({
+    await interaction.reply({
       content: "Debés entrar a un canal de voz",
       ephemeral: true,
     });
+    return
   }
 
   await interaction.deferReply();
@@ -40,9 +41,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       duration: trackInfo.duration,
     });
 
-    return await interaction.editReply(`Añadido: **${trackInfo.title}**`);
+    await interaction.editReply(`Añadido: **${trackInfo.title}**`);
   } catch (error) {
-    console.error(error);
-    return await interaction.editReply("Error al procesar el tema");
+    console.error("Error al procesar el tema");
+    await interaction.editReply("Error al procesar el tema");
   }
 }

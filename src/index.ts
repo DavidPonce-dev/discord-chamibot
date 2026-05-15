@@ -9,6 +9,15 @@ import { execute as stop } from "./commands/stop"
 import { execute as autoplay } from "./commands/autoplay"
 import { execute as help } from "./commands/help"
 
+process.on("unhandledRejection", (error) => {
+  console.error("Error no manejado")
+})
+
+process.on("uncaughtException", (error:unknown) => {
+  console.error("Error crítico")
+  process.exit(1)
+})
+
 dotenv.config()
 
 const client = new Client({
@@ -29,7 +38,15 @@ commands.set("ap", autoplay)
 commands.set("h", help)
 
 client.once("clientReady", () => {
-  console.log(`Bot conectado como ${client.user?.tag}`)
+  if (!client.user) {
+    console.error("Bot conectado pero sin usuario")
+    return
+  }
+  console.log(`Bot conectado como ${client.user.tag}`)
+})
+
+client.on("error", (error) => {
+  console.error("Error del cliente Discord")
 })
 
 client.on("interactionCreate", async (interaction) => {
@@ -37,8 +54,20 @@ client.on("interactionCreate", async (interaction) => {
 
   const handler = commands.get(interaction.commandName)
   if (handler) {
-    await handler(interaction)
+    try {
+      await handler(interaction)
+    } catch (error) {
+      console.error(`Error en comando ${interaction.commandName}`)
+      if (interaction.replied || interaction.deferred) {
+        await interaction.editReply("Ocurrió un error al ejecutar el comando")
+      } else {
+        await interaction.reply({ content: "Ocurrió un error al ejecutar el comando", ephemeral: true })
+      }
+    }
   }
 })
 
-client.login(process.env.DISCORD_TOKEN)
+client.login(process.env.DISCORD_TOKEN).catch((error) => {
+  console.error("Error al iniciar sesión")
+  process.exit(1)
+})

@@ -1,5 +1,16 @@
 import play from "play-dl"
 
+function sanitizeYouTubeUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const vid = parsed.searchParams.get("v")
+    if (vid) {
+      return `https://www.youtube.com/watch?v=${vid}`
+    }
+  } catch {}
+  return url
+}
+
 export async function resolveQuery(query: string): Promise<{
   url: string
   title: string
@@ -8,9 +19,10 @@ export async function resolveQuery(query: string): Promise<{
   const isUrl = query.startsWith("http://") || query.startsWith("https://")
 
   if (isUrl) {
-    const info = await play.video_basic_info(query)
+    const cleanUrl = sanitizeYouTubeUrl(query)
+    const info = await play.video_basic_info(cleanUrl)
     return {
-      url: query,
+      url: cleanUrl,
       title: info.video_details.title ?? "Unknown",
       duration: info.video_details.durationRaw,
     }

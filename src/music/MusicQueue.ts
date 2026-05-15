@@ -34,16 +34,24 @@ export class MusicQueue {
 
   private registerEvents() {
     this.player.on(AudioPlayerStatus.Idle, async () => {
-      this.isPlaying = false
-      this.current = null
-      await this.processQueue()
+      try {
+        this.isPlaying = false
+        this.current = null
+        await this.processQueue()
+      } catch (error) {
+        console.error("Error en Idle handler")
+      }
     })
 
     this.player.on("error", async (error) => {
-      console.error("Player Error:", error)
-      this.isPlaying = false
-      this.current = null
-      await this.processQueue()
+      try {
+        console.error("Error del AudioPlayer")
+        this.isPlaying = false
+        this.current = null
+        await this.processQueue()
+      } catch (error) {
+        console.error("Error en Player handler")
+      }
     })
 
     this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
@@ -86,6 +94,7 @@ export class MusicQueue {
         console.error("Track sin URL, saltando")
         this.isPlaying = false
         this.current = null
+        await this.processQueue()
         return
       }
 
@@ -94,17 +103,14 @@ export class MusicQueue {
         output: "-",
         quiet: true,
         noWarnings: true,
+        forceOverwrites: true,
       }, { stdio: ["ignore", "pipe", "ignore"] })
 
       this.activeProcess = subprocess
       const stream = subprocess.stdout!
 
-      subprocess.on("error", async (err) => {
-        console.error("yt-dlp error:", err.message)
-        this.isPlaying = false
-        this.current = null
-        if (this.player) this.player.stop()
-        await this.processQueue()
+      subprocess.on("error", (err: Error) => {
+        console.error("Error en descarga")
       })
 
       const probe = await demuxProbe(stream)
@@ -114,7 +120,7 @@ export class MusicQueue {
       })
       this.player.play(resource)
     } catch (error) {
-      console.error("Track Error:", error)
+      console.error("Error al reproducir track")
       this.isPlaying = false
       this.current = null
       await this.processQueue()
@@ -135,11 +141,15 @@ export class MusicQueue {
       })
       await this.processQueue()
     } catch (error) {
-      console.error("Autoplay Error:", error)
+      console.error("Error en autoplay")
     }
   }
 
   skip() {
+    if (this.activeProcess && !this.activeProcess.killed) {
+      this.activeProcess.kill()
+    }
+    this.activeProcess = undefined
     this.player.stop()
   }
 

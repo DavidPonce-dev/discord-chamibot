@@ -5,19 +5,21 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const queue = musicManager.get(interaction.guildId!);
 
   if (!queue || !queue.getCurrentTrack()) {
-    return await interaction.reply({
+    await interaction.reply({
       content: "No hay nada reproduciéndose",
       ephemeral: true,
     });
+    return
   }
 
   if (queue.isPaused()) {
-    return await interaction.reply({
+    await interaction.reply({
       content: "Ya está pausado",
       ephemeral: true,
     });
+    return
   }
 
   queue.pause();
-  return await interaction.reply("⏸ Pausado");
+  await interaction.reply("⏸ Pausado");
 }
