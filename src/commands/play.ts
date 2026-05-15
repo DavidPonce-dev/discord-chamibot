@@ -14,7 +14,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       content: "Debés entrar a un canal de voz",
       ephemeral: true,
     });
-    return;
   }
 
   await interaction.deferReply();
