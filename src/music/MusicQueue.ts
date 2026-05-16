@@ -34,7 +34,9 @@ export class MusicQueue {
   private loopMode: "none" | "one" | "all" = "none"
   private playbackStart: number | null = null
   private seeking = false
+  private autoplayFails = 0
   onTrackChange?: (guildId: string) => void | Promise<void>
+  onDisconnect?: (guildId: string) => void | Promise<void>
 
   constructor(connection: VoiceConnection, autoplay = false) {
     this.connection = connection
@@ -84,7 +86,9 @@ export class MusicQueue {
           entersState(this.connection, VoiceConnectionStatus.Connecting, 5_000),
         ])
       } catch {
+        const guildId = this.connection.joinConfig.guildId
         this.destroy()
+        await this.onDisconnect?.(guildId)
       }
     })
   }
@@ -259,6 +263,7 @@ export class MusicQueue {
       const results = await play.search(`${this.lastTrackTitle} music`, { limit: 1 })
       if (!results.length) return
 
+      this.autoplayFails = 0
       const video = results[0]
       const id = video.id
       this.queue.push({
@@ -272,7 +277,17 @@ export class MusicQueue {
       await this.processQueue()
     } catch (error) {
       console.error("Error en autoplay")
+      this.autoplayFails++
+      if (this.autoplayFails >= 3) {
+        this.autoplay = false
+        this.autoplayFails = 0
+        console.error("Autoplay desactivado por fallos consecutivos")
+      }
     }
+  }
+
+  clear() {
+    this.queue = []
   }
 
   skip() {

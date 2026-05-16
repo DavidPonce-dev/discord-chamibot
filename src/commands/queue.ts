@@ -14,6 +14,10 @@ export function setQueuePage(guildId: string, page: number) {
   queuePages.set(guildId, page)
 }
 
+export function clearQueuePage(guildId: string) {
+  queuePages.delete(guildId)
+}
+
 export function buildQueueContent(queue: MusicQueue, page: number, statusTitle?: string) {
   const tracks = queue.getQueue()
   const current = queue.getCurrentTrack()
@@ -123,7 +127,7 @@ export function buildQueueContent(queue: MusicQueue, page: number, statusTitle?:
   )
   rows.push(playbackRow)
 
-  return {  embeds: [embed], components: rows }
+  return { embeds: [embed], components: rows }
 }
 
 function buildEmptyContent() {
@@ -163,6 +167,7 @@ export async function updateQueueForGuild(guildId: string, statusTitle?: string,
       await msg.delete()
     } catch { /* message might be gone */ }
     musicManager.clearQueueMessage(guildId)
+    clearQueuePage(guildId)
     musicManager.delete(guildId)
     return
   }

@@ -176,9 +176,7 @@ client.on("interactionCreate", async (interaction) => {
           await refreshQueueMessage(interaction)
           break
         case "q_playback_clear":
-          while (queue.getSize() > 0) {
-            queue.remove(0)
-          }
+          queue.clear()
           await refreshQueueMessage(interaction)
           break
         case "q_playback_stop":
@@ -193,11 +191,15 @@ client.on("interactionCreate", async (interaction) => {
           await interaction.reply({ content: "Acción no reconocida", ephemeral: true })
           break
       }
-    } catch {
-      console.error("Error en botón")
-      if (!interaction.replied) {
-        await interaction.reply({ content: "Error al ejecutar la acción", ephemeral: true })
-      }
+    } catch (error) {
+      console.error("Error en botón", error)
+      try {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.editReply("Error al ejecutar la acción")
+        } else {
+          await interaction.reply({ content: "Error al ejecutar la acción", ephemeral: true })
+        }
+      } catch { /* interaction might be expired */ }
     }
     return
   }

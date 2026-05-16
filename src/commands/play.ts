@@ -2,7 +2,7 @@ import { ChatInputCommandInteraction } from "discord.js";
 import { joinVoiceChannel } from "@discordjs/voice";
 import { resolveQuery } from "../utils/search";
 import { musicManager } from "../music/MusicManager";
-import { ensureQueueMessage, updateQueueForGuild, setQueuePage, TRACKS_PER_PAGE } from "./queue";
+import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage, TRACKS_PER_PAGE } from "./queue";
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const query = interaction.options.getString("query", true);
@@ -39,6 +39,16 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       queue.onTrackChange = (guildId) => {
         setQueuePage(guildId, 1)
         updateQueueForGuild(guildId)
+      }
+    }
+
+    if (!queue.onDisconnect) {
+      queue.onDisconnect = (guildId) => {
+        const msg = musicManager.getQueueMessage(guildId)
+        if (msg) msg.delete().catch(() => {})
+        musicManager.clearQueueMessage(guildId)
+        clearQueuePage(guildId)
+        musicManager.delete(guildId)
       }
     }
 
