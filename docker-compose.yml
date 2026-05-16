@@ -1,6 +1,6 @@
 services:
   bot:
     build: .
-    container_name: discord-music-bot
+    container_name: charmin-charmeleon-bot
     restart: unless-stopped
     env_file: .env

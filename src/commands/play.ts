@@ -4,6 +4,34 @@ import { resolveQuery } from "../utils/search";
 import { musicManager } from "../music/MusicManager";
 import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage, TRACKS_PER_PAGE } from "./queue";
 
+const progressIntervals = new Map<string, NodeJS.Timeout>()
+
+function updateProgress(guildId: string) {
+  const queue = musicManager.get(guildId)
+  if (!queue || (!queue.getCurrentTrack() && queue.getSize() === 0)) {
+    const iv = progressIntervals.get(guildId)
+    if (iv) {
+      clearInterval(iv)
+      progressIntervals.delete(guildId)
+    }
+    return
+  }
+  updateQueueForGuild(guildId)
+}
+
+function startProgressUpdates(guildId: string) {
+  stopProgressUpdates(guildId)
+  progressIntervals.set(guildId, setInterval(() => updateProgress(guildId), 3000))
+}
+
+function stopProgressUpdates(guildId: string) {
+  const iv = progressIntervals.get(guildId)
+  if (iv) {
+    clearInterval(iv)
+    progressIntervals.delete(guildId)
+  }
+}
+
 export async function execute(interaction: ChatInputCommandInteraction) {
   const query = interaction.options.getString("query", true);
 
@@ -39,6 +67,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       queue.onTrackChange = (guildId) => {
         setQueuePage(guildId, 1)
         updateQueueForGuild(guildId)
+        const q = musicManager.get(guildId)
+        if (q?.getCurrentTrack()) {
+          startProgressUpdates(guildId)
+        }
       }
     }
 
@@ -48,6 +80,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         if (msg) msg.delete().catch(() => {})
         musicManager.clearQueueMessage(guildId)
         clearQueuePage(guildId)
+        stopProgressUpdates(guildId)
         musicManager.delete(guildId)
       }
     }

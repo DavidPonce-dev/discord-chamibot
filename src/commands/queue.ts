@@ -18,6 +18,37 @@ export function clearQueuePage(guildId: string) {
   queuePages.delete(guildId)
 }
 
+function parseDuration(dur: string | undefined): number {
+  if (!dur) return 0
+  const parts = dur.split(":").map(Number)
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  return parts[0] || 0
+}
+
+function formatPos(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+  return `${m}:${String(s).padStart(2, "0")}`
+}
+
+const NBSP = "\u00A0"
+
+function buildProgressBar(pos: number, total: number, width = 36): string {
+  if (total <= 0) return `[${NBSP.repeat(width)}] ${formatPos(pos)} / ?:??`
+  const units = Math.round((pos / total) * width * 2)
+  let bar = ""
+  for (let i = 0; i < width; i++) {
+    const filled = units - i * 2
+    if (filled >= 2) bar += "█"
+    else if (filled === 1) bar += "▌"
+    else bar += NBSP
+  }
+  return `[${bar}] ${formatPos(pos)} / ${formatPos(total)}`
+}
+
 export function buildQueueContent(queue: MusicQueue, page: number, statusTitle?: string) {
   const tracks = queue.getQueue()
   const current = queue.getCurrentTrack()
@@ -33,12 +64,15 @@ export function buildQueueContent(queue: MusicQueue, page: number, statusTitle?:
   }
   if (current) {
     embedLines.push(`Reproduciendo : ${current.title}`)
+    const pos = queue.getPosition()
+    const total = parseDuration(current.duration)
+    embedLines.push(buildProgressBar(pos, total))
   }
   const embedDescription = embedLines.join("\n")
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle("🎵 Chamibot Reproductor🎵")
+    .setTitle("🎵 Charmin Charmeleon 🎵")
   if (embedDescription) {
     embed.setDescription(embedDescription)
   }
@@ -120,10 +154,10 @@ export function buildQueueContent(queue: MusicQueue, page: number, statusTitle?:
       .setLabel("Limpiar")
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId("q_playback_stop")
-      .setEmoji("⏹")
-      .setLabel("Detener")
-      .setStyle(ButtonStyle.Danger),
+      .setCustomId("q_playback_autoplay")
+      .setEmoji("💿")
+      .setLabel(queue.isAutoplayEnabled() ? "Radio: ON" : "Radio: OFF")
+      .setStyle(queue.isAutoplayEnabled() ? ButtonStyle.Success : ButtonStyle.Secondary),
   )
   rows.push(playbackRow)
 
@@ -133,7 +167,7 @@ export function buildQueueContent(queue: MusicQueue, page: number, statusTitle?:
 function buildEmptyContent() {
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle("🎵 Chamibot Reproductor🎵")
+    .setTitle("🎵 Charmin Charmeleon 🎵")
     .setDescription("La cola está vacía")
   return { embeds: [embed], components: [] }
 }
@@ -177,7 +211,7 @@ export async function updateQueueForGuild(guildId: string, statusTitle?: string,
   try {
     await msg.edit(buildQueueContent(queue, currentPage, statusTitle))
   } catch {
-    musicManager.clearQueueMessage(guildId)
+    console.log("[Queue] Error al editar mensaje (transitorio, se reintenta)")
   }
 }
 
@@ -208,14 +242,27 @@ export async function ensureQueueMessage(
 }
 
 export async function refreshQueueMessage(interaction: MessageComponentInteraction, page?: number) {
-  const queue = musicManager.get(interaction.guildId!)
+  const guildId = interaction.guildId!
+  const queue = musicManager.get(guildId)
+  const msg = musicManager.getQueueMessage(guildId)
 
   if (!queue || (queue.getSize() === 0 && !queue.getCurrentTrack())) {
-    await interaction.update(buildEmptyContent())
+    if (msg) {
+      await interaction.deferUpdate()
+      await msg.edit(buildEmptyContent()).catch(() => {})
+    } else {
+      await interaction.update(buildEmptyContent())
+    }
     return
   }
 
-  const currentPage = page ?? queuePages.get(interaction.guildId!) ?? 1
-  queuePages.set(interaction.guildId!, currentPage)
-  await interaction.update(buildQueueContent(queue, currentPage))
+  const currentPage = page ?? queuePages.get(guildId) ?? 1
+  queuePages.set(guildId, currentPage)
+
+  if (msg) {
+    await interaction.deferUpdate()
+    await msg.edit(buildQueueContent(queue, currentPage)).catch(() => {})
+  } else {
+    await interaction.update(buildQueueContent(queue, currentPage))
+  }
 }

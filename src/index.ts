@@ -21,12 +21,12 @@ import { refreshQueueMessage, getQueuePage } from "./commands/queue"
 import { musicManager } from "./music/MusicManager"
 import { autocompleteSearch } from "./utils/search"
 
-process.on("unhandledRejection", () => {
-  console.error("Error no manejado")
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason)
 })
 
-process.on("uncaughtException", () => {
-  console.error("Error crítico")
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err)
   process.exit(1)
 })
 
@@ -179,13 +179,10 @@ client.on("interactionCreate", async (interaction) => {
           queue.clear()
           await refreshQueueMessage(interaction)
           break
-        case "q_playback_stop":
-          queue.stop()
-          musicManager.delete(interaction.guildId!)
-          musicManager.clearQueueMessage(interaction.guildId!)
-          try {
-            await interaction.update({ embeds: [], components: [], content: "⏹ Reproducción detenida" })
-          } catch { /* message might be gone */ }
+        case "q_playback_autoplay":
+          queue.toggleAutoplay()
+          musicManager.toggleAutoplayPref(interaction.guildId!)
+          await refreshQueueMessage(interaction)
           break
         default:
           await interaction.reply({ content: "Acción no reconocida", ephemeral: true })

@@ -1,9 +1,9 @@
 {
-  "name": "discord-music-bot",
+  "name": "charmin-charmeleon",
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "set NODE_OPTIONS=--no-deprecation && tsx src/index.ts",
     "register": "tsx src/register.ts"
   },
   "dependencies": {

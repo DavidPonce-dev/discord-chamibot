@@ -1,7 +1,53 @@
-# Chamibot — Discord Music Bot
+# 🎵 Charmin Charmeleon — Discord Music Bot
 
-Bot de música para Discord con soporte de URLs de YouTube y búsqueda por texto.
-Reproduce audio en canales de voz con cola de reproducción y autoplay.
+```
+  ___ _               _ _           _
+ / __\ |__   ___  ___| (_) ___ __ _| |_
+/ /  | '_ \ / _ \/ __| | |/ __/ _` | __|
+\ \__| | | |  __/ (__| | | (_| (_| | |_
+ \___/_| |_|\___|\___|_|_|\___\__,_|\__|
+```
+
+Bot de música para Discord con interfaz de reproductor interactiva.
+Reproduce audio desde YouTube (URLs o búsqueda por texto) con cola de reproducción, controles en tiempo real y modo radio.
+
+---
+
+## 🎛️ Interfaz del Reproductor
+
+```
+┌─────────────────────────────────────────────────┐
+│  🎵 Charmin Charmeleon 🎵                         │
+│  Reproduciendo : Nombre del tema                │
+├─────────────────────────────────────────────────┤
+│  [🗑] [⬆] [⬇] 1. Tema uno (3:45)               │
+│  [🗑] [⬆] [⬇] 2. Tema dos (4:20)               │
+│  [🗑] [⬆] [⬇] 3. Tema tres (5:10)               │
+│             [◀] [1/3] [▶]                        │
+│  [⏸ Pausar] [⏭ Siguiente] [🔀 Mezclar]          │
+│  [🗑 Limpiar] [💿 Radio: ON]                     │
+└─────────────────────────────────────────────────┘
+```
+
+> 🖼️ *Próximamente: capturas de pantalla reales del reproductor en acción*
+
+### Funcionalidades
+
+| Característica | Descripción |
+|---------------|-------------|
+| **Cola visual** | Lista paginada con hasta 3 tracks por página |
+| **Controles por track** | Botones individuales 🗑 ⬆ ⬇ para eliminar, subir o bajar cada tema |
+| **Paginación** | ◀ / ▶ con indicador de página actual |
+| **Playback en vivo** | Pausar, saltar, mezclar, limpiar cola desde el mismo mensaje |
+| **Modo Radio** | 💿 Activable desde el reproductor: agrega automáticamente tracks similares |
+| **Loop modes** | `/loop` — none → one → all (sin necesidad de botón) |
+| **Actualización en tiempo real** | Interacción asincrónica: los botones responden sin bloquear |
+
+### Cómo funciona
+
+Cada servidor tiene **un único mensaje de cola** que se actualiza dinámicamente. Los botones usan `interaction.update()` para editar el mensaje in-place, sin spam de mensajes nuevos.
+
+---
 
 ## Comandos
 
@@ -14,9 +60,24 @@ Reproduce audio en canales de voz con cola de reproducción y autoplay.
 | `/r` | Reanuda la reproducción |
 | `/st` | Detiene y limpia la cola |
 | `/ap` | Activa/desactiva el autoplay |
+| `/loop` | Cicla modos: none → one → all |
+| `/shuffle` | Mezcla aleatoriamente la cola |
+| `/remove` | Elimina un track por posición |
+| `/np` | Muestra el tema actual |
+| `/seek` | Adelanta o retrocede en el tema |
 | `/h` | Muestra la ayuda |
 
+---
+
 ## Stack
+
+```
+  ______  _____  _   _  _____
+ |  _ \ \/ / _ \| \ | | ____|
+ | | | \  / | | |  \| |  _|
+ | |_| /  \ |_| | |\  | |___
+ |____/_/\_\___/|_| \_|_____|
+```
 
 - **Runtime:** Node.js 22 + TypeScript
 - **Discord API:** discord.js v14
@@ -25,6 +86,8 @@ Reproduce audio en canales de voz con cola de reproducción y autoplay.
 - **Búsqueda:** play-dl
 - **Audio:** FFmpeg (opcional, para conversión)
 
+---
+
 ## Estructura del proyecto
 
 ```
@@ -32,14 +95,19 @@ src/
 ├── commands/       # Handlers de comandos slash
 │   ├── play.ts     #   /p — buscar y reproducir
 │   ├── skip.ts     #   /s — saltar track
-│   ├── queue.ts    #   /q — mostrar cola
+│   ├── queue.ts    #   /q — interfaz del reproductor
 │   ├── pause.ts    #   /pa — pausar
 │   ├── resume.ts   #   /r — reanudar
 │   ├── stop.ts     #   /st — detener y limpiar
 │   ├── autoplay.ts #   /ap — toggle autoplay
+│   ├── loop.ts     #   /loop — toggle loop modes
+│   ├── shuffle.ts  #   /shuffle — mezclar cola
+│   ├── remove.ts   #   /remove — eliminar track
+│   ├── np.ts       #   /np — now playing
+│   ├── seek.ts     #   /seek — adelantar/retroceder
 │   └── help.ts     #   /h — ayuda
 ├── music/
-│   ├── MusicQueue.ts   # Cola, reproducción, eventos del player
+│   ├── MusicQueue.ts   # Motor de reproducción y cola
 │   ├── MusicManager.ts # Gestión de colas por servidor
 │   └── Track.ts        # Interfaz de track
 ├── utils/
@@ -48,28 +116,72 @@ src/
 └── register.ts     # Script para registrar comandos slash
 ```
 
+---
+
 ## Arquitectura
 
 ```
-Usuario escribe /p <query>
-  → interactionCreate (index.ts) captura el comando
-  → play.ts ejecuta la búsqueda (play-dl) o sanitiza la URL
-  → MusicManager.create() o .get() obtiene la cola del servidor
-  → MusicQueue.add() encola y arranca processQueue()
-  → yt-dlp descarga el audio y lo envía por stdout
-  → @discordjs/voice demodula con demuxProbe y envía al canal de voz
-  → Al terminar (Idle), processQueue() pasa al siguiente track
+  ┌──────────┐    ┌──────────┐    ┌────────────┐
+  │  Usuario  │───▶│  Discord │───▶│   index.ts │
+  │  /p query │    │  Gateway │    │  handler   │
+  └──────────┘    └──────────┘    └─────┬──────┘
+                                        │
+                               ┌────────▼──────┐
+                               │   play.ts      │
+                               │  resolveQuery  │
+                               └───────┬───────┘
+                                       │
+                  ┌────────────────────┼────────────────────┐
+                  ▼                    ▼                    ▼
+           ┌──────────┐       ┌──────────────┐    ┌────────────────┐
+           │ play-dl  │       │ MusicManager │    │ ensureMessage  │
+           │ search/  │       │  .get/create │    │ (interfaz cola)│
+           │ resolve  │       └──────┬───────┘    └────────────────┘
+           └──────────┘              │
+                                     ▼
+                            ┌────────────────┐
+                            │  MusicQueue    │
+                            │  .add()        │
+                            │  .processQueue │
+                            └───────┬────────┘
+                                    │
+                           ┌────────▼────────┐
+                           │   yt-dlp stdout │
+                           │  → demuxProbe   │
+                           │  → AudioPlayer  │
+                           │  → VC subscribe │
+                           └─────────────────┘
 ```
+
+---
 
 ## Manejo de errores
 
-El bot captura errores en múltiples capas:
+```
+  ⚠️  CAPTURA EN MÚLTIPLES CAPAS  ⚠️
+  ┌─────────────────────────────────────────┐
+  │  Global: unhandledRejection             │
+  │         uncaughtException → exit(1)    │
+  ├─────────────────────────────────────────┤
+  │  Discord: client.on("error")            │
+  ├─────────────────────────────────────────┤
+  │  Comandos: try-catch + reply o editReply│
+  ├─────────────────────────────────────────┤
+  │  Reprod.: yt-dlp / demuxProbe / Idle    │
+  ├─────────────────────────────────────────┤
+  │  Botones: try-catch + editReply fallback│
+  └─────────────────────────────────────────┘
+```
 
+El bot captura errores en múltiples capas:
 - **Global:** `unhandledRejection` y `uncaughtException` evitan que el proceso muera
 - **Cliente Discord:** listener `client.on("error")` para errores de WebSocket
 - **Comandos:** cada handler está envuelto en try-catch, responde al usuario sin crashear
 - **Reproducción:** errores de yt-dlp, demuxProbe o el AudioPlayer se capturan y la cola continúa
+- **Botones:** si un interaction expiró, intenta `editReply` como fallback en vez de crashear
 - **Logs:** mensajes cortos y legibles, sin stack traces
+
+---
 
 ## Desarrollo local
 
@@ -97,6 +209,8 @@ npm run dev
 5. Dar permisos: `Send Messages`, `Connect`, `Speak`, `Use Slash Commands`
 6. Invitar el bot al servidor con la URL generada
 
+---
+
 ## Deploy con Docker
 
 ```bash
@@ -119,6 +233,8 @@ El `docker-compose.yml` incluye:
 - Política de reinicio `unless-stopped`
 - Mount del volumen para logs
 
+---
+
 ## Variables de entorno
 
 | Variable | Descripción |
@@ -126,7 +242,15 @@ El `docker-compose.yml` incluye:
 | `DISCORD_TOKEN` | Token del bot (Discord Developer Portal) |
 | `CLIENT_ID` | Application ID del bot |
 
+---
+
 ## Troubleshooting
+
+```
+  ╔══════════════════════════════════════════╗
+  ║   ¿ALGO NO ANDA?  REVISÁ ESTO PRIMERO   ║
+  ╚══════════════════════════════════════════╝
+```
 
 | Problema | Causa probable | Solución |
 |----------|---------------|----------|

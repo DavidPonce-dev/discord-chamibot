@@ -17,7 +17,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle("🎵 Chamibot Reproductor🎵")
+    .setTitle("🎵 Charmin Charmeleon 🎵")
     .setDescription(`Reproduciendo : ${track.title}`)
     .addFields(
       { name: "Pedido por", value: track.requestedBy, inline: true },
