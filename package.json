@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "set NODE_OPTIONS=--no-deprecation && tsx src/index.ts",
-    "register": "tsx src/register.ts"
+    "register": "tsx src/register.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@discordjs/voice": "^0.19.2",
@@ -18,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^22.13.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.6"
   }
 }

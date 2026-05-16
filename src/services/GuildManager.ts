@@ -2,7 +2,7 @@ import { VoiceConnection } from "@discordjs/voice"
 import { Message } from "discord.js"
 import { TrackScheduler } from "./TrackScheduler"
 
-class GuildManager {
+export class GuildManager {
   private sessions = new Map<string, TrackScheduler>()
   private autoplayPrefs = new Map<string, boolean>()
   private queueMessages = new Map<string, Message>()

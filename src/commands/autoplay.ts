@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { guildManager } from "../services/GuildManager"
+import { replyTemporary } from "../utils/messages"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const queue = guildManager.get(interaction.guildId!)
@@ -7,10 +8,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   if (queue) {
     const newState = queue.toggleAutoplay()
     guildManager.toggleAutoplayPref(interaction.guildId!)
-    await interaction.reply(`Autoplay: ${newState ? "✅ Activado" : "❌ Desactivado"}`)
+    await replyTemporary(interaction, `Autoplay: ${newState ? "✅ Activado" : "❌ Desactivado"}`)
     return
   }
 
   const newState = guildManager.toggleAutoplayPref(interaction.guildId!)
-  await interaction.reply(`Autoplay: ${newState ? "✅ Activado" : "❌ Desactivado"}`)
+  await replyTemporary(interaction, `Autoplay: ${newState ? "✅ Activado" : "❌ Desactivado"}`)
 }

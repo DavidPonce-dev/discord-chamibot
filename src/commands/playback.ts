@@ -1,6 +1,7 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { guildManager } from "../services/GuildManager"
 import { updateQueueForGuild, setQueuePage } from "./queue"
+import { replyTemporary } from "../utils/messages"
 
 export async function pause(interaction: ChatInputCommandInteraction) {
   const queue = guildManager.get(interaction.guildId!)
@@ -13,7 +14,7 @@ export async function pause(interaction: ChatInputCommandInteraction) {
     return
   }
   queue.pause()
-  await interaction.reply("⏸ Pausado")
+  await replyTemporary(interaction, "⏸ Pausado")
 }
 
 export async function resume(interaction: ChatInputCommandInteraction) {
@@ -27,7 +28,7 @@ export async function resume(interaction: ChatInputCommandInteraction) {
     return
   }
   queue.resume()
-  await interaction.reply("▶ Reanudado")
+  await replyTemporary(interaction, "▶ Reanudado")
 }
 
 export async function skip(interaction: ChatInputCommandInteraction) {

@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction } from "discord.js"
 import { guildManager } from "../services/GuildManager"
 import { buildNowPlayingEmbed } from "../ui/NowPlayingEmbed"
 import { buildNowPlayingButtons } from "../ui/QueueComponents"
+import { replyTemporaryEmbed } from "../utils/messages"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const queue = guildManager.get(interaction.guildId!)
@@ -14,5 +15,5 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const embed = buildNowPlayingEmbed(queue)
   const row = buildNowPlayingButtons(queue)
 
-  await interaction.reply({ embeds: [embed], components: [row] })
+  await replyTemporaryEmbed(interaction, [embed], [row])
 }

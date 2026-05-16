@@ -6,7 +6,7 @@ export function parseDuration(dur: string | undefined): number {
   return parts[0] || 0
 }
 
-export function parseDurationSec(dur: string | number | undefined): number {
+export function parseDurationSec(dur: string | number | null | undefined): number {
   if (dur == null) return 0
   if (typeof dur === "number") return dur
   return parseDuration(dur)

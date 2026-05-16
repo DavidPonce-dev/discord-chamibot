@@ -1,6 +1,7 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { guildManager } from "../services/GuildManager"
 import { updateQueueForGuild } from "./queue"
+import { replyTemporary } from "../utils/messages"
 
 export async function remove(interaction: ChatInputCommandInteraction) {
   const position = interaction.options.getInteger("position", true)
@@ -47,5 +48,5 @@ export async function loop(interaction: ChatInputCommandInteraction) {
     return
   }
   const mode = queue.toggleLoop()
-  await interaction.reply(`Loop: ${loopLabels[mode]}`)
+  await replyTemporary(interaction, `Loop: ${loopLabels[mode]}`)
 }

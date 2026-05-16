@@ -3,6 +3,7 @@ import { joinVoiceChannel } from "@discordjs/voice";
 import { resolveQuery } from "../utils/search";
 import { guildManager } from "../services/GuildManager";
 import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage, TRACKS_PER_PAGE } from "./queue";
+import { editTemporary } from "../utils/messages";
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
 
@@ -122,6 +123,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     await interaction.deleteReply().catch(() => {});
   } catch (error) {
     console.error("Error al procesar el tema");
-    await interaction.editReply("Error al procesar el tema");
+    await editTemporary(interaction, "Error al procesar el tema");
   }
 }

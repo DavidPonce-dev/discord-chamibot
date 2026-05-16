@@ -14,6 +14,7 @@ import { remove, shuffle, loop } from "./commands/queue-control"
 import { autocompleteSearch } from "./utils/search"
 import { handleButton } from "./handlers/ButtonHandler"
 import { execute as seek } from "./commands/seek"
+import { editTemporary } from "./utils/messages"
 
 process.on("unhandledRejection", (reason) => {
   console.error("[unhandledRejection]", reason)
@@ -69,7 +70,7 @@ client.on("interactionCreate", async (interaction) => {
       } catch {
         console.error(`Error en comando ${interaction.commandName}`)
         if (interaction.replied || interaction.deferred) {
-          await interaction.editReply("Ocurrió un error al ejecutar el comando")
+          await editTemporary(interaction, "Ocurrió un error al ejecutar el comando")
         } else {
           await interaction.reply({ content: "Ocurrió un error al ejecutar el comando", ephemeral: true })
         }

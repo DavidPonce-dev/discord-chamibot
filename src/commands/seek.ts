@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { guildManager } from "../services/GuildManager"
+import { editTemporary } from "../utils/messages"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const seconds = interaction.options.getNumber("seconds", true)
@@ -16,8 +17,8 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     await queue.seek(seconds)
     const m = Math.floor(seconds / 60)
     const s = seconds % 60
-    await interaction.editReply(`⏩ Saltado a ${m}:${String(s).padStart(2, "0")}`)
+    await editTemporary(interaction, `⏩ Saltado a ${m}:${String(s).padStart(2, "0")}`)
   } catch {
-    await interaction.editReply("Error al buscar")
+    await editTemporary(interaction, "Error al buscar")
   }
 }
