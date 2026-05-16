@@ -1,9 +1,9 @@
 import { ChatInputCommandInteraction } from "discord.js"
-import { musicManager } from "../music/MusicManager"
+import { guildManager } from "../services/GuildManager"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const seconds = interaction.options.getNumber("seconds", true)
-  const queue = musicManager.get(interaction.guildId!)
+  const queue = guildManager.get(interaction.guildId!)
 
   if (!queue || !queue.getCurrentTrack()) {
     await interaction.reply({ content: "No hay nada reproduciéndose", ephemeral: true })

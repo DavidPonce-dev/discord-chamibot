@@ -6,3 +6,5 @@ export interface Track {
   id?: string
   thumbnail?: string
 }
+
+export type LoopMode = "none" | "one" | "all"

@@ -1,9 +1,9 @@
 import { VoiceConnection } from "@discordjs/voice"
 import { Message } from "discord.js"
-import { MusicQueue } from "./MusicQueue"
+import { TrackScheduler } from "./TrackScheduler"
 
-export class MusicManager {
-  private queues = new Map<string, MusicQueue>()
+class GuildManager {
+  private sessions = new Map<string, TrackScheduler>()
   private autoplayPrefs = new Map<string, boolean>()
   private queueMessages = new Map<string, Message>()
 
@@ -18,25 +18,25 @@ export class MusicManager {
   }
 
   create(guildId: string, connection: VoiceConnection) {
-    const queue = new MusicQueue(connection, this.getAutoplayPref(guildId))
-    this.queues.set(guildId, queue)
-    return queue
+    const session = new TrackScheduler(connection, this.getAutoplayPref(guildId))
+    this.sessions.set(guildId, session)
+    return session
   }
 
   get(guildId: string) {
-    return this.queues.get(guildId)
+    return this.sessions.get(guildId)
   }
 
   delete(guildId: string) {
-    const queue = this.queues.get(guildId)
-    if (queue) {
-      queue.destroy()
+    const session = this.sessions.get(guildId)
+    if (session) {
+      session.destroy()
     }
-    this.queues.delete(guildId)
+    this.sessions.delete(guildId)
   }
 
   has(guildId: string) {
-    return this.queues.has(guildId)
+    return this.sessions.has(guildId)
   }
 
   setQueueMessage(guildId: string, message: Message) {
@@ -52,4 +52,4 @@ export class MusicManager {
   }
 }
 
-export const musicManager = new MusicManager()
+export const guildManager = new GuildManager()

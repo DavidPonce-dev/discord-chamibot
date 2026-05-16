@@ -1,13 +1,13 @@
 import { ChatInputCommandInteraction } from "discord.js";
 import { joinVoiceChannel } from "@discordjs/voice";
 import { resolveQuery } from "../utils/search";
-import { musicManager } from "../music/MusicManager";
+import { guildManager } from "../services/GuildManager";
 import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage, TRACKS_PER_PAGE } from "./queue";
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
 
 function updateProgress(guildId: string) {
-  const queue = musicManager.get(guildId)
+  const queue = guildManager.get(guildId)
   if (!queue || (!queue.getCurrentTrack() && queue.getSize() === 0)) {
     const iv = progressIntervals.get(guildId)
     if (iv) {
@@ -51,7 +51,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   try {
     const result = await resolveQuery(query);
 
-    let queue = musicManager.get(interaction.guildId!);
+    let queue = guildManager.get(interaction.guildId!);
 
     if (!queue) {
       const connection = joinVoiceChannel({
@@ -60,14 +60,14 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         adapterCreator: voiceChannel.guild.voiceAdapterCreator,
       });
 
-      queue = musicManager.create(interaction.guildId!, connection);
+      queue = guildManager.create(interaction.guildId!, connection);
     }
 
     if (!queue.onTrackChange) {
       queue.onTrackChange = (guildId) => {
         setQueuePage(guildId, 1)
         updateQueueForGuild(guildId)
-        const q = musicManager.get(guildId)
+        const q = guildManager.get(guildId)
         if (q?.getCurrentTrack()) {
           startProgressUpdates(guildId)
         }
@@ -76,12 +76,12 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
     if (!queue.onDisconnect) {
       queue.onDisconnect = (guildId) => {
-        const msg = musicManager.getQueueMessage(guildId)
+        const msg = guildManager.getQueueMessage(guildId)
         if (msg) msg.delete().catch(() => {})
-        musicManager.clearQueueMessage(guildId)
+        guildManager.clearQueueMessage(guildId)
         clearQueuePage(guildId)
         stopProgressUpdates(guildId)
-        musicManager.delete(guildId)
+        guildManager.delete(guildId)
       }
     }
 
