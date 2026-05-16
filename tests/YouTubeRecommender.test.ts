@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { AutoplayService } from "../src/services/AutoplayService"
+import { YouTubeRecommender } from "../src/radio/YouTubeRecommender"
 import type { Track } from "../src/core/types"
 
 const mockPlaySearch = vi.hoisted(() => vi.fn())
@@ -33,11 +33,11 @@ function makePlayResult(id: string, title: string, durationRaw: string) {
   return { id, title, url: `https://youtube.com/watch?v=${id}`, durationRaw }
 }
 
-describe("AutoplayService", () => {
-  let service: AutoplayService
+describe("YouTubeRecommender", () => {
+  let service: YouTubeRecommender
 
   beforeEach(() => {
-    service = new AutoplayService()
+    service = new YouTubeRecommender()
     vi.clearAllMocks()
   })
 
@@ -187,8 +187,8 @@ describe("AutoplayService", () => {
         video_details: { tags: ["rock"] },
       })
       mockPlaySearch
-        .mockResolvedValueOnce([])    // genre query → vacío
-        .mockResolvedValueOnce([      // artist query → resultados
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
           makePlayResult("artist1", "Artist Name - Another Song", "3:00"),
         ])
 

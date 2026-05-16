@@ -88,7 +88,7 @@ function filterResults(
   })
 }
 
-export class AutoplayService {
+export class YouTubeRecommender {
   async findRelated(
     currentTrack: Track | null,
     lastTrackTitle: string | null,

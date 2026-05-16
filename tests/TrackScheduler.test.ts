@@ -17,8 +17,8 @@ vi.mock("../src/services/AudioService", () => ({
   },
 }))
 
-vi.mock("../src/services/AutoplayService", () => ({
-  AutoplayService: class {
+vi.mock("../src/services/RadioService", () => ({
+  RadioService: class {
     constructor() {
       return { findRelated: mockFindRelated } as any
     }

@@ -30,7 +30,7 @@ export function createMockAudioService() {
   }
 }
 
-export function createMockAutoplayService() {
+export function createMockRadioService() {
   return {
     findRelated: vi.fn().mockResolvedValue(null),
   }

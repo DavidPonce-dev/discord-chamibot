@@ -8,7 +8,7 @@ import {
 } from "@discordjs/voice"
 import { Track, LoopMode } from "../core/types"
 import { AudioService } from "./AudioService"
-import { AutoplayService } from "./AutoplayService"
+import { RadioService } from "./RadioService"
 
 export class TrackScheduler {
   private queue: Track[] = []
@@ -25,7 +25,7 @@ export class TrackScheduler {
   private seeking = false
 
   private audio: AudioService
-  private autoplayService: AutoplayService
+  private radioService: RadioService
 
   onTrackChange?: (guildId: string) => void
   onDisconnect?: (guildId: string) => void
@@ -36,7 +36,7 @@ export class TrackScheduler {
     this.player = createAudioPlayer()
     this.connection.subscribe(this.player)
     this.audio = new AudioService()
-    this.autoplayService = new AutoplayService()
+    this.radioService = new RadioService()
     this.registerEvents()
   }
 
@@ -56,7 +56,7 @@ export class TrackScheduler {
         }
 
         if (willAutoplay) {
-          const next = await this.autoplayService.findRelated(finished, this.lastTrackTitle)
+          const next = await this.radioService.findRelated(finished, this.lastTrackTitle)
           if (next) {
             this.queue.unshift(next as Track)
           }
