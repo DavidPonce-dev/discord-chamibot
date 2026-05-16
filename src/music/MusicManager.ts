@@ -1,9 +1,11 @@
 import { VoiceConnection } from "@discordjs/voice"
+import { Message } from "discord.js"
 import { MusicQueue } from "./MusicQueue"
 
 export class MusicManager {
   private queues = new Map<string, MusicQueue>()
   private autoplayPrefs = new Map<string, boolean>()
+  private queueMessages = new Map<string, Message>()
 
   getAutoplayPref(guildId: string): boolean {
     return this.autoplayPrefs.get(guildId) ?? false
@@ -35,6 +37,18 @@ export class MusicManager {
 
   has(guildId: string) {
     return this.queues.has(guildId)
+  }
+
+  setQueueMessage(guildId: string, message: Message) {
+    this.queueMessages.set(guildId, message)
+  }
+
+  getQueueMessage(guildId: string): Message | undefined {
+    return this.queueMessages.get(guildId)
+  }
+
+  clearQueueMessage(guildId: string) {
+    this.queueMessages.delete(guildId)
   }
 }
 

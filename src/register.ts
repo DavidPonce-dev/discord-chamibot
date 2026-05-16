@@ -13,6 +13,7 @@ const commands = [
         description: "URL o texto de búsqueda",
         type: 3,
         required: true,
+        autocomplete: true,
       },
     ],
   },
@@ -43,6 +44,44 @@ const commands = [
   {
     name: "h",
     description: "Muestra todos los comandos disponibles",
+  },
+  {
+    name: "shuffle",
+    description: "Mezcla aleatoriamente la cola",
+  },
+  {
+    name: "remove",
+    description: "Elimina un tema de la cola por su posición",
+    options: [
+      {
+        name: "position",
+        description: "Número de posición en la cola",
+        type: 4,
+        required: true,
+        min_value: 1,
+      },
+    ],
+  },
+  {
+    name: "np",
+    description: "Muestra el tema que se está reproduciendo",
+  },
+  {
+    name: "loop",
+    description: "Cambia el modo de repetición (none / one / all)",
+  },
+  {
+    name: "seek",
+    description: "Adelanta o atrasa la reproducción",
+    options: [
+      {
+        name: "seconds",
+        description: "Segundos a avanzar (ej: 120 para 2 minutos)",
+        type: 10,
+        required: true,
+        min_value: 0,
+      },
+    ],
   },
 ]
 

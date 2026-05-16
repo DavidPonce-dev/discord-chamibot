@@ -1,6 +1,12 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { musicManager } from "../music/MusicManager"
 
+const labels: Record<string, string> = {
+  none: "❌ Desactivado",
+  one: "🔂 Repetir uno",
+  all: "🔁 Repetir todo",
+}
+
 export async function execute(interaction: ChatInputCommandInteraction) {
   const queue = musicManager.get(interaction.guildId!)
 
@@ -9,9 +15,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     return
   }
 
-  queue.stop()
-  musicManager.delete(interaction.guildId!)
-  musicManager.clearQueueMessage(interaction.guildId!)
-  await interaction.reply("⏹ Detenido y cola limpiada")
-  await interaction.deleteReply().catch(() => {})
+  const mode = queue.toggleLoop()
+  await interaction.reply(`Loop: ${labels[mode]}`)
 }

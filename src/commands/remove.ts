@@ -1,7 +1,9 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { musicManager } from "../music/MusicManager"
+import { updateQueueForGuild } from "./queue"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
+  const position = interaction.options.getInteger("position", true)
   const queue = musicManager.get(interaction.guildId!)
 
   if (!queue) {
@@ -9,9 +11,14 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     return
   }
 
-  queue.stop()
-  musicManager.delete(interaction.guildId!)
-  musicManager.clearQueueMessage(interaction.guildId!)
-  await interaction.reply("⏹ Detenido y cola limpiada")
+  const removed = queue.remove(position - 1)
+
+  if (!removed) {
+    await interaction.reply({ content: "Posición inválida", ephemeral: true })
+    return
+  }
+
+  await interaction.reply(`Eliminado: **${removed.title}**`)
   await interaction.deleteReply().catch(() => {})
+  await updateQueueForGuild(interaction.guildId!)
 }

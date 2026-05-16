@@ -3,4 +3,6 @@ export interface Track {
   url: string
   requestedBy: string
   duration?: string
+  id?: string
+  thumbnail?: string
 }
