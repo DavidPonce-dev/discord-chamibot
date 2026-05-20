@@ -75,6 +75,7 @@ export async function updateQueueForGuild(guildId: string, statusTitle?: string,
   const currentPage = page ?? queuePages.get(guildId) ?? 1
   queuePages.set(guildId, currentPage)
   try {
+    if (queue.getSize() === 0 && !queue.getCurrentTrack()) return
     await msg.edit(buildQueuePayload(queue, currentPage, statusTitle))
   } catch {
     console.log("[Queue] Error al editar mensaje (transitorio, se reintenta)")

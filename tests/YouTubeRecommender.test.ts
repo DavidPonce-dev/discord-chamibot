@@ -1,20 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { YouTubeRecommender } from "../src/radio/YouTubeRecommender"
+import { YouTubeRecommender, isMusic, normalizeTitle } from "../src/radio/YouTubeRecommender"
 import type { Track } from "../src/core/types"
 
-const mockPlaySearch = vi.hoisted(() => vi.fn())
+const mockSearchPlayDl = vi.hoisted(() => vi.fn())
+const mockSearchYtDlp = vi.hoisted(() => vi.fn())
 const mockPlayVideoInfo = vi.hoisted(() => vi.fn())
-const mockYoutubedl = vi.hoisted(() => vi.fn())
 
 vi.mock("play-dl", () => ({
   default: {
-    search: mockPlaySearch,
     video_basic_info: mockPlayVideoInfo,
   },
 }))
 
-vi.mock("youtube-dl-exec", () => ({
-  default: mockYoutubedl,
+vi.mock("../src/radio/RadioSearchService", () => ({
+  searchPlayDl: mockSearchPlayDl,
+  searchYtDlp: mockSearchYtDlp,
 }))
 
 function makeTrack(overrides: Partial<Track> = {}): Track {
@@ -38,7 +38,7 @@ describe("YouTubeRecommender", () => {
 
   beforeEach(() => {
     service = new YouTubeRecommender()
-    vi.clearAllMocks()
+    vi.resetAllMocks()
   })
 
   describe("findRelated — errores esperados (inputs inválidos)", () => {
@@ -57,12 +57,10 @@ describe("YouTubeRecommender", () => {
   describe("findRelated — sin género (solo búsqueda por artista)", () => {
     beforeEach(() => {
       mockPlayVideoInfo.mockRejectedValue(new Error("no info"))
-      mockPlaySearch.mockReset()
-      mockYoutubedl.mockReset()
     })
 
     it("play-dl encuentra resultados → devuelve track", async () => {
-      mockPlaySearch.mockResolvedValue([
+      mockSearchPlayDl.mockResolvedValue([
         makePlayResult("xyz789", "Artist Name - Another Song", "4:00"),
       ])
 
@@ -73,35 +71,31 @@ describe("YouTubeRecommender", () => {
     })
 
     it("play-dl encuentra resultados → NO llama a yt-dlp", async () => {
-      mockPlaySearch.mockResolvedValue([
+      mockSearchPlayDl.mockResolvedValue([
         makePlayResult("xyz789", "Artist Name - Another Song", "4:00"),
       ])
 
       await service.findRelated(makeTrack(), "Artist Name - Song Title")
-      expect(mockYoutubedl).not.toHaveBeenCalled()
+      expect(mockSearchYtDlp).not.toHaveBeenCalled()
     })
 
     it("play-dl devuelve vacío → fallback a yt-dlp", async () => {
-      mockPlaySearch.mockResolvedValue([])
-      mockYoutubedl.mockResolvedValue({
-        entries: [
-          { id: "yt777", title: "YT Fallback Song", duration: 250 },
-        ],
-      })
+      mockSearchPlayDl.mockResolvedValue([])
+      mockSearchYtDlp.mockResolvedValue([
+        { id: "yt777", title: "YT Fallback Song", url: "https://youtube.com/watch?v=yt777", durationRaw: "250" },
+      ])
 
       const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).not.toBeNull()
       expect(result!.id).toBe("yt777")
-      expect(mockYoutubedl).toHaveBeenCalledOnce()
+      expect(mockSearchYtDlp).toHaveBeenCalledOnce()
     })
 
     it("play-dl falla → fallback a yt-dlp", async () => {
-      mockPlaySearch.mockRejectedValue(new Error("network error"))
-      mockYoutubedl.mockResolvedValue({
-        entries: [
-          { id: "yt777", title: "YT Fallback", duration: 200 },
-        ],
-      })
+      mockSearchPlayDl.mockResolvedValue([])
+      mockSearchYtDlp.mockResolvedValue([
+        { id: "yt777", title: "YT Fallback", url: "https://youtube.com/watch?v=yt777", durationRaw: "200" },
+      ])
 
       const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).not.toBeNull()
@@ -109,8 +103,8 @@ describe("YouTubeRecommender", () => {
     })
 
     it("play-dl y yt-dlp fallan → null", async () => {
-      mockPlaySearch.mockRejectedValue(new Error("network error"))
-      mockYoutubedl.mockRejectedValue(new Error("yt-dlp error"))
+      mockSearchPlayDl.mockResolvedValue([])
+      mockSearchYtDlp.mockResolvedValue([])
 
       const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).toBeNull()
@@ -119,7 +113,7 @@ describe("YouTubeRecommender", () => {
 
   describe("findRelated — filtrado", () => {
     it("filtra track que coincide con current ID", async () => {
-      mockPlaySearch.mockResolvedValue([
+      mockSearchPlayDl.mockResolvedValue([
         makePlayResult("abc123", "Artist Name - Song Title", "3:30"),
         makePlayResult("xyz789", "Different Song", "4:00"),
       ])
@@ -133,7 +127,7 @@ describe("YouTubeRecommender", () => {
     })
 
     it("filtra track que coincide con current title", async () => {
-      mockPlaySearch.mockResolvedValue([
+      mockSearchPlayDl.mockResolvedValue([
         makePlayResult("xyz789", "Artist Name - Song Title", "3:30"),
       ])
 
@@ -145,7 +139,7 @@ describe("YouTubeRecommender", () => {
     })
 
     it("filtra tracks de más de 1500s", async () => {
-      mockPlaySearch.mockResolvedValue([
+      mockSearchPlayDl.mockResolvedValue([
         makePlayResult("long1", "Very Long Song", "30:00"),
         makePlayResult("short1", "Short Song", "3:00"),
       ])
@@ -156,7 +150,7 @@ describe("YouTubeRecommender", () => {
     })
 
     it("todos filtrados → null", async () => {
-      mockPlaySearch.mockResolvedValue([
+      mockSearchPlayDl.mockResolvedValue([
         makePlayResult("abc123", "Artist Name - Song Title", "3:30"),
       ])
 
@@ -173,20 +167,21 @@ describe("YouTubeRecommender", () => {
       mockPlayVideoInfo.mockResolvedValue({
         video_details: { tags: ["rock", "guitar", "live"] },
       })
-      mockPlaySearch.mockResolvedValueOnce([
+      mockSearchPlayDl.mockResolvedValueOnce([
         makePlayResult("genre1", "Rock Song", "3:00"),
       ])
 
       const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).not.toBeNull()
-      expect(mockPlaySearch).toHaveBeenCalledWith("rock music", { limit: 15 })
+      expect(mockSearchPlayDl).toHaveBeenCalledWith("rock music")
     })
 
     it("genre query da vacío → fallback a artist query", async () => {
       mockPlayVideoInfo.mockResolvedValue({
         video_details: { tags: ["rock"] },
       })
-      mockPlaySearch
+      mockSearchYtDlp.mockResolvedValue([])
+      mockSearchPlayDl
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
           makePlayResult("artist1", "Artist Name - Another Song", "3:00"),
@@ -195,7 +190,119 @@ describe("YouTubeRecommender", () => {
       const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).not.toBeNull()
       expect(result!.id).toBe("artist1")
-      expect(mockPlaySearch).toHaveBeenCalledTimes(2)
+      expect(mockSearchPlayDl).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe("isMusic", () => {
+    it("true cuando category es Music", async () => {
+      mockPlayVideoInfo.mockResolvedValue({
+        video_details: { category: "Music" },
+      })
+
+      const result = await isMusic({
+        title: "Some Song",
+        url: "https://youtube.com/watch?v=test123",
+      })
+      expect(result).toBe(true)
+    })
+
+    it("false cuando category no es Music", async () => {
+      mockPlayVideoInfo.mockResolvedValue({
+        video_details: { category: "Gaming" },
+      })
+
+      const result = await isMusic({
+        title: "Some Song",
+        url: "https://youtube.com/watch?v=test123",
+      })
+      expect(result).toBe(false)
+    })
+
+    it("false cuando title contiene keyword no musical", async () => {
+      const result = await isMusic({
+        title: "Interview with Artist - Deep Talk",
+        url: "https://youtube.com/watch?v=test123",
+      })
+      expect(result).toBe(false)
+    })
+
+    it("true cuando API falla y no hay red flags", async () => {
+      mockPlayVideoInfo.mockRejectedValue(new Error("network error"))
+
+      const result = await isMusic({
+        title: "Some Song",
+        url: "https://youtube.com/watch?v=test123",
+      })
+      expect(result).toBe(true)
+    })
+
+    it("true cuando no hay URL (inclusive fallback)", async () => {
+      const result = await isMusic({
+        title: "Unknown Track",
+      })
+      expect(result).toBe(true)
+    })
+  })
+
+  describe("normalizeTitle", () => {
+    it("elimina parentesis y brackets", () => {
+      expect(normalizeTitle("Song Title (Official Video) [4K]")).toBe("song title")
+    })
+
+    it("preserva estructura Artista - Tema", () => {
+      expect(normalizeTitle("Queen - Bohemian Rhapsody (Official Video)")).toBe("queen - bohemian rhapsody")
+    })
+
+    it("normaliza mayusculas y espacios", () => {
+      expect(normalizeTitle("  ARTIST  -  SONG  ")).toBe("artist - song")
+    })
+
+    it("elimina sufijos comunes", () => {
+      expect(normalizeTitle("Bohemian Rhapsody (Lyric Video)")).toBe("bohemian rhapsody")
+      expect(normalizeTitle("Bohemian Rhapsody (Official Audio)")).toBe("bohemian rhapsody")
+      expect(normalizeTitle("Bohemian Rhapsody (Live at Wembley)")).toBe("bohemian rhapsody")
+    })
+
+    it("diferencia covers de versiones originales", () => {
+      expect(normalizeTitle("Queen - Bohemian Rhapsody")).toBe("queen - bohemian rhapsody")
+      expect(normalizeTitle("Panic! At The Disco - Bohemian Rhapsody")).toBe("panic! at the disco - bohemian rhapsody")
+    })
+  })
+
+  describe("findRelated — exclusion por historial", () => {
+    beforeEach(() => {
+      mockPlayVideoInfo.mockRejectedValue(new Error("no info"))
+    })
+
+    it("excluye candidatos que matchean el historial normalizado", async () => {
+      mockSearchPlayDl.mockResolvedValue([
+        makePlayResult("official", "Artist Name - Song Title (Official Video)", "3:30"),
+        makePlayResult("audio", "Artist Name - Song Title (Audio)", "3:30"),
+      ])
+
+      const exclude = new Set(["artist name - song title"])
+      const result = await service.findRelated(
+        makeTrack({ id: "prev123" }),
+        "Artist Name - Song Title",
+        exclude,
+      )
+      expect(result).toBeNull()
+    })
+
+    it("no excluye tracks con distinto artista/tema", async () => {
+      mockSearchPlayDl.mockResolvedValue([
+        makePlayResult("diff1", "Different Artist - Another Song", "3:30"),
+      ])
+
+      const exclude = new Set(["artist name - song title"])
+      const result = await service.findRelated(
+        makeTrack({ id: "prev123" }),
+        "Artist Name - Song Title",
+        exclude,
+      )
+      expect(result).not.toBeNull()
+      expect(result!.id).toBe("diff1")
     })
   })
 })

@@ -20,17 +20,17 @@ export function formatTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`
 }
 
-const NBSP = "\u00A0"
+const EMPTY = "\u2591"
 
 export function buildProgressBar(pos: number, total: number, width = 36): string {
-  if (total <= 0) return `[${NBSP.repeat(width)}] ${formatTime(pos)} / ?:??`
+  if (total <= 0) return `[${EMPTY.repeat(width)}] ${formatTime(pos)} / ?:??`
   const units = Math.round((pos / total) * width * 2)
   let bar = ""
   for (let i = 0; i < width; i++) {
     const filled = units - i * 2
     if (filled >= 2) bar += "█"
     else if (filled === 1) bar += "▌"
-    else bar += NBSP
+    else bar += EMPTY
   }
   return `[${bar}] ${formatTime(pos)} / ${formatTime(total)}`
 }

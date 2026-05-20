@@ -9,6 +9,7 @@ import {
 import { Track, LoopMode } from "../core/types"
 import { AudioService } from "./AudioService"
 import { RadioService } from "./RadioService"
+import { normalizeTitle, extractArtist } from "../radio/YouTubeRecommender"
 
 export class TrackScheduler {
   private queue: Track[] = []
@@ -23,6 +24,14 @@ export class TrackScheduler {
   private pauseOffset = 0
   private pauseTime: number | null = null
   private seeking = false
+  private trackHistory: string[] = []
+  private sameArtistStreak = 0
+  private currentArtist: string | null = null
+  private readonly ARTIST_ROTATION_LIMIT = 3
+  private artistHistory: string[] = []
+
+  private readonly MAX_HISTORY = 20
+  private readonly MAX_ARTIST_HISTORY = 10
 
   private audio: AudioService
   private radioService: RadioService
@@ -47,6 +56,22 @@ export class TrackScheduler {
         const finished = this.current
         const willAutoplay = this.autoplay && !!finished && this.queue.length === 0
 
+        if (finished?.title) {
+          const norm = normalizeTitle(finished.title)
+          this.trackHistory.unshift(norm)
+          if (this.trackHistory.length > this.MAX_HISTORY) this.trackHistory.pop()
+
+          const artist = extractArtist(finished.title)
+          if (artist && artist === this.currentArtist) {
+            this.sameArtistStreak++
+          } else if (artist) {
+            this.sameArtistStreak = 1
+            this.currentArtist = artist
+            this.artistHistory.unshift(artist)
+            if (this.artistHistory.length > this.MAX_ARTIST_HISTORY) this.artistHistory.pop()
+          }
+        }
+
         if (!willAutoplay) {
           if (this.loopMode === "one" && finished) {
             this.queue.unshift({ ...finished })
@@ -56,7 +81,14 @@ export class TrackScheduler {
         }
 
         if (willAutoplay) {
-          const next = await this.radioService.findRelated(finished, this.lastTrackTitle)
+          const shouldSwitch = this.sameArtistStreak >= this.ARTIST_ROTATION_LIMIT
+          const next = await this.radioService.findRelated(
+            finished,
+            this.lastTrackTitle,
+            new Set(this.trackHistory),
+            this.currentArtist,
+            shouldSwitch,
+          )
           if (next) {
             this.queue.unshift(next as Track)
           }

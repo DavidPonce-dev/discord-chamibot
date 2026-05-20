@@ -1,4 +1,4 @@
-import play from "play-dl"
+import play, { YouTubePlayList } from "play-dl"
 
 export interface ResolveResult {
   tracks: {
@@ -53,17 +53,20 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
       }
     }
 
-    const cleanUrl = sanitizeYouTubeUrl(query)
-    const info = await play.video_basic_info(cleanUrl)
-    const id = extractVideoId(cleanUrl)
-    return {
-      tracks: [{
-        url: cleanUrl,
-        title: info.video_details.title ?? "Unknown",
-        duration: info.video_details.durationRaw,
-        id,
-        thumbnail: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : undefined,
-      }],
+    const isChannel = parsed.pathname.includes("/channel/") || parsed.pathname.startsWith("/@")
+    if (!isChannel) {
+      const cleanUrl = sanitizeYouTubeUrl(query)
+      const info = await play.video_basic_info(cleanUrl)
+      const id = extractVideoId(cleanUrl)
+      return {
+        tracks: [{
+          url: cleanUrl,
+          title: info.video_details.title ?? "Unknown",
+          duration: info.video_details.durationRaw,
+          id,
+          thumbnail: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : undefined,
+        }],
+      }
     }
   }
 
@@ -85,13 +88,57 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
   }
 }
 
+const ALBUM_KEYWORDS = /\b(album|full\s*album|ep|lp|discography|complete|edición|cd)\b/i
+
+function isAlbumLike(title: string, videoCount: number): boolean {
+  return videoCount >= 3 && videoCount <= 20 || ALBUM_KEYWORDS.test(title)
+}
+
 export async function autocompleteSearch(query: string): Promise<{ name: string; value: string }[]> {
   try {
-    const results = await play.search(query, { limit: 10 })
-    return results.map((r) => ({
-      name: `🎵 ${r.title ?? "Unknown"}`,
-      value: r.url ?? `https://youtube.com/watch?v=${r.id}`,
-    }))
+    const [videos, playlistResults] = await Promise.all([
+      play.search(query, { source: { youtube: "video" }, limit: 5 }),
+      play.search(query, { source: { youtube: "playlist" }, limit: 15 }),
+    ])
+
+    const albums: YouTubePlayList[] = []
+    const playlists: YouTubePlayList[] = []
+
+    for (const p of playlistResults) {
+      if (isAlbumLike(p.title ?? "", p.videoCount ?? 0)) {
+        if (albums.length < 5) albums.push(p)
+      } else {
+        if (playlists.length < 3) playlists.push(p)
+      }
+    }
+
+    const results: { name: string; value: string }[] = []
+
+    for (const v of videos) {
+      if (results.length >= 25) break
+      results.push({
+        name: `🎵 ${v.title ?? "Unknown"}`,
+        value: v.url ?? `https://youtube.com/watch?v=${v.id}`,
+      })
+    }
+
+    for (const a of albums) {
+      if (results.length >= 25) break
+      results.push({
+        name: `💿 ${a.title ?? "Unknown"}`,
+        value: a.url ?? "",
+      })
+    }
+
+    for (const p of playlists) {
+      if (results.length >= 25) break
+      results.push({
+        name: `📋 ${p.title ?? "Unknown"}`,
+        value: p.url ?? "",
+      })
+    }
+
+    return results.slice(0, 25)
   } catch {
     return []
   }

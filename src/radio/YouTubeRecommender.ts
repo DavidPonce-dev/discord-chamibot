@@ -1,9 +1,11 @@
 import play from "play-dl"
-import youtubedl from "youtube-dl-exec"
 import { Track } from "../core/types"
 import { parseDurationSec } from "../utils/format"
+import { VideoResult, searchPlayDl, searchYtDlp } from "./RadioSearchService"
 
 const MAX_AUTOPLAY_SEC = 1500
+const MAX_RETRIES = 3
+const ARTIST_ROTATION_LIMIT = 3
 
 const GENRE_KEYWORDS = [
   "rock", "pop", "metal", "hip hop", "rap", "r&b", "jazz", "blues",
@@ -14,14 +16,13 @@ const GENRE_KEYWORDS = [
   "hip-hop", "trap", "lo-fi", "synthwave", "progressive", "acoustic",
 ]
 
-interface VideoResult {
-  title?: string
-  url?: string
-  id?: string
-  durationRaw?: string
-}
+const NON_MUSIC_KEYWORDS = [
+  "podcast", "interview", "tutorial", "review", "reaction",
+  "vlog", "gameplay", "comedy", "lecture", "documentary",
+  "asmr", "full album", "live stream", "audiobook",
+]
 
-function extractArtist(title: string): string {
+export function extractArtist(title: string): string {
   const sep = title.search(/ [-–|]/)
   if (sep > 0) return title.slice(0, sep)
   return title.replace(/\[.*?\]|\(.*?\)/g, "").trim() || "popular music"
@@ -39,92 +40,114 @@ async function detectGenre(url: string): Promise<string | null> {
   return null
 }
 
-async function searchPlayDl(query: string): Promise<VideoResult[]> {
-  try {
-    const results = await play.search(query, { limit: 15 })
-    return results.map((r) => ({
-      title: r.title,
-      url: r.url,
-      id: r.id,
-      durationRaw: r.durationRaw,
-    }))
-  } catch {
-    return []
-  }
-}
-
-async function searchYtDlp(query: string): Promise<VideoResult[]> {
-  try {
-    const out = (await youtubedl(`ytsearch15:${query}`, {
-      dumpSingleJson: true,
-      noWarnings: true,
-      quiet: true,
-      flatPlaylist: true,
-      matchFilter: "duration < 1500",
-    }, { timeout: 15000 })) as any
-    const entries = out?.entries ?? []
-    return entries.map((e: any) => ({
-      title: e.title,
-      url: `https://youtube.com/watch?v=${e.id}`,
-      id: e.id,
-      durationRaw: e.duration ?? undefined,
-    }))
-  } catch {
-    return []
-  }
+export function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\[[^\]]*\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function filterResults(
   videos: VideoResult[],
   currentId?: string,
   currentTitle?: string,
+  excludeTitles: Set<string> = new Set(),
 ): VideoResult[] {
   return videos.filter((v) => {
     if (currentId && v.id === currentId) return false
     if (currentTitle && v.title?.toLowerCase() === currentTitle) return false
+    if (v.title && excludeTitles.has(normalizeTitle(v.title))) return false
     const durSec = parseDurationSec(v.durationRaw)
     if (durSec > MAX_AUTOPLAY_SEC) return false
     return true
   })
 }
 
+export async function isMusic(video: VideoResult): Promise<boolean> {
+  const title = (video.title ?? "").toLowerCase()
+  if (NON_MUSIC_KEYWORDS.some((k) => title.includes(k))) return false
+
+  if (video.url) {
+    try {
+      const info = await play.video_basic_info(video.url)
+      const details = info.video_details as any
+      const category = details.category?.toLowerCase()
+      if (category === "music") return true
+      if (category) return false
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return true
+}
+
+function isSameArtist(a: string, b: string): boolean {
+  const na = a.toLowerCase().trim()
+  const nb = b.toLowerCase().trim()
+  return na === nb || na.includes(nb) || nb.includes(na)
+}
+
 export class YouTubeRecommender {
   async findRelated(
     currentTrack: Track | null,
     lastTrackTitle: string | null,
+    excludeTitles: Set<string> = new Set(),
+    currentArtist?: string | null,
+    shouldSwitch?: boolean,
   ): Promise<Omit<Track, "requestedBy"> | null> {
     const title = lastTrackTitle ?? ""
     if (!title && !currentTrack?.url) return null
 
-    let genreQuery = ""
+    let genre: string | null = null
     if (currentTrack?.url) {
-      const genre = await detectGenre(currentTrack.url)
-      if (genre) genreQuery = `${genre} music`
+      genre = await detectGenre(currentTrack.url)
     }
-
-    const artistQuery = extractArtist(title)
-    const queries = genreQuery ? [genreQuery, artistQuery] : [artistQuery]
 
     const currentId = currentTrack?.id
     const currentTitle = currentTrack?.title?.toLowerCase()
+
+    let queries: string[]
+    if (shouldSwitch && currentArtist) {
+      queries = genre ? [`${genre} music`] : ["popular music"]
+    } else {
+      const artistQuery = extractArtist(title)
+      if (genre) {
+        queries = [`${genre} music`, `${genre} ${artistQuery}`]
+      } else {
+        queries = [`${artistQuery} music`]
+      }
+    }
 
     for (const q of queries) {
       let videos = await searchPlayDl(q)
       if (!videos.length) videos = await searchYtDlp(q)
       if (!videos.length) continue
 
-      const filtered = filterResults(videos, currentId, currentTitle)
+      const filtered = filterResults(videos, currentId, currentTitle, excludeTitles)
       if (!filtered.length) continue
 
-      const picked = filtered[Math.floor(Math.random() * filtered.length)]
-      return {
-        title: picked.title ?? "Unknown",
-        url: picked.url ?? `https://youtube.com/watch?v=${picked.id}`,
-        duration: picked.durationRaw,
-        id: picked.id,
-        thumbnail: picked.id
-          ? `https://img.youtube.com/vi/${picked.id}/hqdefault.jpg`
-          : undefined,
+      const shuffled = [...filtered].sort(() => Math.random() - 0.5)
+      const candidates = shuffled.slice(0, MAX_RETRIES)
+
+      for (const picked of candidates) {
+        if (await isMusic(picked)) {
+          if (shouldSwitch && currentArtist) {
+            const pickedArtist = extractArtist(picked.title ?? "")
+            if (isSameArtist(pickedArtist, currentArtist)) continue
+          }
+          return {
+            title: picked.title ?? "Unknown",
+            url: picked.url ?? `https://youtube.com/watch?v=${picked.id}`,
+            duration: picked.durationRaw,
+            id: picked.id,
+            thumbnail: picked.id
+              ? `https://img.youtube.com/vi/${picked.id}/hqdefault.jpg`
+              : undefined,
+          }
+        }
       }
     }
 

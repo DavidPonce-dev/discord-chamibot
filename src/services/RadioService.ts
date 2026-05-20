@@ -11,7 +11,10 @@ export class RadioService {
   async findRelated(
     currentTrack: Track | null,
     lastTrackTitle: string | null,
+    excludeTitles: Set<string> = new Set(),
+    currentArtist?: string | null,
+    shouldSwitch?: boolean,
   ): Promise<Omit<Track, "requestedBy"> | null> {
-    return this.recommender.findRelated(currentTrack, lastTrackTitle)
+    return this.recommender.findRelated(currentTrack, lastTrackTitle, excludeTitles, currentArtist, shouldSwitch)
   }
 }
