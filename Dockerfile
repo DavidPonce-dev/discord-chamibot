@@ -2,14 +2,12 @@ FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
   ffmpeg \
-  python3 \
+  ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci
-
-COPY . .
 
 CMD ["npm", "run", "dev"]
