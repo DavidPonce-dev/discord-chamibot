@@ -1,5 +1,5 @@
 import play, { YouTubePlayList } from "play-dl"
-import youtubedl from "youtube-dl-exec"
+import https from "https"
 import { logger } from "./logger"
 
 export interface ResolveResult {
@@ -33,29 +33,23 @@ function extractVideoId(url: string): string | undefined {
   }
 }
 
-async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string } | null> {
-  try {
-    const result = await youtubedl(url, {
-      dumpSingleJson: true,
-      noWarnings: true,
-      skipDownload: true,
-      quiet: true,
-    })
-
-    if (!result || typeof result !== "object") return null
-
-    const title = (result as any).title ?? "Unknown"
-    const duration = (result as any).duration ?? 0
-    const id = (result as any).id ?? extractVideoId(url) ?? ""
-    const durationStr = duration ? `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, "0")}` : "0:00"
-
-    return { title, duration: durationStr, id }
-  } catch (err) {
-    logger.warn("search", "yt-dlp resolve failed, falling back to play-dl", {
-      error: err instanceof Error ? err.message : String(err),
-    })
-    return null
-  }
+async function fetchOEmbed(url: string): Promise<{ title: string; author_name: string } | null> {
+  return new Promise((resolve) => {
+    https.get(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, (res) => {
+      let data = ""
+      res.on("data", (chunk) => (data += chunk))
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.title) resolve({ title: parsed.title, author_name: parsed.author_name ?? "" })
+          else resolve(null)
+        } catch {
+          resolve(null)
+        }
+      })
+      res.on("error", () => resolve(null))
+    }).on("error", () => resolve(null))
+  })
 }
 
 export async function resolveQuery(query: string): Promise<ResolveResult> {
@@ -85,35 +79,21 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
       const cleanUrl = sanitizeYouTubeUrl(query)
       const id = extractVideoId(cleanUrl)
 
-      // Try yt-dlp first (more reliable), fallback to play-dl
-      const ytDlpResult = await resolveWithYtDlp(cleanUrl)
-      if (ytDlpResult) {
+      // Use YouTube oEmbed API (no auth required, not blocked)
+      const oembed = await fetchOEmbed(cleanUrl)
+      if (oembed) {
+        const title = oembed.author_name ? `${oembed.author_name} - ${oembed.title}` : oembed.title
         return {
           tracks: [{
             url: cleanUrl,
-            title: ytDlpResult.title,
-            duration: ytDlpResult.duration,
-            id: ytDlpResult.id,
-            thumbnail: ytDlpResult.id ? `https://img.youtube.com/vi/${ytDlpResult.id}/hqdefault.jpg` : undefined,
-          }],
-        }
-      }
-
-      // Fallback to play-dl
-      try {
-        const info = await play.video_basic_info(cleanUrl)
-        return {
-          tracks: [{
-            url: cleanUrl,
-            title: info.video_details.title ?? "Unknown",
-            duration: info.video_details.durationRaw,
+            title,
             id,
             thumbnail: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : undefined,
           }],
         }
-      } catch {
-        throw new Error("No se pudo obtener info del video")
       }
+
+      throw new Error("No se pudo obtener info del video")
     }
   }
 
@@ -163,24 +143,27 @@ export async function autocompleteSearch(query: string): Promise<{ name: string;
 
     for (const v of videos) {
       if (results.length >= 25) break
+      const name = `🎵 ${v.title ?? "Unknown"}`
       results.push({
-        name: `🎵 ${v.title ?? "Unknown"}`,
+        name: name.length > 100 ? name.slice(0, 97) + "..." : name,
         value: v.url ?? `https://youtube.com/watch?v=${v.id}`,
       })
     }
 
     for (const a of albums) {
       if (results.length >= 25) break
+      const name = `💿 ${a.title ?? "Unknown"}`
       results.push({
-        name: `💿 ${a.title ?? "Unknown"}`,
+        name: name.length > 100 ? name.slice(0, 97) + "..." : name,
         value: a.url ?? "",
       })
     }
 
     for (const p of playlists) {
       if (results.length >= 25) break
+      const name = `📋 ${p.title ?? "Unknown"}`
       results.push({
-        name: `📋 ${p.title ?? "Unknown"}`,
+        name: name.length > 100 ? name.slice(0, 97) + "..." : name,
         value: p.url ?? "",
       })
     }
