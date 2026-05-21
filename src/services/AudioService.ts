@@ -1,5 +1,5 @@
 import { createAudioResource, AudioResource, StreamType } from "@discordjs/voice"
-import youtubedl from "youtube-dl-exec"
+import play from "play-dl"
 import { spawn } from "child_process"
 import { logger } from "../utils/logger"
 
@@ -20,33 +20,26 @@ export class AudioService {
   }
 
   private async getAudioUrl(url: string, seekTo?: number): Promise<string> {
-    const clients = ["tv_embedded", "android", "web_creator"]
+    const info = await play.video_info(url)
+    logger.debug("audio", "video_info obtenido", {
+      title: info.video_details.title,
+      formats: info.format.length,
+    })
 
-    for (const client of clients) {
-      try {
-        const opts: Record<string, string | boolean> = {
-          format: "bestaudio",
-          quiet: true,
-          noWarnings: true,
-          extractorArgs: `youtube:player_client=${client}`,
-        }
-        if (seekTo !== undefined) {
-          opts.downloadSections = `*${this.formatTime(seekTo)}-*`
-        }
+    // Prefer opus/webm audio, fallback to any format with URL
+    const audioFmt = info.format.find(
+      (f) => f.url && f.mimeType?.includes("audio/webm")
+    ) || info.format.find(
+      (f) => f.url && f.mimeType?.includes("audio/")
+    ) || info.format.find(
+      (f) => f.url
+    )
 
-        const result = await youtubedl(url, { ...opts, getUrl: true })
-        if (typeof result === "string" && result.trim()) {
-          logger.debug("audio", `URL obtenida con cliente ${client}`)
-          return result.trim()
-        }
-      } catch (err) {
-        logger.debug("audio", `Cliente ${client} falló`, {
-          error: err instanceof Error ? err.message.slice(0, 100) : String(err),
-        })
-      }
+    if (!audioFmt?.url) {
+      throw new Error("No se encontró URL de audio en los formatos")
     }
 
-    throw new Error("yt-dlp no pudo obtener URL con ningún cliente")
+    return audioFmt.url
   }
 
   async createResource(url: string, seekTo?: number): Promise<AudioResource> {
@@ -57,12 +50,21 @@ export class AudioService {
 
     try {
       const audioUrl = await this.getAudioUrl(url, seekTo)
-      logger.debug("audio", "URL obtenida, iniciando FFmpeg stream")
+      logger.debug("audio", "URL obtenida, iniciando FFmpeg stream", {
+        host: new URL(audioUrl).hostname,
+      })
 
       const ffmpegArgs = [
         "-reconnect", "1",
         "-reconnect_streamed", "1",
         "-reconnect_delay_max", "5",
+      ]
+
+      if (seekTo !== undefined) {
+        ffmpegArgs.push("-ss", this.formatTime(seekTo))
+      }
+
+      ffmpegArgs.push(
         "-i", audioUrl,
         "-f", "opus",
         "-c:a", "libopus",
@@ -70,7 +72,7 @@ export class AudioService {
         "-application", "audio",
         "-v", "quiet",
         "pipe:1",
-      ]
+      )
 
       const ffmpeg = spawn("ffmpeg", ffmpegArgs)
       this.activeFfmpeg = ffmpeg

@@ -1,5 +1,4 @@
 import play, { YouTubePlayList } from "play-dl"
-import https from "https"
 import { logger } from "./logger"
 
 export interface ResolveResult {
@@ -33,25 +32,6 @@ function extractVideoId(url: string): string | undefined {
   }
 }
 
-async function fetchOEmbed(url: string): Promise<{ title: string; author_name: string } | null> {
-  return new Promise((resolve) => {
-    https.get(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, (res) => {
-      let data = ""
-      res.on("data", (chunk) => (data += chunk))
-      res.on("end", () => {
-        try {
-          const parsed = JSON.parse(data)
-          if (parsed.title) resolve({ title: parsed.title, author_name: parsed.author_name ?? "" })
-          else resolve(null)
-        } catch {
-          resolve(null)
-        }
-      })
-      res.on("error", () => resolve(null))
-    }).on("error", () => resolve(null))
-  })
-}
-
 export async function resolveQuery(query: string): Promise<ResolveResult> {
   const isUrl = query.startsWith("http://") || query.startsWith("https://")
 
@@ -79,18 +59,21 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
       const cleanUrl = sanitizeYouTubeUrl(query)
       const id = extractVideoId(cleanUrl)
 
-      // Use YouTube oEmbed API (no auth required, not blocked)
-      const oembed = await fetchOEmbed(cleanUrl)
-      if (oembed) {
-        const title = oembed.author_name ? `${oembed.author_name} - ${oembed.title}` : oembed.title
+      try {
+        const info = await play.video_info(cleanUrl)
         return {
           tracks: [{
             url: cleanUrl,
-            title,
-            id,
-            thumbnail: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : undefined,
+            title: info.video_details.title ?? "Unknown",
+            duration: info.video_details.durationRaw,
+            id: info.video_details.id ?? id,
+            thumbnail: (info.video_details.id ?? id) ? `https://img.youtube.com/vi/${info.video_details.id ?? id}/hqdefault.jpg` : undefined,
           }],
         }
+      } catch (err) {
+        logger.warn("search", "video_info failed, using fallback", {
+          error: err instanceof Error ? err.message.slice(0, 100) : String(err),
+        })
       }
 
       throw new Error("No se pudo obtener info del video")
