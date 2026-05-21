@@ -24,83 +24,94 @@ export class AudioService {
     return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
-  private async getAudioUrl(url: string): Promise<string> {
+  private async tryGetUrlWithFormat(format: string, url: string): Promise<string> {
     const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    const args = ["--get-url", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", userAgent]
+    if (format) args.push("--format", format)
+    if (cookieFile) args.push("--cookies", cookieFile)
+    args.push(url)
 
-    // Try default client first (no extractor-args), then specific clients
-    const configs = [
-      { client: "default", args: [] as string[] },
-      { client: "web", args: ["--extractor-args", "youtube:player_client=web"] },
-      { client: "web_music", args: ["--extractor-args", "youtube:player_client=web_music"] },
-      { client: "tv_embedded", args: ["--extractor-args", "youtube:player_client=tv_embedded"] },
-      { client: "android", args: ["--extractor-args", "youtube:player_client=android"] },
+    return new Promise((resolve, reject) => {
+      const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] })
+      let stdout = ""
+      let stderr = ""
+      proc.stdout.on("data", (d) => (stdout += d))
+      proc.stderr.on("data", (d) => (stderr += d))
+      proc.on("close", (code) => {
+        if (code !== 0 || !stdout.trim()) {
+          reject(new Error(stderr.slice(0, 200) || `code ${code}`))
+        } else {
+          resolve(stdout.trim())
+        }
+      })
+      proc.on("error", reject)
+    })
+  }
+
+  private async getAudioUrl(url: string): Promise<string> {
+    const strategies = [
+      { format: "bestaudio", label: "bestaudio" },
+      { format: "worstaudio", label: "worstaudio" },
+      { format: "", label: "default" },
+      { format: "best", label: "best" },
     ]
 
-    for (const { client, args: extraArgs } of configs) {
+    for (const strategy of strategies) {
       try {
-        const args = [
-          "--dump-single-json",
-          "--no-playlist",
-          "--format", "bestaudio[ext=webm]/bestaudio/best",
-          "--quiet",
-          "--no-warnings",
-          "--user-agent", userAgent,
-          ...extraArgs,
-        ]
-
-        if (cookieFile) {
-          args.push("--cookies", cookieFile)
-        }
-
-        args.push(url)
-
-        const result = await new Promise<string>((resolve, reject) => {
-          const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] })
-          let stdout = ""
-          let stderr = ""
-
-          proc.stdout.on("data", (d) => (stdout += d))
-          proc.stderr.on("data", (d) => (stderr += d))
-
-          proc.on("close", (code) => {
-            if (code !== 0) {
-              reject(new Error(stderr.slice(0, 200)))
-              return
-            }
-
-            try {
-              const data = JSON.parse(stdout)
-              const audioFmt = data.formats?.find(
-                (f: any) => f.url && f.acodec !== "none" && f.vcodec === "none"
-              ) || data.formats?.find(
-                (f: any) => f.url && f.acodec !== "none"
-              ) || data.formats?.find(
-                (f: any) => f.url
-              )
-
-              if (audioFmt?.url) {
-                resolve(audioFmt.url)
-              } else {
-                reject(new Error("No audio URL found"))
-              }
-            } catch (err) {
-              reject(err instanceof Error ? err : new Error(String(err)))
-            }
-          })
-
-          proc.on("error", (err) => reject(err))
-        })
-
-        logger.debug("audio", `URL obtenida con cliente ${client}`)
+        logger.debug("audio", `Trying format strategy: ${strategy.label}`)
+        const result = await this.tryGetUrlWithFormat(strategy.format, url)
+        logger.debug("audio", `URL obtained with strategy: ${strategy.label}`)
         return result
       } catch (err) {
-        logger.debug("audio", `Cliente ${client} falló`, {
-          error: err instanceof Error ? err.message.slice(0, 100) : String(err),
+        logger.debug("audio", `Strategy ${strategy.label} failed`, {
+          error: err instanceof Error ? err.message.slice(0, 150) : String(err),
         })
       }
     }
 
-    throw new Error("yt-dlp no pudo obtener URL con ningún cliente")
+    // All strategies failed - try --dump-json fallback
+    logger.debug("audio", "All format strategies failed, trying --dump-json fallback")
+    const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    const jsonArgs = ["--dump-json", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", userAgent]
+    if (cookieFile) jsonArgs.push("--cookies", cookieFile)
+    jsonArgs.push(url)
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn("yt-dlp", jsonArgs, { stdio: ["ignore", "pipe", "pipe"] })
+      let stdout = ""
+      let stderr = ""
+
+      proc.stdout.on("data", (d) => (stdout += d))
+      proc.stderr.on("data", (d) => (stderr += d))
+
+      proc.on("close", (code) => {
+        if (code !== 0 || !stdout.trim()) {
+          reject(new Error(stderr.slice(0, 200) || `code ${code}`))
+          return
+        }
+
+        try {
+          const data = JSON.parse(stdout)
+          const audioFmt = data.formats?.find(
+            (f: any) => f.url && f.acodec !== "none" && f.vcodec === "none"
+          ) || data.formats?.find(
+            (f: any) => f.url && f.acodec !== "none"
+          ) || data.formats?.find(
+            (f: any) => f.url
+          ) || data.url
+
+          if (audioFmt?.url || typeof audioFmt === "string") {
+            resolve(typeof audioFmt === "string" ? audioFmt : audioFmt.url)
+          } else {
+            reject(new Error("No audio URL found in formats"))
+          }
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err)))
+        }
+      })
+
+      proc.on("error", reject)
+    })
   }
 
   async createResource(url: string, seekTo?: number): Promise<AudioResource> {
