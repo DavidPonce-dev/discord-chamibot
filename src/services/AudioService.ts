@@ -1,9 +1,12 @@
 import { createAudioResource, AudioResource, StreamType } from "@discordjs/voice"
 import { spawn } from "child_process"
-import path from "path"
 import { logger } from "../utils/logger"
 
-const COOKIE_FILE = path.join(process.cwd(), "youtube-cookies.txt")
+let cookieFile: string | null = null
+
+export function setCookieFile(path: string | null) {
+  cookieFile = path
+}
 
 export class AudioService {
   private activeFfmpeg: ReturnType<typeof spawn> | null = null
@@ -30,8 +33,8 @@ export class AudioService {
       "--no-warnings",
     ]
 
-    if (COOKIE_FILE) {
-      args.push("--cookies", COOKIE_FILE)
+    if (cookieFile) {
+      args.push("--cookies", cookieFile)
     }
 
     args.push(url)
@@ -53,9 +56,9 @@ export class AudioService {
         try {
           const data = JSON.parse(stdout)
           const audioFmt = data.formats?.find(
-            (f: any) => f.url && f.acodeg !== "none" && f.vcodec === "none"
+            (f: any) => f.url && f.acodec !== "none" && f.vcodec === "none"
           ) || data.formats?.find(
-            (f: any) => f.url && f.acodeg !== "none"
+            (f: any) => f.url && f.acodec !== "none"
           ) || data.formats?.find(
             (f: any) => f.url
           )

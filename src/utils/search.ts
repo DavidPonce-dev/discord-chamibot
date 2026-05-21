@@ -1,6 +1,5 @@
 import play, { YouTubePlayList } from "play-dl"
 import { spawn } from "child_process"
-import path from "path"
 import { logger } from "./logger"
 
 export interface ResolveResult {
@@ -14,7 +13,11 @@ export interface ResolveResult {
   playlistTitle?: string
 }
 
-const COOKIE_FILE = path.join(process.cwd(), "youtube-cookies.txt")
+let cookieFile: string | null = null
+
+export function setCookieFile(path: string | null) {
+  cookieFile = path
+}
 
 function sanitizeYouTubeUrl(url: string): string {
   try {
@@ -45,8 +48,8 @@ async function resolveWithYtDlp(url: string): Promise<{ title: string; duration:
     "--no-warnings",
   ]
 
-  if (COOKIE_FILE) {
-    args.push("--cookies", COOKIE_FILE)
+  if (cookieFile) {
+    args.push("--cookies", cookieFile)
   }
 
   args.push(url)
@@ -133,7 +136,7 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
           }],
         }
       } catch {
-        throw new Error("No se pudo obtener info del video. Si estás en un servidor cloud, configurá youtube-cookies.txt")
+        throw new Error("No se pudo obtener info del video. Si estás en un servidor cloud, configurá YOUTUBE_COOKIES")
       }
     }
   }

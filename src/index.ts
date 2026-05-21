@@ -11,11 +11,13 @@ import { execute as help } from "./commands/help"
 import { execute as autoplay } from "./commands/autoplay"
 import { pause, resume, skip, stop } from "./commands/playback"
 import { remove, shuffle, loop } from "./commands/queue-control"
-import { autocompleteSearch } from "./utils/search"
+import { autocompleteSearch, setCookieFile as setSearchCookieFile } from "./utils/search"
 import { handleButton } from "./handlers/ButtonHandler"
 import { execute as seek } from "./commands/seek"
 import { editTemporary } from "./utils/messages"
 import { logger } from "./utils/logger"
+import { setupCookies } from "./utils/cookieSetup"
+import { setCookieFile as setAudioCookieFile } from "./services/AudioService"
 
 process.on("unhandledRejection", (reason) => {
   const msg = String(reason)
@@ -33,6 +35,16 @@ process.on("uncaughtException", (err) => {
 })
 
 dotenv.config()
+
+// Setup YouTube cookies from environment variable
+const cookiePath = setupCookies()
+setSearchCookieFile(cookiePath)
+setAudioCookieFile(cookiePath)
+if (cookiePath) {
+  logger.info("bot", "YouTube cookies configuradas", { path: cookiePath })
+} else {
+  logger.warn("bot", "Sin YouTube cookies (YOUTUBE_COOKIES no configurada)")
+}
 
 const client = new Client({
   intents: [
