@@ -25,59 +25,72 @@ export class AudioService {
   }
 
   private async getAudioUrl(url: string): Promise<string> {
-    const args = [
-      "--dump-single-json",
-      "--no-playlist",
-      "--format", "bestaudio",
-      "--quiet",
-      "--no-warnings",
-      "--extractor-args", "youtube:player_client=tv_embedded",
-    ]
+    const clients = ["web", "tv_embedded", "android"]
 
-    if (cookieFile) {
-      args.push("--cookies", cookieFile)
-      logger.debug("audio", "Usando cookies", { file: cookieFile })
+    for (const client of clients) {
+      try {
+        const args = [
+          "--dump-single-json",
+          "--no-playlist",
+          "--format", "bestaudio",
+          "--quiet",
+          "--no-warnings",
+          "--extractor-args", `youtube:player_client=${client}`,
+        ]
+
+        if (cookieFile) {
+          args.push("--cookies", cookieFile)
+        }
+
+        args.push(url)
+
+        const result = await new Promise<string>((resolve, reject) => {
+          const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] })
+          let stdout = ""
+          let stderr = ""
+
+          proc.stdout.on("data", (d) => (stdout += d))
+          proc.stderr.on("data", (d) => (stderr += d))
+
+          proc.on("close", (code) => {
+            if (code !== 0) {
+              reject(new Error(stderr.slice(0, 200)))
+              return
+            }
+
+            try {
+              const data = JSON.parse(stdout)
+              const audioFmt = data.formats?.find(
+                (f: any) => f.url && f.acodec !== "none" && f.vcodec === "none"
+              ) || data.formats?.find(
+                (f: any) => f.url && f.acodec !== "none"
+              ) || data.formats?.find(
+                (f: any) => f.url
+              )
+
+              if (audioFmt?.url) {
+                resolve(audioFmt.url)
+              } else {
+                reject(new Error("No audio URL found"))
+              }
+            } catch (err) {
+              reject(err instanceof Error ? err : new Error(String(err)))
+            }
+          })
+
+          proc.on("error", (err) => reject(err))
+        })
+
+        logger.debug("audio", `URL obtenida con cliente ${client}`)
+        return result
+      } catch (err) {
+        logger.debug("audio", `Cliente ${client} falló`, {
+          error: err instanceof Error ? err.message.slice(0, 100) : String(err),
+        })
+      }
     }
 
-    args.push(url)
-
-    return new Promise((resolve, reject) => {
-      const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] })
-      let stdout = ""
-      let stderr = ""
-
-      proc.stdout.on("data", (d) => (stdout += d))
-      proc.stderr.on("data", (d) => (stderr += d))
-
-      proc.on("close", (code) => {
-        if (code !== 0) {
-          const errMsg = stderr.slice(0, 300) || `yt-dlp exited with code ${code}`
-          reject(new Error(errMsg))
-          return
-        }
-
-        try {
-          const data = JSON.parse(stdout)
-          const audioFmt = data.formats?.find(
-            (f: any) => f.url && f.acodec !== "none" && f.vcodec === "none"
-          ) || data.formats?.find(
-            (f: any) => f.url && f.acodec !== "none"
-          ) || data.formats?.find(
-            (f: any) => f.url
-          )
-
-          if (audioFmt?.url) {
-            resolve(audioFmt.url)
-          } else {
-            reject(new Error("No se encontró URL de audio en los formatos"))
-          }
-        } catch (err) {
-          reject(err instanceof Error ? err : new Error(String(err)))
-        }
-      })
-
-      proc.on("error", (err) => reject(err))
-    })
+    throw new Error("yt-dlp no pudo obtener URL con ningún cliente")
   }
 
   async createResource(url: string, seekTo?: number): Promise<AudioResource> {

@@ -40,53 +40,60 @@ function extractVideoId(url: string): string | undefined {
 }
 
 async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string } | null> {
-  const args = [
-    "--dump-single-json",
-    "--no-playlist",
-    "--skip-download",
-    "--quiet",
-    "--no-warnings",
-    "--extractor-args", "youtube:player_client=tv_embedded",
-  ]
+  const clients = ["web", "tv_embedded", "android"]
 
-  if (cookieFile) {
-    args.push("--cookies", cookieFile)
+  for (const client of clients) {
+    try {
+      const args = [
+        "--dump-single-json",
+        "--no-playlist",
+        "--skip-download",
+        "--quiet",
+        "--no-warnings",
+        "--extractor-args", `youtube:player_client=${client}`,
+      ]
+
+      if (cookieFile) {
+        args.push("--cookies", cookieFile)
+      }
+
+      args.push(url)
+
+      const result = await new Promise<string>((resolve, reject) => {
+        const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 })
+        let stdout = ""
+        let stderr = ""
+
+        proc.stdout.on("data", (d) => (stdout += d))
+        proc.stderr.on("data", (d) => (stderr += d))
+
+        proc.on("close", (code) => {
+          if (code !== 0 || !stdout) {
+            reject(new Error(stderr.slice(0, 150) || `code ${code}`))
+            return
+          }
+          resolve(stdout)
+        })
+
+        proc.on("error", () => reject(new Error("spawn failed")))
+      })
+
+      const data = JSON.parse(result)
+      const title = data.title ?? "Unknown"
+      const duration = data.duration ?? 0
+      const id = data.id ?? extractVideoId(url) ?? ""
+      const durationStr = duration ? `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, "0")}` : "0:00"
+
+      logger.debug("search", `yt-dlp resolve OK con cliente ${client}`)
+      return { title, duration: durationStr, id }
+    } catch (err) {
+      logger.debug("search", `Cliente ${client} falló`, {
+        error: err instanceof Error ? err.message.slice(0, 100) : String(err),
+      })
+    }
   }
 
-  args.push(url)
-
-  return new Promise((resolve) => {
-    const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 })
-    let stdout = ""
-    let stderr = ""
-
-    proc.stdout.on("data", (d) => (stdout += d))
-    proc.stderr.on("data", (d) => (stderr += d))
-
-    proc.on("close", (code) => {
-      if (code !== 0 || !stdout) {
-        logger.debug("search", "yt-dlp resolve failed", {
-          code,
-          error: stderr.slice(0, 150),
-        })
-        resolve(null)
-        return
-      }
-
-      try {
-        const data = JSON.parse(stdout)
-        const title = data.title ?? "Unknown"
-        const duration = data.duration ?? 0
-        const id = data.id ?? extractVideoId(url) ?? ""
-        const durationStr = duration ? `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, "0")}` : "0:00"
-        resolve({ title, duration: durationStr, id })
-      } catch {
-        resolve(null)
-      }
-    })
-
-    proc.on("error", () => resolve(null))
-  })
+  return null
 }
 
 export async function resolveQuery(query: string): Promise<ResolveResult> {
