@@ -1,7 +1,7 @@
 import play from "play-dl"
 import { Track } from "../core/types"
 import { parseDurationSec } from "../utils/format"
-import { VideoResult, searchPlayDl, searchYtDlp } from "./RadioSearchService"
+import { VideoResult, searchPlayDl } from "./RadioSearchService"
 
 const MAX_AUTOPLAY_SEC = 1500
 const MAX_RETRIES = 3
@@ -123,7 +123,6 @@ export class YouTubeRecommender {
 
     for (const q of queries) {
       let videos = await searchPlayDl(q)
-      if (!videos.length) videos = await searchYtDlp(q)
       if (!videos.length) continue
 
       const filtered = filterResults(videos, currentId, currentTitle, excludeTitles)

@@ -3,7 +3,6 @@ import { YouTubeRecommender, isMusic, normalizeTitle } from "../src/radio/YouTub
 import type { Track } from "../src/core/types"
 
 const mockSearchPlayDl = vi.hoisted(() => vi.fn())
-const mockSearchYtDlp = vi.hoisted(() => vi.fn())
 const mockPlayVideoInfo = vi.hoisted(() => vi.fn())
 
 vi.mock("play-dl", () => ({
@@ -14,7 +13,6 @@ vi.mock("play-dl", () => ({
 
 vi.mock("../src/radio/RadioSearchService", () => ({
   searchPlayDl: mockSearchPlayDl,
-  searchYtDlp: mockSearchYtDlp,
 }))
 
 function makeTrack(overrides: Partial<Track> = {}): Track {
@@ -70,41 +68,15 @@ describe("YouTubeRecommender", () => {
       expect(result!.title).toBe("Artist Name - Another Song")
     })
 
-    it("play-dl encuentra resultados → NO llama a yt-dlp", async () => {
-      mockSearchPlayDl.mockResolvedValue([
-        makePlayResult("xyz789", "Artist Name - Another Song", "4:00"),
-      ])
-
-      await service.findRelated(makeTrack(), "Artist Name - Song Title")
-      expect(mockSearchYtDlp).not.toHaveBeenCalled()
-    })
-
-    it("play-dl devuelve vacío → fallback a yt-dlp", async () => {
+    it("play-dl devuelve vacío → null", async () => {
       mockSearchPlayDl.mockResolvedValue([])
-      mockSearchYtDlp.mockResolvedValue([
-        { id: "yt777", title: "YT Fallback Song", url: "https://youtube.com/watch?v=yt777", durationRaw: "250" },
-      ])
 
       const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
-      expect(result).not.toBeNull()
-      expect(result!.id).toBe("yt777")
-      expect(mockSearchYtDlp).toHaveBeenCalledOnce()
+      expect(result).toBeNull()
     })
 
-    it("play-dl falla → fallback a yt-dlp", async () => {
+    it("play-dl falla → null", async () => {
       mockSearchPlayDl.mockResolvedValue([])
-      mockSearchYtDlp.mockResolvedValue([
-        { id: "yt777", title: "YT Fallback", url: "https://youtube.com/watch?v=yt777", durationRaw: "200" },
-      ])
-
-      const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
-      expect(result).not.toBeNull()
-      expect(result!.id).toBe("yt777")
-    })
-
-    it("play-dl y yt-dlp fallan → null", async () => {
-      mockSearchPlayDl.mockResolvedValue([])
-      mockSearchYtDlp.mockResolvedValue([])
 
       const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).toBeNull()
@@ -180,7 +152,6 @@ describe("YouTubeRecommender", () => {
       mockPlayVideoInfo.mockResolvedValue({
         video_details: { tags: ["rock"] },
       })
-      mockSearchYtDlp.mockResolvedValue([])
       mockSearchPlayDl
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([

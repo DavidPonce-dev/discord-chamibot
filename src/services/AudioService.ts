@@ -1,19 +1,15 @@
-import {
-  demuxProbe,
-  createAudioResource,
-  AudioResource,
-} from "@discordjs/voice"
+import { demuxProbe, createAudioResource, AudioResource } from "@discordjs/voice"
 import youtubedl from "youtube-dl-exec"
-import { formatTime } from "../utils/format"
+import { logger } from "../utils/logger"
 
 export class AudioService {
-  private activeProcess?: ReturnType<typeof youtubedl.exec>
+  private activeProcess: ReturnType<typeof youtubedl.exec> | null = null
 
   killProcess() {
     if (this.activeProcess && !this.activeProcess.killed) {
       this.activeProcess.kill()
     }
-    this.activeProcess = undefined
+    this.activeProcess = null
   }
 
   private buildOpts(seekTo?: number) {
@@ -25,29 +21,52 @@ export class AudioService {
       forceOverwrites: true,
     }
     if (seekTo !== undefined) {
-      opts.downloadSections = `*${formatTime(seekTo)}-*`
+      opts.downloadSections = `*${this.formatTime(seekTo)}-*`
     }
     return opts
+  }
+
+  private formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
   async createResource(url: string, seekTo?: number): Promise<AudioResource> {
     this.killProcess()
 
-    const subprocess = youtubedl.exec(url, this.buildOpts(seekTo), {
-      stdio: ["ignore", "pipe", "ignore"],
-    })
+    const seekInfo = seekTo !== undefined ? ` (seek: ${seekTo}s)` : ""
+    logger.debug("audio", `Iniciando stream yt-dlp${seekInfo}`, { url: url.slice(0, 60) })
 
-    this.activeProcess = subprocess
-    subprocess.catch(() => {})
-    const stream = subprocess.stdout!
+    try {
+      const subprocess = youtubedl.exec(url, this.buildOpts(seekTo), {
+        stdio: ["ignore", "pipe", "ignore"],
+      })
 
-    subprocess.on("error", (err) => console.error("[yt-dlp] Error:", err))
-    stream.on("error", () => {})
-    subprocess.on("close", (code) => {
-      if (code && code !== 0) console.error(`[yt-dlp] Salió con código ${code}`)
-    })
+      this.activeProcess = subprocess
+      subprocess.catch(() => {})
+      const stream = subprocess.stdout!
 
-    const probe = await demuxProbe(stream)
-    return createAudioResource(probe.stream, { inputType: probe.type })
+      subprocess.on("error", (err) =>
+        logger.error("audio", "Error en proceso yt-dlp", { error: err.message })
+      )
+      stream.on("error", () => {})
+      subprocess.on("close", (code) => {
+        if (code && code !== 0) {
+          logger.error("audio", "yt-dlp terminó con error", { code })
+        }
+      })
+
+      const probe = await demuxProbe(stream)
+      logger.debug("audio", "Stream iniciado exitosamente", { type: probe.type })
+      return createAudioResource(probe.stream, { inputType: probe.type })
+    } catch (err) {
+      logger.error("audio", "Error al crear recurso de audio", {
+        url: url.slice(0, 60),
+        error: err instanceof Error ? err.message : String(err),
+        seek: seekTo,
+      })
+      throw err
+    }
   }
 }

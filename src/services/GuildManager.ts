@@ -1,6 +1,7 @@
 import { VoiceConnection } from "@discordjs/voice"
 import { Message } from "discord.js"
 import { TrackScheduler } from "./TrackScheduler"
+import { logger } from "../utils/logger"
 
 export class GuildManager {
   private sessions = new Map<string, TrackScheduler>()
@@ -14,10 +15,15 @@ export class GuildManager {
   toggleAutoplayPref(guildId: string): boolean {
     const current = this.autoplayPrefs.get(guildId) ?? false
     this.autoplayPrefs.set(guildId, !current)
+    logger.event("guild", "Autoplay preference toggled", {
+      guildId,
+      enabled: !current,
+    })
     return !current
   }
 
   create(guildId: string, connection: VoiceConnection) {
+    logger.event("guild", "Sesión de música creada", { guildId })
     const session = new TrackScheduler(connection, this.getAutoplayPref(guildId))
     this.sessions.set(guildId, session)
     return session
@@ -28,6 +34,7 @@ export class GuildManager {
   }
 
   delete(guildId: string) {
+    logger.event("guild", "Sesión de música eliminada", { guildId })
     const session = this.sessions.get(guildId)
     if (session) {
       session.destroy()
