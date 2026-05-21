@@ -1,4 +1,6 @@
 import play, { YouTubePlayList } from "play-dl"
+import youtubedl from "youtube-dl-exec"
+import { logger } from "./logger"
 
 export interface ResolveResult {
   tracks: {
@@ -31,6 +33,31 @@ function extractVideoId(url: string): string | undefined {
   }
 }
 
+async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string } | null> {
+  try {
+    const result = await youtubedl(url, {
+      dumpSingleJson: true,
+      noWarnings: true,
+      skipDownload: true,
+      quiet: true,
+    })
+
+    if (!result || typeof result !== "object") return null
+
+    const title = (result as any).title ?? "Unknown"
+    const duration = (result as any).duration ?? 0
+    const id = (result as any).id ?? extractVideoId(url) ?? ""
+    const durationStr = duration ? `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, "0")}` : "0:00"
+
+    return { title, duration: durationStr, id }
+  } catch (err) {
+    logger.warn("search", "yt-dlp resolve failed, falling back to play-dl", {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return null
+  }
+}
+
 export async function resolveQuery(query: string): Promise<ResolveResult> {
   const isUrl = query.startsWith("http://") || query.startsWith("https://")
 
@@ -56,16 +83,36 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
     const isChannel = parsed.pathname.includes("/channel/") || parsed.pathname.startsWith("/@")
     if (!isChannel) {
       const cleanUrl = sanitizeYouTubeUrl(query)
-      const info = await play.video_basic_info(cleanUrl)
       const id = extractVideoId(cleanUrl)
-      return {
-        tracks: [{
-          url: cleanUrl,
-          title: info.video_details.title ?? "Unknown",
-          duration: info.video_details.durationRaw,
-          id,
-          thumbnail: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : undefined,
-        }],
+
+      // Try yt-dlp first (more reliable), fallback to play-dl
+      const ytDlpResult = await resolveWithYtDlp(cleanUrl)
+      if (ytDlpResult) {
+        return {
+          tracks: [{
+            url: cleanUrl,
+            title: ytDlpResult.title,
+            duration: ytDlpResult.duration,
+            id: ytDlpResult.id,
+            thumbnail: ytDlpResult.id ? `https://img.youtube.com/vi/${ytDlpResult.id}/hqdefault.jpg` : undefined,
+          }],
+        }
+      }
+
+      // Fallback to play-dl
+      try {
+        const info = await play.video_basic_info(cleanUrl)
+        return {
+          tracks: [{
+            url: cleanUrl,
+            title: info.video_details.title ?? "Unknown",
+            duration: info.video_details.durationRaw,
+            id,
+            thumbnail: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : undefined,
+          }],
+        }
+      } catch {
+        throw new Error("No se pudo obtener info del video")
       }
     }
   }
