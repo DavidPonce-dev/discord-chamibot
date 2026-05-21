@@ -69,9 +69,29 @@ export class AudioService {
       }
     }
 
-    // All strategies failed - try --dump-json fallback
-    logger.debug("audio", "All format strategies failed, trying --dump-json fallback")
+    // All strategies failed - diagnostic: list available formats
     const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    logger.warn("audio", "All format strategies failed, running --list-formats for diagnostics")
+    const listArgs = ["--list-formats", "--no-playlist", "--user-agent", userAgent]
+    if (cookieFile) listArgs.push("--cookies", cookieFile)
+    listArgs.push(url)
+
+    const listResult = await new Promise<string>((resolve, reject) => {
+      const proc = spawn("yt-dlp", listArgs, { stdio: ["ignore", "pipe", "pipe"] })
+      let stdout = ""
+      let stderr = ""
+      proc.stdout.on("data", (d) => (stdout += d))
+      proc.stderr.on("data", (d) => (stderr += d))
+      proc.on("close", (code) => {
+        resolve(`stdout:\n${stdout}\nstderr:\n${stderr}`)
+      })
+      proc.on("error", reject)
+    })
+
+    logger.error("audio", "--list-formats diagnostic output", { output: listResult.slice(0, 1000) })
+
+    // Try --dump-json fallback anyway
+    logger.debug("audio", "Trying --dump-json fallback")
     const jsonArgs = ["--dump-json", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", userAgent]
     if (cookieFile) jsonArgs.push("--cookies", cookieFile)
     jsonArgs.push(url)
