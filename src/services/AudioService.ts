@@ -1,15 +1,21 @@
-import { demuxProbe, createAudioResource, AudioResource } from "@discordjs/voice"
+import { createAudioResource, AudioResource, StreamType } from "@discordjs/voice"
 import youtubedl from "youtube-dl-exec"
+import { spawn } from "child_process"
 import { logger } from "../utils/logger"
 
 export class AudioService {
   private activeProcess: ReturnType<typeof youtubedl.exec> | null = null
+  private activeFfmpeg: ReturnType<typeof spawn> | null = null
 
   killProcess() {
     if (this.activeProcess && !this.activeProcess.killed) {
       this.activeProcess.kill()
     }
+    if (this.activeFfmpeg && !this.activeFfmpeg.killed) {
+      this.activeFfmpeg.kill()
+    }
     this.activeProcess = null
+    this.activeFfmpeg = null
   }
 
   private buildOpts(seekTo?: number) {
@@ -45,21 +51,38 @@ export class AudioService {
 
       this.activeProcess = subprocess
       subprocess.catch(() => {})
-      const stream = subprocess.stdout!
+      const ytStream = subprocess.stdout!
 
       subprocess.on("error", (err) =>
         logger.error("audio", "Error en proceso yt-dlp", { error: err.message })
       )
-      stream.on("error", () => {})
       subprocess.on("close", (code) => {
         if (code && code !== 0) {
           logger.error("audio", "yt-dlp terminó con error", { code })
         }
       })
 
-      const probe = await demuxProbe(stream)
-      logger.debug("audio", "Stream iniciado exitosamente", { type: probe.type })
-      return createAudioResource(probe.stream, { inputType: probe.type })
+      // Convert any input format to opus via FFmpeg
+      const ffmpeg = spawn("ffmpeg", [
+        "-i", "pipe:0",
+        "-f", "opus",
+        "-c:a", "libopus",
+        "-b:a", "128k",
+        "-application", "audio",
+        "-v", "quiet",
+        "pipe:1",
+      ])
+
+      this.activeFfmpeg = ffmpeg
+
+      ffmpeg.on("error", (err) =>
+        logger.error("audio", "Error en FFmpeg", { error: err.message })
+      )
+
+      ytStream.pipe(ffmpeg.stdin!)
+
+      logger.debug("audio", "Stream iniciado exitosamente (opus via FFmpeg)")
+      return createAudioResource(ffmpeg.stdout!, { inputType: StreamType.Opus })
     } catch (err) {
       logger.error("audio", "Error al crear recurso de audio", {
         url: url.slice(0, 60),
