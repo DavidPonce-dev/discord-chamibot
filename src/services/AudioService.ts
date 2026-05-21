@@ -26,7 +26,7 @@ export class AudioService {
 
   private async tryGetUrlWithFormat(format: string, url: string): Promise<string> {
     const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-    const args = ["--get-url", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", userAgent]
+    const args = ["--get-url", "--js-runtimes", "deno", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", userAgent]
     if (format) args.push("--format", format)
     if (cookieFile) args.push("--cookies", cookieFile)
     args.push(url)
@@ -72,7 +72,7 @@ export class AudioService {
     // All strategies failed - diagnostic: list available formats
     const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     logger.warn("audio", "All format strategies failed, running --list-formats for diagnostics")
-    const listArgs = ["--list-formats", "--no-playlist", "--user-agent", userAgent]
+    const listArgs = ["--list-formats", "--js-runtimes", "deno", "--no-playlist", "--user-agent", userAgent]
     if (cookieFile) listArgs.push("--cookies", cookieFile)
     listArgs.push(url)
 
@@ -92,7 +92,7 @@ export class AudioService {
 
     // Try --dump-json fallback anyway
     logger.debug("audio", "Trying --dump-json fallback")
-    const jsonArgs = ["--dump-json", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", userAgent]
+    const jsonArgs = ["--dump-json", "--js-runtimes", "deno", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", userAgent]
     if (cookieFile) jsonArgs.push("--cookies", cookieFile)
     jsonArgs.push(url)
 

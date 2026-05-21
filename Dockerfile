@@ -18,7 +18,13 @@ RUN apt-get update && apt-get install -y \
   ffmpeg \
   curl \
   ca-certificates \
+  unzip \
   && rm -rf /var/lib/apt/lists/*
+
+# Install deno (required by yt-dlp for YouTube JS extraction)
+RUN curl -fsSL https://deno.land/install.sh | sh
+ENV DENO_INSTALL="/root/.deno"
+ENV PATH="$DENO_INSTALL/bin:$PATH"
 
 # Install yt-dlp for YouTube URL extraction
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \

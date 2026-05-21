@@ -44,6 +44,7 @@ async function resolveWithYtDlp(url: string): Promise<{ title: string; duration:
 
   const args = [
     "--dump-json",
+    "--js-runtimes", "deno",
     "--no-playlist",
     "--quiet",
     "--no-warnings",
