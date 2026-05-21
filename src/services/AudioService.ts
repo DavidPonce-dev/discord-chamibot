@@ -1,7 +1,9 @@
 import { createAudioResource, AudioResource, StreamType } from "@discordjs/voice"
-import play from "play-dl"
 import { spawn } from "child_process"
+import path from "path"
 import { logger } from "../utils/logger"
+
+const COOKIE_FILE = path.join(process.cwd(), "youtube-cookies.txt")
 
 export class AudioService {
   private activeFfmpeg: ReturnType<typeof spawn> | null = null
@@ -19,27 +21,57 @@ export class AudioService {
     return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
-  private async getAudioUrl(url: string, seekTo?: number): Promise<string> {
-    const info = await play.video_info(url)
-    logger.debug("audio", "video_info obtenido", {
-      title: info.video_details.title,
-      formats: info.format.length,
-    })
+  private async getAudioUrl(url: string): Promise<string> {
+    const args = [
+      "--dump-single-json",
+      "--no-playlist",
+      "--format", "bestaudio",
+      "--quiet",
+      "--no-warnings",
+    ]
 
-    // Prefer opus/webm audio, fallback to any format with URL
-    const audioFmt = info.format.find(
-      (f) => f.url && f.mimeType?.includes("audio/webm")
-    ) || info.format.find(
-      (f) => f.url && f.mimeType?.includes("audio/")
-    ) || info.format.find(
-      (f) => f.url
-    )
-
-    if (!audioFmt?.url) {
-      throw new Error("No se encontró URL de audio en los formatos")
+    if (COOKIE_FILE) {
+      args.push("--cookies", COOKIE_FILE)
     }
 
-    return audioFmt.url
+    args.push(url)
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] })
+      let stdout = ""
+      let stderr = ""
+
+      proc.stdout.on("data", (d) => (stdout += d))
+      proc.stderr.on("data", (d) => (stderr += d))
+
+      proc.on("close", (code) => {
+        if (code !== 0) {
+          reject(new Error(stderr.slice(0, 200) || `yt-dlp exited with code ${code}`))
+          return
+        }
+
+        try {
+          const data = JSON.parse(stdout)
+          const audioFmt = data.formats?.find(
+            (f: any) => f.url && f.acodeg !== "none" && f.vcodec === "none"
+          ) || data.formats?.find(
+            (f: any) => f.url && f.acodeg !== "none"
+          ) || data.formats?.find(
+            (f: any) => f.url
+          )
+
+          if (audioFmt?.url) {
+            resolve(audioFmt.url)
+          } else {
+            reject(new Error("No se encontró URL de audio en los formatos"))
+          }
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err)))
+        }
+      })
+
+      proc.on("error", (err) => reject(err))
+    })
   }
 
   async createResource(url: string, seekTo?: number): Promise<AudioResource> {
@@ -49,7 +81,7 @@ export class AudioService {
     logger.debug("audio", `Obteniendo URL de audio${seekInfo}`, { url: url.slice(0, 60) })
 
     try {
-      const audioUrl = await this.getAudioUrl(url, seekTo)
+      const audioUrl = await this.getAudioUrl(url)
       logger.debug("audio", "URL obtenida, iniciando FFmpeg stream", {
         host: new URL(audioUrl).hostname,
       })

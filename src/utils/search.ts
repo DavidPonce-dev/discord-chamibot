@@ -1,4 +1,6 @@
 import play, { YouTubePlayList } from "play-dl"
+import { spawn } from "child_process"
+import path from "path"
 import { logger } from "./logger"
 
 export interface ResolveResult {
@@ -11,6 +13,8 @@ export interface ResolveResult {
   }[]
   playlistTitle?: string
 }
+
+const COOKIE_FILE = path.join(process.cwd(), "youtube-cookies.txt")
 
 function sanitizeYouTubeUrl(url: string): string {
   try {
@@ -30,6 +34,49 @@ function extractVideoId(url: string): string | undefined {
   } catch {
     return undefined
   }
+}
+
+async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string } | null> {
+  const args = [
+    "--dump-single-json",
+    "--no-playlist",
+    "--skip-download",
+    "--quiet",
+    "--no-warnings",
+  ]
+
+  if (COOKIE_FILE) {
+    args.push("--cookies", COOKIE_FILE)
+  }
+
+  args.push(url)
+
+  return new Promise((resolve) => {
+    const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 })
+    let stdout = ""
+
+    proc.stdout.on("data", (d) => (stdout += d))
+
+    proc.on("close", (code) => {
+      if (code !== 0 || !stdout) {
+        resolve(null)
+        return
+      }
+
+      try {
+        const data = JSON.parse(stdout)
+        const title = data.title ?? "Unknown"
+        const duration = data.duration ?? 0
+        const id = data.id ?? extractVideoId(url) ?? ""
+        const durationStr = duration ? `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, "0")}` : "0:00"
+        resolve({ title, duration: durationStr, id })
+      } catch {
+        resolve(null)
+      }
+    })
+
+    proc.on("error", () => resolve(null))
+  })
 }
 
 export async function resolveQuery(query: string): Promise<ResolveResult> {
@@ -59,6 +106,21 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
       const cleanUrl = sanitizeYouTubeUrl(query)
       const id = extractVideoId(cleanUrl)
 
+      // Try yt-dlp first (works with cookies from cloud IPs)
+      const ytDlpResult = await resolveWithYtDlp(cleanUrl)
+      if (ytDlpResult) {
+        return {
+          tracks: [{
+            url: cleanUrl,
+            title: ytDlpResult.title,
+            duration: ytDlpResult.duration,
+            id: ytDlpResult.id,
+            thumbnail: ytDlpResult.id ? `https://img.youtube.com/vi/${ytDlpResult.id}/hqdefault.jpg` : undefined,
+          }],
+        }
+      }
+
+      // Fallback to play-dl (works from non-blocked IPs)
       try {
         const info = await play.video_info(cleanUrl)
         return {
@@ -70,13 +132,9 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
             thumbnail: (info.video_details.id ?? id) ? `https://img.youtube.com/vi/${info.video_details.id ?? id}/hqdefault.jpg` : undefined,
           }],
         }
-      } catch (err) {
-        logger.warn("search", "video_info failed, using fallback", {
-          error: err instanceof Error ? err.message.slice(0, 100) : String(err),
-        })
+      } catch {
+        throw new Error("No se pudo obtener info del video. Si estás en un servidor cloud, configurá youtube-cookies.txt")
       }
-
-      throw new Error("No se pudo obtener info del video")
     }
   }
 
