@@ -162,25 +162,37 @@ export class AudioService {
         "-c:a", "libopus",
         "-b:a", "128k",
         "-application", "audio",
-        "-v", "quiet",
         "pipe:1",
       )
 
       const ffmpeg = spawn("ffmpeg", ffmpegArgs)
       this.activeFfmpeg = ffmpeg
 
+      let bytesWritten = 0
+      ffmpeg.stdout?.on("data", (data) => {
+        bytesWritten += data.length
+      })
+
+      let ffmpegStderr = ""
+      ffmpeg.stderr?.on("data", (data) => {
+        ffmpegStderr += data.toString()
+      })
+
       ffmpeg.on("error", (err) =>
         logger.error("audio", "Error en FFmpeg", { error: err.message })
       )
-      ffmpeg.stderr?.on("data", (data) => {
-        const msg = data.toString()
-        if (msg.toLowerCase().includes("error")) {
-          logger.error("audio", "FFmpeg stderr", { msg: msg.slice(0, 200) })
-        }
-      })
+
       ffmpeg.on("close", (code) => {
+        logger.debug("audio", "FFmpeg cerrado", {
+          code,
+          bytesWritten,
+          stderr: ffmpegStderr.slice(0, 500),
+        })
         if (code && code !== 0) {
-          logger.error("audio", "FFmpeg terminó con error", { code })
+          logger.error("audio", "FFmpeg terminó con error", {
+            code,
+            stderr: ffmpegStderr.slice(0, 500),
+          })
         }
       })
 
