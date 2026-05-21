@@ -20,20 +20,33 @@ export class AudioService {
   }
 
   private async getAudioUrl(url: string, seekTo?: number): Promise<string> {
-    const opts: Record<string, string | boolean> = {
-      format: "bestaudio",
-      quiet: true,
-      noWarnings: true,
-    }
-    if (seekTo !== undefined) {
-      opts.downloadSections = `*${this.formatTime(seekTo)}-*`
+    const clients = ["tv_embedded", "android", "web_creator"]
+
+    for (const client of clients) {
+      try {
+        const opts: Record<string, string | boolean> = {
+          format: "bestaudio",
+          quiet: true,
+          noWarnings: true,
+          extractorArgs: `youtube:player_client=${client}`,
+        }
+        if (seekTo !== undefined) {
+          opts.downloadSections = `*${this.formatTime(seekTo)}-*`
+        }
+
+        const result = await youtubedl(url, { ...opts, getUrl: true })
+        if (typeof result === "string" && result.trim()) {
+          logger.debug("audio", `URL obtenida con cliente ${client}`)
+          return result.trim()
+        }
+      } catch (err) {
+        logger.debug("audio", `Cliente ${client} falló`, {
+          error: err instanceof Error ? err.message.slice(0, 100) : String(err),
+        })
+      }
     }
 
-    const result = await youtubedl(url, { ...opts, getUrl: true })
-    if (typeof result === "string" && result.trim()) {
-      return result.trim()
-    }
-    throw new Error("yt-dlp no devolvió URL de audio")
+    throw new Error("yt-dlp no pudo obtener URL con ningún cliente")
   }
 
   async createResource(url: string, seekTo?: number): Promise<AudioResource> {
