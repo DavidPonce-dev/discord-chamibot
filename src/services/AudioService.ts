@@ -21,7 +21,6 @@ export class AudioService {
 
   private async getAudioUrl(url: string, seekTo?: number): Promise<string> {
     const opts: Record<string, string | boolean> = {
-      getURL: true,
       format: "bestaudio",
       quiet: true,
       noWarnings: true,
@@ -30,7 +29,7 @@ export class AudioService {
       opts.downloadSections = `*${this.formatTime(seekTo)}-*`
     }
 
-    const result = await youtubedl(url, opts)
+    const result = await youtubedl(url, { ...opts, getUrl: true })
     if (typeof result === "string" && result.trim()) {
       return result.trim()
     }
