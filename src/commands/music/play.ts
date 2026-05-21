@@ -2,7 +2,7 @@ import { ChatInputCommandInteraction } from "discord.js";
 import type { GuildTextBasedChannel } from "discord.js";
 import { joinVoiceChannel } from "@discordjs/voice";
 import { resolveQuery } from "../../utils/search";
-import { guildManager } from "../../services/guild/GuildManager";
+import { guildManager, registerCleanup } from "../../services/guild/GuildManager";
 import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage } from "../queue/queue";
 import { editTemporary } from "../../utils/messages";
 import { logger } from "../../utils/logger";
@@ -23,6 +23,19 @@ function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track 
     id: video.id,
     thumbnail: video.thumbnail,
   }
+}
+
+registerCleanup(stopProgressUpdates)
+
+async function sendQueueStatus(
+  guildId: string,
+  channel: GuildTextBasedChannel | undefined,
+  statusTitle: string,
+  totalPages: number,
+) {
+  if (!channel?.send) return
+  await ensureQueueMessage(guildId, channel, statusTitle, totalPages)
+  startProgressUpdates(guildId)
 }
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
@@ -46,8 +59,6 @@ function setupSchedulerCallbacks(scheduler: import("../../services/scheduler/Tra
       if (msg) msg.delete().catch(() => {})
       guildManager.clearQueueMessage(gId)
       clearQueuePage(gId)
-      stopProgressUpdates(gId)
-      guildManager.delete(gId)
     }
   }
 }
@@ -138,11 +149,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         guildId,
       })
       await interaction.editReply(`Añadida playlist: **${result.playlistTitle ?? "Lista"}** (${tracks.length} temas)`)
-      const channel = interaction.channel as GuildTextBasedChannel | undefined
-      if (channel?.send) {
-        await ensureQueueMessage(guildId, channel, `🎵 ${user} agregó una playlist — ${result.playlistTitle ?? "Lista"}`, lastPage())
-        startProgressUpdates(guildId)
-      }
+      await sendQueueStatus(guildId, interaction.channel as GuildTextBasedChannel | undefined, `🎵 ${user} agregó una playlist — ${result.playlistTitle ?? "Lista"}`, lastPage())
     } else {
       const track = toTrack(result.tracks[0], user)
       await scheduler.add(track)
@@ -152,11 +159,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         guildId,
       })
       await interaction.editReply(`Añadido: **${track.title}**`)
-      const channel = interaction.channel as GuildTextBasedChannel | undefined
-      if (channel?.send) {
-        await ensureQueueMessage(guildId, channel, `🎵 ${user} agregó una canción — ${track.title}`, lastPage())
-        startProgressUpdates(guildId)
-      }
+      await sendQueueStatus(guildId, interaction.channel as GuildTextBasedChannel | undefined, `🎵 ${user} agregó una canción — ${track.title}`, lastPage())
     }
   } catch (error) {
     logger.error("command", "Error al procesar el tema", {

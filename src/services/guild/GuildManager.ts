@@ -3,6 +3,13 @@ import { Message } from "discord.js"
 import { TrackScheduler } from "../scheduler/TrackScheduler"
 import { logger } from "../../utils/logger"
 
+type CleanupFn = (guildId: string) => void
+const cleanupCallbacks: CleanupFn[] = []
+
+export function registerCleanup(cb: CleanupFn) {
+  cleanupCallbacks.push(cb)
+}
+
 export class GuildManager {
   private sessions = new Map<string, TrackScheduler>()
   private autoplayPrefs = new Map<string, boolean>()
@@ -40,6 +47,9 @@ export class GuildManager {
       session.destroy()
     }
     this.sessions.delete(guildId)
+    for (const cb of cleanupCallbacks) {
+      cb(guildId)
+    }
   }
 
   has(guildId: string) {

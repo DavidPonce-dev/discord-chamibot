@@ -1,8 +1,6 @@
 import play, { YouTubePlayList } from "play-dl"
-import { spawn } from "child_process"
 import { logger } from "./logger"
-import { getCookieFile } from "./cookies"
-import { buildYtDlpArgs, USER_AGENT } from "./ytdlp"
+import { buildYtDlpArgs, spawnYtDlp } from "./ytdlp"
 import { formatTime } from "./format"
 
 export interface ResolveResult {
@@ -40,38 +38,25 @@ async function resolveWithYtDlp(url: string): Promise<{ title: string; duration:
   const args = buildYtDlpArgs(["--dump-json"])
   args.push(url)
 
-  return new Promise((resolve) => {
-    const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 })
-    let stdout = ""
-    let stderr = ""
+  try {
+    const result = await spawnYtDlp(args, 15000)
+    if (result.code !== 0 || !result.stdout.trim()) {
+      logger.debug("search", "yt-dlp resolve failed", {
+        code: result.code,
+        error: result.stderr.slice(0, 150),
+      })
+      return null
+    }
 
-    proc.stdout.on("data", (d) => (stdout += d))
-    proc.stderr.on("data", (d) => (stderr += d))
-
-    proc.on("close", (code) => {
-      if (code !== 0 || !stdout.trim()) {
-        logger.debug("search", "yt-dlp resolve failed", {
-          code,
-          error: stderr.slice(0, 150),
-        })
-        resolve(null)
-        return
-      }
-
-      try {
-        const data = JSON.parse(stdout)
-        const title = data.title ?? "Unknown"
-        const duration = data.duration ?? 0
-        const id = data.id ?? extractVideoId(url) ?? ""
-        const durationStr = formatTime(duration)
-        resolve({ title, duration: durationStr, id })
-      } catch {
-        resolve(null)
-      }
-    })
-
-    proc.on("error", () => resolve(null))
-  })
+    const data = JSON.parse(result.stdout)
+    const title = data.title ?? "Unknown"
+    const duration = data.duration ?? 0
+    const id = data.id ?? extractVideoId(url) ?? ""
+    const durationStr = formatTime(duration)
+    return { title, duration: durationStr, id }
+  } catch {
+    return null
+  }
 }
 
 export async function resolveQuery(query: string): Promise<ResolveResult> {

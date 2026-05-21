@@ -231,46 +231,57 @@ export class TrackScheduler {
     })
   }
 
+  private processingQueue = false
+
   private async processQueue() {
-    if (this.isPlaying) return
+    if (this.isPlaying || this.processingQueue) return
 
-    const nextTrack = this.queue.shift()
-    if (!nextTrack) return
-
-    this.isPlaying = true
-    this.current = nextTrack
-    this.lastTrackTitle = nextTrack.title
-
-    logger.event("scheduler", "Reproduciendo track", {
-      title: nextTrack.title,
-      id: nextTrack.id,
-      guildId: this.connection.joinConfig.guildId,
-      queueRemaining: this.queue.length,
-    })
-
+    this.processingQueue = true
     try {
-      if (!nextTrack.url) {
-        logger.warn("scheduler", "Track sin URL, saltando", { title: nextTrack.title })
-        this.resetPlaybackState()
-        await this.processQueue()
-        return
-      }
+      await this._processQueueLoop()
+    } finally {
+      this.processingQueue = false
+    }
+  }
 
-      this.audio.killProcess()
-      const resource = await this.audio.createResource(nextTrack.url)
+  private async _processQueueLoop() {
+    while (!this.isPlaying) {
+      const nextTrack = this.queue.shift()
+      if (!nextTrack) return
 
-      this.playbackStart = Date.now()
-      this.pauseOffset = 0
-      this.pauseTime = null
-      this.player.play(resource)
-    } catch (error) {
-      logger.error("scheduler", "Error al reproducir track", {
+      this.isPlaying = true
+      this.current = nextTrack
+      this.lastTrackTitle = nextTrack.title
+
+      logger.event("scheduler", "Reproduciendo track", {
         title: nextTrack.title,
-        url: nextTrack.url?.slice(0, 60),
-        error: getErrorMessage(error),
+        id: nextTrack.id,
+        guildId: this.connection.joinConfig.guildId,
+        queueRemaining: this.queue.length,
       })
-      this.resetPlaybackState()
-      await this.processQueue()
+
+      try {
+        if (!nextTrack.url) {
+          logger.warn("scheduler", "Track sin URL, saltando", { title: nextTrack.title })
+          this.resetPlaybackState()
+          continue
+        }
+
+        this.audio.killProcess()
+        const resource = await this.audio.createResource(nextTrack.url)
+
+        this.playbackStart = Date.now()
+        this.pauseOffset = 0
+        this.pauseTime = null
+        this.player.play(resource)
+      } catch (error) {
+        logger.error("scheduler", "Error al reproducir track", {
+          title: nextTrack.title,
+          url: nextTrack.url?.slice(0, 60),
+          error: getErrorMessage(error),
+        })
+        this.resetPlaybackState()
+      }
     }
   }
 
@@ -350,7 +361,7 @@ export class TrackScheduler {
     await new Promise((resolve) => setTimeout(resolve, SEEK_SETTLE_DELAY_MS))
     this.isPlaying = true
 
-    logger.event("scheduler", "Seeking", {
+    logger.event("scheduler", "Buscando posición", {
       title: this.current.title,
       time,
       guildId: this.connection.joinConfig.guildId,
@@ -385,7 +396,7 @@ export class TrackScheduler {
   }
 
   skip() {
-    logger.event("scheduler", "Skip", {
+    logger.event("scheduler", "Saltando", {
       title: this.current?.title ?? "none",
       guildId: this.connection.joinConfig.guildId,
     })
@@ -449,7 +460,7 @@ export class TrackScheduler {
 
   toggleAutoplay(): boolean {
     this.autoplay = !this.autoplay
-    logger.event("scheduler", "Autoplay toggled", {
+    logger.event("scheduler", "Autoplay cambiado", {
       enabled: this.autoplay,
       guildId: this.connection.joinConfig.guildId,
     })

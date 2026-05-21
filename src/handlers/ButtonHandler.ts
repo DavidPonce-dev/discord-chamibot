@@ -14,9 +14,9 @@ interface QueueButtonAction {
 }
 
 const queueIndexActions: Record<string, QueueButtonAction> = {
-  q_up_: { action: (s, idx) => s.moveUp(idx), logEvent: "Move up" },
-  q_down_: { action: (s, idx) => s.moveDown(idx), logEvent: "Move down" },
-  q_del_: { action: (s, idx) => s.remove(idx), logEvent: "Delete from queue" },
+  q_up_: { action: (s, idx) => s.moveUp(idx), logEvent: "Subir track" },
+  q_down_: { action: (s, idx) => s.moveDown(idx), logEvent: "Bajar track" },
+  q_del_: { action: (s, idx) => s.remove(idx), logEvent: "Eliminar de cola" },
 }
 
 export async function handleButton(interaction: ButtonInteraction) {
@@ -77,11 +77,11 @@ type ButtonHandler = (
 const buttonHandlers: Record<string, ButtonHandler> = {
   // Queue navigation
   q_page_prev: async (s, interaction, guildId, user) => {
-    logger.event("button", "Page prev", { user, guildId })
+    logger.event("button", "Página anterior", { user, guildId })
     await refreshQueueMessage(interaction, Math.max(1, (getQueuePage(guildId) || 1) - 1))
   },
   q_page_next: async (s, interaction, guildId, user) => {
-    logger.event("button", "Page next", { user, guildId })
+    logger.event("button", "Página siguiente", { user, guildId })
     await refreshQueueMessage(interaction, getQueuePage(guildId) + 1)
   },
 
@@ -93,17 +93,17 @@ const buttonHandlers: Record<string, ButtonHandler> = {
   },
   q_playback_skip: async (s, interaction, guildId, user) => {
     s.skip()
-    logger.event("button", "Skip", { user, guildId })
+    logger.event("button", "Saltando", { user, guildId })
     await refreshQueueMessage(interaction, 1)
   },
   q_playback_shuffle: async (s, interaction, guildId, user) => {
     s.shuffle()
-    logger.event("button", "Shuffle", { user, guildId })
+    logger.event("button", "Mezclando cola", { user, guildId })
     await refreshQueueMessage(interaction)
   },
   q_playback_clear: async (s, interaction, guildId, user) => {
     s.clear()
-    logger.event("button", "Clear queue", { user, guildId })
+    logger.event("button", "Limpiando cola", { user, guildId })
     await refreshQueueMessage(interaction)
   },
   q_playback_autoplay: async (s, interaction, guildId, user) => {

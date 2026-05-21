@@ -10,7 +10,6 @@ export const TRACKS_PER_PAGE = 3
 
 export const MAX_AUTOPLAY_SEC = 1500
 export const MAX_RETRIES = 3
-export const ARTIST_ROTATION_LIMIT = 3
 
 export const GENRE_KEYWORDS = [
   "rock", "pop", "metal", "hip hop", "rap", "r&b", "jazz", "blues",

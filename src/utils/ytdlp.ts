@@ -19,7 +19,7 @@ export function buildYtDlpArgs(baseArgs: string[], extraArgs: string[] = []): st
   return args
 }
 
-export function spawnYtDlp(args: string[]): Promise<YtDlpResult> {
+export function spawnYtDlp(args: string[], timeoutMs = 30000): Promise<YtDlpResult> {
   return new Promise((resolve) => {
     const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] })
     let stdout = ""
@@ -28,5 +28,13 @@ export function spawnYtDlp(args: string[]): Promise<YtDlpResult> {
     proc.stderr.on("data", (d) => (stderr += d))
     proc.on("close", (code) => resolve({ stdout, stderr, code }))
     proc.on("error", () => resolve({ stdout, stderr: "spawn failed", code: -1 }))
+
+    const timer = setTimeout(() => {
+      if (!proc.killed) proc.kill("SIGKILL")
+      resolve({ stdout, stderr: "timeout", code: -1 })
+    }, timeoutMs)
+
+    proc.on("close", () => clearTimeout(timer))
+    proc.on("error", () => clearTimeout(timer))
   })
 }

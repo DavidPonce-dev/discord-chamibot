@@ -82,9 +82,8 @@ Cada servidor tiene **un único mensaje de cola** que se actualiza dinámicament
 - **Runtime:** Node.js 22 + TypeScript
 - **Discord API:** discord.js v14
 - **Voz:** @discordjs/voice
-- **Streaming:** yt-dlp (via youtube-dl-exec)
-- **Búsqueda:** play-dl
-- **Audio:** FFmpeg (opcional, para conversión)
+- **Streaming:** yt-dlp (spawn directo) + FFmpeg (conversión a opus)
+- **Búsqueda y metadata:** play-dl
 
 ---
 
@@ -92,28 +91,53 @@ Cada servidor tiene **un único mensaje de cola** que se actualiza dinámicament
 
 ```
 src/
-├── commands/       # Handlers de comandos slash
-│   ├── play.ts     #   /p — buscar y reproducir
-│   ├── skip.ts     #   /s — saltar track
-│   ├── queue.ts    #   /q — interfaz del reproductor
-│   ├── pause.ts    #   /pa — pausar
-│   ├── resume.ts   #   /r — reanudar
-│   ├── stop.ts     #   /st — detener y limpiar
-│   ├── autoplay.ts #   /ap — toggle autoplay
-│   ├── loop.ts     #   /loop — toggle loop modes
-│   ├── shuffle.ts  #   /shuffle — mezclar cola
-│   ├── remove.ts   #   /remove — eliminar track
-│   ├── np.ts       #   /np — now playing
-│   ├── seek.ts     #   /seek — adelantar/retroceder
-│   └── help.ts     #   /h — ayuda
-├── music/
-│   ├── MusicQueue.ts   # Motor de reproducción y cola
-│   ├── MusicManager.ts # Gestión de colas por servidor
-│   └── Track.ts        # Interfaz de track
+├── core/
+│   └── types.ts              # Tipos compartidos (Track, LoopMode)
+├── commands/
+│   ├── music/
+│   │   ├── play.ts           # /p — buscar y reproducir
+│   │   ├── np.ts             # /np — now playing
+│   │   └── seek.ts           # /seek — adelantar/retroceder
+│   ├── queue/
+│   │   ├── queue.ts          # /q — interfaz del reproductor
+│   │   └── queue-control.ts  # /shuffle, /remove, /loop
+│   ├── playback/
+│   │   └── playback.ts       # /pa, /r, /s, /st
+│   └── general/
+│       ├── help.ts           # /h — ayuda
+│       └── autoplay.ts       # /ap — toggle autoplay
+├── services/
+│   ├── audio/
+│   │   └── AudioService.ts   # yt-dlp + FFmpeg streaming
+│   ├── scheduler/
+│   │   └── TrackScheduler.ts # Cola, autoplay, loop, playback
+│   └── guild/
+│       └── GuildManager.ts   # Sesiones por servidor
+├── handlers/
+│   └── ButtonHandler.ts      # Manejo de botones interactivos
+├── radio/
+│   ├── YouTubeRecommender.ts # Recomendaciones de tracks
+│   └── RadioSearchService.ts # Búsqueda para autoplay
+├── ui/
+│   ├── embeds/
+│   │   ├── QueueEmbed.ts     # Embed de la cola
+│   │   ├── NowPlayingEmbed.ts# Embed de now playing
+│   │   └── HelpEmbed.ts      # Embed de ayuda
+│   └── components/
+│       └── QueueComponents.ts# Botones de la cola
 ├── utils/
-│   └── search.ts       # Búsqueda y sanitización de URLs
-├── index.ts        # Entry point, client, registro de comandos
-└── register.ts     # Script para registrar comandos slash
+│   ├── ytdlp.ts              # Spawn yt-dlp con cookies
+│   ├── search.ts             # resolveQuery + autocomplete
+│   ├── messages.ts           # Helpers de mensajes temporales
+│   ├── guards.ts             # Validación de sesión
+│   ├── format.ts             # Formato de tiempo y progress bar
+│   ├── error.ts              # Helper de mensajes de error
+│   ├── cookies.ts            # Estado global de cookies
+│   ├── cookie-setup.ts       # Setup de cookies desde env/file
+│   └── logger.ts             # Logger estructurado
+├── constants.ts              # Constantes globales
+├── index.ts                  # Entry point, client, registro de handlers
+└── register.ts               # Script para registrar comandos slash
 ```
 
 ---
@@ -134,20 +158,21 @@ src/
                   ┌────────────────────┼────────────────────┐
                   ▼                    ▼                    ▼
            ┌──────────┐       ┌──────────────┐    ┌────────────────┐
-           │ play-dl  │       │ MusicManager │    │ ensureMessage  │
+           │ play-dl  │       │ GuildManager │    │ ensureMessage  │
            │ search/  │       │  .get/create │    │ (interfaz cola)│
-           │ resolve  │       └──────┬───────┘    └────────────────┘
+           │ metadata │       └──────┬───────┘    └────────────────┘
            └──────────┘              │
                                      ▼
                             ┌────────────────┐
-                            │  MusicQueue    │
+                            │ TrackScheduler │
                             │  .add()        │
                             │  .processQueue │
                             └───────┬────────┘
                                     │
                            ┌────────▼────────┐
-                           │   yt-dlp stdout │
-                           │  → demuxProbe   │
+                           │  AudioService   │
+                           │  yt-dlp --get-url│
+                           │  FFmpeg → opus  │
                            │  → AudioPlayer  │
                            │  → VC subscribe │
                            └─────────────────┘
@@ -167,7 +192,7 @@ src/
   ├─────────────────────────────────────────┤
   │  Comandos: try-catch + reply o editReply│
   ├─────────────────────────────────────────┤
-  │  Reprod.: yt-dlp / demuxProbe / Idle    │
+  │  Reprod.: yt-dlp / FFmpeg / Idle        │
   ├─────────────────────────────────────────┤
   │  Botones: try-catch + editReply fallback│
   └─────────────────────────────────────────┘
@@ -177,7 +202,7 @@ El bot captura errores en múltiples capas:
 - **Global:** `unhandledRejection` y `uncaughtException` evitan que el proceso muera
 - **Cliente Discord:** listener `client.on("error")` para errores de WebSocket
 - **Comandos:** cada handler está envuelto en try-catch, responde al usuario sin crashear
-- **Reproducción:** errores de yt-dlp, demuxProbe o el AudioPlayer se capturan y la cola continúa
+- **Reproducción:** errores de yt-dlp, FFmpeg o el AudioPlayer se capturan y la cola continúa
 - **Botones:** si un interaction expiró, intenta `editReply` como fallback en vez de crashear
 - **Logs:** mensajes cortos y legibles, sin stack traces
 
@@ -204,7 +229,7 @@ npm run dev
 
 1. Ir a [Discord Developer Portal](https://discord.com/developers/applications)
 2. Crear una aplicación y un bot
-3. En **Bot** → habilitar `Message Content Intent` y `Voice States`
+3. En **Bot** → habilitar `Voice States`
 4. En **OAuth2 → URL Generator** → marcar `bot` + `applications.commands`
 5. Dar permisos: `Send Messages`, `Connect`, `Speak`, `Use Slash Commands`
 6. Invitar el bot al servidor con la URL generada
@@ -241,6 +266,7 @@ El `docker-compose.yml` incluye:
 |----------|------------|
 | `DISCORD_TOKEN` | Token del bot (Discord Developer Portal) |
 | `CLIENT_ID` | Application ID del bot |
+| `YOUTUBE_COOKIES` | (Opcional) Cookies de YouTube para servidores cloud |
 
 ---
 
@@ -258,4 +284,4 @@ El `docker-compose.yml` incluye:
 | `Comandos no aparecen` | Slash commands no registrados | Ejecutar `npm run register` |
 | `No hay audio` | Bot no tiene permisos de voz | Verificar permisos `Connect` y `Speak` |
 | `Error al reproducir` | URL inválida o video restringido | Probar con otra URL o búsqueda por texto |
-| `yt-dlp falla` | Versión desactualizada | `npx youtube-dl-exec@latest update` |
+| `yt-dlp falla` | Versión desactualizada | Ejecutar `yt-dlp -U` o reconstruir Docker |
