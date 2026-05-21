@@ -4,32 +4,13 @@ import { spawn } from "child_process"
 import { logger } from "../utils/logger"
 
 export class AudioService {
-  private activeProcess: ReturnType<typeof youtubedl.exec> | null = null
   private activeFfmpeg: ReturnType<typeof spawn> | null = null
 
   killProcess() {
-    if (this.activeProcess && !this.activeProcess.killed) {
-      this.activeProcess.kill()
-    }
     if (this.activeFfmpeg && !this.activeFfmpeg.killed) {
-      this.activeFfmpeg.kill()
+      this.activeFfmpeg.kill("SIGKILL")
     }
-    this.activeProcess = null
     this.activeFfmpeg = null
-  }
-
-  private buildOpts(seekTo?: number) {
-    const opts: Record<string, string | boolean> = {
-      format: "bestaudio",
-      output: "-",
-      quiet: true,
-      noWarnings: true,
-      forceOverwrites: true,
-    }
-    if (seekTo !== undefined) {
-      opts.downloadSections = `*${this.formatTime(seekTo)}-*`
-    }
-    return opts
   }
 
   private formatTime(seconds: number): string {
@@ -38,48 +19,64 @@ export class AudioService {
     return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
+  private async getAudioUrl(url: string, seekTo?: number): Promise<string> {
+    const opts: Record<string, string | boolean> = {
+      getURL: true,
+      format: "bestaudio",
+      quiet: true,
+      noWarnings: true,
+    }
+    if (seekTo !== undefined) {
+      opts.downloadSections = `*${this.formatTime(seekTo)}-*`
+    }
+
+    const result = await youtubedl(url, opts)
+    if (typeof result === "string" && result.trim()) {
+      return result.trim()
+    }
+    throw new Error("yt-dlp no devolvió URL de audio")
+  }
+
   async createResource(url: string, seekTo?: number): Promise<AudioResource> {
     this.killProcess()
 
     const seekInfo = seekTo !== undefined ? ` (seek: ${seekTo}s)` : ""
-    logger.debug("audio", `Iniciando stream yt-dlp${seekInfo}`, { url: url.slice(0, 60) })
+    logger.debug("audio", `Obteniendo URL de audio${seekInfo}`, { url: url.slice(0, 60) })
 
     try {
-      const subprocess = youtubedl.exec(url, this.buildOpts(seekTo), {
-        stdio: ["ignore", "pipe", "ignore"],
-      })
+      const audioUrl = await this.getAudioUrl(url, seekTo)
+      logger.debug("audio", "URL obtenida, iniciando FFmpeg stream")
 
-      this.activeProcess = subprocess
-      subprocess.catch(() => {})
-      const ytStream = subprocess.stdout!
-
-      subprocess.on("error", (err) =>
-        logger.error("audio", "Error en proceso yt-dlp", { error: err.message })
-      )
-      subprocess.on("close", (code) => {
-        if (code && code !== 0) {
-          logger.error("audio", "yt-dlp terminó con error", { code })
-        }
-      })
-
-      // Convert any input format to opus via FFmpeg
-      const ffmpeg = spawn("ffmpeg", [
-        "-i", "pipe:0",
+      const ffmpegArgs = [
+        "-reconnect", "1",
+        "-reconnect_streamed", "1",
+        "-reconnect_delay_max", "5",
+        "-i", audioUrl,
         "-f", "opus",
         "-c:a", "libopus",
         "-b:a", "128k",
         "-application", "audio",
         "-v", "quiet",
         "pipe:1",
-      ])
+      ]
 
+      const ffmpeg = spawn("ffmpeg", ffmpegArgs)
       this.activeFfmpeg = ffmpeg
 
       ffmpeg.on("error", (err) =>
         logger.error("audio", "Error en FFmpeg", { error: err.message })
       )
-
-      ytStream.pipe(ffmpeg.stdin!)
+      ffmpeg.stderr?.on("data", (data) => {
+        const msg = data.toString()
+        if (msg.toLowerCase().includes("error")) {
+          logger.error("audio", "FFmpeg stderr", { msg: msg.slice(0, 200) })
+        }
+      })
+      ffmpeg.on("close", (code) => {
+        if (code && code !== 0) {
+          logger.error("audio", "FFmpeg terminó con error", { code })
+        }
+      })
 
       logger.debug("audio", "Stream iniciado exitosamente (opus via FFmpeg)")
       return createAudioResource(ffmpeg.stdout!, { inputType: StreamType.Opus })
