@@ -5,6 +5,29 @@ import { getCookieFile } from "../../utils/cookies"
 import { buildYtDlpArgs, spawnYtDlp, USER_AGENT } from "../../utils/ytDlp"
 import { formatTimeFFmpeg } from "../../utils/format"
 
+const ERROR_MSG_MAX_LENGTH = 200
+const LOG_ERROR_MAX_LENGTH = 150
+const DIAGNOSTIC_OUTPUT_MAX_LENGTH = 1_000
+const FFMPEG_STDERR_MAX_LENGTH = 500
+
+interface YtDlpFormat {
+  url?: string
+  acodec?: string
+  vcodec?: string
+}
+
+interface FormatStrategy {
+  format: string
+  label: string
+}
+
+const FORMAT_STRATEGIES: FormatStrategy[] = [
+  { format: "bestaudio", label: "bestaudio" },
+  { format: "worstaudio", label: "worstaudio" },
+  { format: "", label: "default" },
+  { format: "best", label: "best" },
+]
+
 export class AudioService {
   private activeFfmpeg: ReturnType<typeof spawn> | null = null
 
@@ -21,20 +44,13 @@ export class AudioService {
 
     const result = await spawnYtDlp(args)
     if (result.code !== 0 || !result.stdout.trim()) {
-      throw new Error(result.stderr.slice(0, 200) || `code ${result.code}`)
+      throw new Error(result.stderr.slice(0, ERROR_MSG_MAX_LENGTH) || `code ${result.code}`)
     }
     return result.stdout.trim()
   }
 
-  private async getAudioUrl(url: string): Promise<string> {
-    const strategies = [
-      { format: "bestaudio", label: "bestaudio" },
-      { format: "worstaudio", label: "worstaudio" },
-      { format: "", label: "default" },
-      { format: "best", label: "best" },
-    ]
-
-    for (const strategy of strategies) {
+  private async tryFormatStrategies(url: string): Promise<string | null> {
+    for (const strategy of FORMAT_STRATEGIES) {
       try {
         logger.debug("audio", `Trying format strategy: ${strategy.label}`)
         const result = await this.tryGetUrlWithFormat(strategy.format, url)
@@ -42,12 +58,14 @@ export class AudioService {
         return result
       } catch (err) {
         logger.debug("audio", `Strategy ${strategy.label} failed`, {
-          error: err instanceof Error ? err.message.slice(0, 150) : String(err),
+          error: err instanceof Error ? err.message.slice(0, LOG_ERROR_MAX_LENGTH) : String(err),
         })
       }
     }
+    return null
+  }
 
-    // All strategies failed - diagnostic: list available formats
+  private async runListFormatsDiagnostic(url: string): Promise<void> {
     logger.warn("audio", "All format strategies failed, running --list-formats for diagnostics")
     const listArgs = ["--list-formats", "--js-runtimes", "deno", "--no-playlist", "--user-agent", USER_AGENT]
     const cookieFile = getCookieFile()
@@ -66,49 +84,40 @@ export class AudioService {
       proc.on("error", reject)
     })
 
-    logger.error("audio", "--list-formats diagnostic output", { output: listResult.slice(0, 1000) })
+    logger.error("audio", "--list-formats diagnostic output", { output: listResult.slice(0, DIAGNOSTIC_OUTPUT_MAX_LENGTH) })
+  }
 
-    // Try --dump-json fallback anyway
+  private findBestAudioUrl(formats: YtDlpFormat[]): string | undefined {
+    // Prefer audio-only (no video), then audio-with-video, then any format with URL
+    return formats.find((f) => f.url && f.acodec !== "none" && f.vcodec === "none")?.url
+      || formats.find((f) => f.url && f.acodec !== "none")?.url
+      || formats.find((f) => f.url)?.url
+  }
+
+  private async tryDumpJsonFallback(url: string): Promise<string> {
     logger.debug("audio", "Trying --dump-json fallback")
     const jsonArgs = buildYtDlpArgs(["--dump-json"])
     jsonArgs.push(url)
 
-    return new Promise((resolve, reject) => {
-      const proc = spawn("yt-dlp", jsonArgs, { stdio: ["ignore", "pipe", "pipe"] })
-      let stdout = ""
-      let stderr = ""
+    const result = await spawnYtDlp(jsonArgs)
+    if (result.code !== 0 || !result.stdout.trim()) {
+      throw new Error(result.stderr.slice(0, ERROR_MSG_MAX_LENGTH) || `code ${result.code}`)
+    }
 
-      proc.stdout.on("data", (d) => (stdout += d))
-      proc.stderr.on("data", (d) => (stderr += d))
+    const data = JSON.parse(result.stdout)
+    const audioUrl = this.findBestAudioUrl(data.formats ?? []) || data.url
+    if (!audioUrl) {
+      throw new Error("No audio URL found in formats")
+    }
+    return audioUrl
+  }
 
-      proc.on("close", (code) => {
-        if (code !== 0 || !stdout.trim()) {
-          reject(new Error(stderr.slice(0, 200) || `code ${code}`))
-          return
-        }
+  private async getAudioUrl(url: string): Promise<string> {
+    const strategyResult = await this.tryFormatStrategies(url)
+    if (strategyResult) return strategyResult
 
-        try {
-          const data = JSON.parse(stdout)
-          const audioFmt = data.formats?.find(
-            (f: any) => f.url && f.acodec !== "none" && f.vcodec === "none"
-          ) || data.formats?.find(
-            (f: any) => f.url && f.acodec !== "none"
-          ) || data.formats?.find(
-            (f: any) => f.url
-          ) || data.url
-
-          if (audioFmt?.url || typeof audioFmt === "string") {
-            resolve(typeof audioFmt === "string" ? audioFmt : audioFmt.url)
-          } else {
-            reject(new Error("No audio URL found in formats"))
-          }
-        } catch (err) {
-          reject(err instanceof Error ? err : new Error(String(err)))
-        }
-      })
-
-      proc.on("error", reject)
-    })
+    await this.runListFormatsDiagnostic(url)
+    return this.tryDumpJsonFallback(url)
   }
 
   async createResource(url: string, seekTo?: number): Promise<AudioResource> {
@@ -163,12 +172,12 @@ export class AudioService {
         logger.debug("audio", "FFmpeg cerrado", {
           code,
           bytesWritten,
-          stderr: ffmpegStderr.slice(0, 500),
+          stderr: ffmpegStderr.slice(0, FFMPEG_STDERR_MAX_LENGTH),
         })
         if (code && code !== 0) {
           logger.error("audio", "FFmpeg terminó con error", {
             code,
-            stderr: ffmpegStderr.slice(0, 500),
+            stderr: ffmpegStderr.slice(0, FFMPEG_STDERR_MAX_LENGTH),
           })
         }
       })
