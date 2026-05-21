@@ -31,10 +31,12 @@ export class AudioService {
       "--format", "bestaudio",
       "--quiet",
       "--no-warnings",
+      "--extractor-args", "youtube:player_client=tv_embedded",
     ]
 
     if (cookieFile) {
       args.push("--cookies", cookieFile)
+      logger.debug("audio", "Usando cookies", { file: cookieFile })
     }
 
     args.push(url)
@@ -49,7 +51,8 @@ export class AudioService {
 
       proc.on("close", (code) => {
         if (code !== 0) {
-          reject(new Error(stderr.slice(0, 200) || `yt-dlp exited with code ${code}`))
+          const errMsg = stderr.slice(0, 300) || `yt-dlp exited with code ${code}`
+          reject(new Error(errMsg))
           return
         }
 

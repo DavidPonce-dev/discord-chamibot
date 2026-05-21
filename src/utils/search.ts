@@ -46,6 +46,7 @@ async function resolveWithYtDlp(url: string): Promise<{ title: string; duration:
     "--skip-download",
     "--quiet",
     "--no-warnings",
+    "--extractor-args", "youtube:player_client=tv_embedded",
   ]
 
   if (cookieFile) {
@@ -57,11 +58,17 @@ async function resolveWithYtDlp(url: string): Promise<{ title: string; duration:
   return new Promise((resolve) => {
     const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"], timeout: 15000 })
     let stdout = ""
+    let stderr = ""
 
     proc.stdout.on("data", (d) => (stdout += d))
+    proc.stderr.on("data", (d) => (stderr += d))
 
     proc.on("close", (code) => {
       if (code !== 0 || !stdout) {
+        logger.debug("search", "yt-dlp resolve failed", {
+          code,
+          error: stderr.slice(0, 150),
+        })
         resolve(null)
         return
       }
