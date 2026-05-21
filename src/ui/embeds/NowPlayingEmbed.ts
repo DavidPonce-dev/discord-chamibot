@@ -1,6 +1,6 @@
 import { EmbedBuilder } from "discord.js"
-import { TrackScheduler } from "../../services/scheduler/TrackScheduler"
-import { formatTime } from "../../utils/format"
+import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import { formatTime } from "@/utils/format"
 
 export function buildNowPlayingEmbed(queue: TrackScheduler) {
   const track = queue.getCurrentTrack()!

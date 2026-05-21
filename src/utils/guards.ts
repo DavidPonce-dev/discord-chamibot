@@ -1,6 +1,6 @@
 import { ChatInputCommandInteraction, ButtonInteraction } from "discord.js"
-import { guildManager } from "../services/guild/GuildManager"
-import { TrackScheduler } from "../services/scheduler/TrackScheduler"
+import { guildManager } from "@/services/guild/GuildManager"
+import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
 
 export function requireScheduler(
   interaction: ChatInputCommandInteraction | ButtonInteraction,

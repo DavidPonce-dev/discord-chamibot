@@ -1,16 +1,16 @@
 import { ChatInputCommandInteraction } from "discord.js";
 import type { GuildTextBasedChannel } from "discord.js";
 import { joinVoiceChannel } from "@discordjs/voice";
-import { resolveQuery } from "../../utils/search";
-import { guildManager, registerCleanup } from "../../services/guild/GuildManager";
-import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage } from "../queue/queue";
-import { editTemporary } from "../../utils/messages";
-import { logger } from "../../utils/logger";
-import { TRACKS_PER_PAGE } from "../../constants";
-import { calcTotalPages } from "../../utils/format";
-import { getErrorMessage } from "../../utils/error";
-import type { Track } from "../../core/types";
-import type { ResolveResult } from "../../utils/search";
+import { resolveQuery } from "@/utils/search";
+import { guildManager, registerCleanup } from "@/services/guild/GuildManager";
+import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage } from "@/commands/queue/queue";
+import { editTemporary } from "@/utils/messages";
+import { logger } from "@/utils/logger";
+import { TRACKS_PER_PAGE } from "@/constants";
+import { calcTotalPages } from "@/utils/format";
+import { getErrorMessage } from "@/utils/error";
+import type { Track } from "@/core/types";
+import type { ResolveResult } from "@/utils/search";
 
 const PROGRESS_UPDATE_INTERVAL_MS = 3_000
 

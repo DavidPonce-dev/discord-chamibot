@@ -3,9 +3,9 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from "discord.js"
-import { TrackScheduler } from "../../services/scheduler/TrackScheduler"
-import { TRACKS_PER_PAGE } from "../../constants"
-import { calcTotalPages, clampPage } from "../../utils/format"
+import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import { TRACKS_PER_PAGE } from "@/constants"
+import { calcTotalPages, clampPage } from "@/utils/format"
 
 export function buildTrackRows(queue: TrackScheduler, page: number) {
   const tracks = queue.getQueue()

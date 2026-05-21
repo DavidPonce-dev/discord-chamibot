@@ -1,7 +1,7 @@
 import { VoiceConnection } from "@discordjs/voice"
 import { Message } from "discord.js"
-import { TrackScheduler } from "../scheduler/TrackScheduler"
-import { logger } from "../../utils/logger"
+import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import { logger } from "@/utils/logger"
 
 type CleanupFn = (guildId: string) => void
 const cleanupCallbacks: CleanupFn[] = []

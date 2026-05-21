@@ -4,3 +4,25 @@ services:
     container_name: charmin-charmeleon-bot
     restart: unless-stopped
     env_file: .env
+    environment:
+      - COOKIE_REFRESHER_URL=http://cookie-refresher:3001
+    volumes:
+      - ./data/cookies:/cookies:ro
+    depends_on:
+      - cookie-refresher
+
+  cookie-refresher:
+    build: ./cookie-refresher
+    container_name: charmin-cookie-refresher
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+      - "6080:6080"
+    volumes:
+      - ./data/cookies:/cookies
+      - ./data/browser-profile:/profile
+    environment:
+      - PORT=3001
+      - VNC_PORT=6080
+      - COOKIE_FILE=/cookies/youtube-cookies.txt
+      - BROWSER_PROFILE=/profile

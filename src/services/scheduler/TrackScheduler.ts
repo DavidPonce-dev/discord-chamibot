@@ -6,12 +6,12 @@ import {
   entersState,
   VoiceConnectionStatus,
 } from "@discordjs/voice"
-import { Track, LoopMode } from "../../core/types"
-import { AudioService } from "../audio/AudioService"
-import { YouTubeRecommender } from "../../radio/YouTubeRecommender"
-import { normalizeTitle, extractArtist } from "../../radio/YouTubeRecommender"
-import { logger } from "../../utils/logger"
-import { getErrorMessage } from "../../utils/error"
+import { Track, LoopMode } from "@/core/types"
+import { AudioService } from "@/services/audio/AudioService"
+import { YouTubeRecommender } from "@/radio/YouTubeRecommender"
+import { normalizeTitle, extractArtist } from "@/radio/YouTubeRecommender"
+import { logger } from "@/utils/logger"
+import { getErrorMessage } from "@/utils/error"
 
 const VOICE_RECONNECT_TIMEOUT_MS = 5_000
 const SEEK_SETTLE_DELAY_MS = 100

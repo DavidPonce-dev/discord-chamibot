@@ -6,13 +6,13 @@ import {
   ButtonBuilder,
 } from "discord.js"
 import type { GuildTextBasedChannel } from "discord.js"
-import { guildManager } from "../../services/guild/GuildManager"
-import { buildQueueContent, buildEmptyEmbed } from "../../ui/embeds/QueueEmbed"
-import { buildTrackRows, buildNavRow, buildPlaybackRow } from "../../ui/components/QueueComponents"
-import { TRACKS_PER_PAGE } from "../../constants"
-import { calcTotalPages } from "../../utils/format"
-import { logger } from "../../utils/logger"
-import { getErrorMessage } from "../../utils/error"
+import { guildManager } from "@/services/guild/GuildManager"
+import { buildQueueContent, buildEmptyEmbed } from "@/ui/embeds/QueueEmbed"
+import { buildTrackRows, buildNavRow, buildPlaybackRow } from "@/ui/components/QueueComponents"
+import { TRACKS_PER_PAGE } from "@/constants"
+import { calcTotalPages } from "@/utils/format"
+import { logger } from "@/utils/logger"
+import { getErrorMessage } from "@/utils/error"
 
 type QueueMessagePayload = {
   embeds: EmbedBuilder[]

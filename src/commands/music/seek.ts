@@ -1,7 +1,7 @@
 import { ChatInputCommandInteraction } from "discord.js"
-import { editTemporary } from "../../utils/messages"
-import { requireScheduler } from "../../utils/guards"
-import { formatTimeFFmpeg } from "../../utils/format"
+import { editTemporary } from "@/utils/messages"
+import { requireScheduler } from "@/utils/guards"
+import { formatTimeFFmpeg } from "@/utils/format"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const seconds = interaction.options.getNumber("seconds", true)

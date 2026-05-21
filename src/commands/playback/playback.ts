@@ -1,8 +1,8 @@
 import { ChatInputCommandInteraction } from "discord.js"
-import { guildManager } from "../../services/guild/GuildManager"
-import { updateQueueForGuild, setQueuePage } from "../queue/queue"
-import { replyTemporary, replyAndDelete } from "../../utils/messages"
-import { requireScheduler, requireSession } from "../../utils/guards"
+import { guildManager } from "@/services/guild/GuildManager"
+import { updateQueueForGuild, setQueuePage } from "@/commands/queue/queue"
+import { replyTemporary, replyAndDelete } from "@/utils/messages"
+import { requireScheduler, requireSession } from "@/utils/guards"
 
 export async function pause(interaction: ChatInputCommandInteraction) {
   const scheduler = requireScheduler(interaction)

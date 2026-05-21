@@ -1,6 +1,6 @@
 import { ChatInputCommandInteraction } from "discord.js"
-import { guildManager } from "../../services/guild/GuildManager"
-import { replyTemporary } from "../../utils/messages"
+import { guildManager } from "@/services/guild/GuildManager"
+import { replyTemporary } from "@/utils/messages"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const scheduler = guildManager.get(interaction.guildId!)

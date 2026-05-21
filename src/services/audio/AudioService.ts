@@ -1,10 +1,11 @@
 import { createAudioResource, AudioResource, StreamType } from "@discordjs/voice"
 import { spawn } from "child_process"
-import { logger } from "../../utils/logger"
-import { getCookieFile } from "../../utils/cookies"
-import { buildYtDlpArgs, spawnYtDlp, USER_AGENT } from "../../utils/ytdlp"
-import { formatTimeFFmpeg } from "../../utils/format"
-import { getErrorMessage } from "../../utils/error"
+import { logger } from "@/utils/logger"
+import { getCookieFile } from "@/utils/cookies"
+import { buildYtDlpArgs, spawnYtDlp, USER_AGENT } from "@/utils/ytdlp"
+import { formatTimeFFmpeg } from "@/utils/format"
+import { getErrorMessage } from "@/utils/error"
+import { isCookieError, refreshCookies } from "@/utils/cookieRefresher"
 
 const ERROR_MSG_MAX_LENGTH = 200
 const LOG_ERROR_MAX_LENGTH = 150
@@ -113,12 +114,26 @@ export class AudioService {
     return audioUrl
   }
 
-  private async getAudioUrl(url: string): Promise<string> {
+  private async getAudioUrl(url: string, retries = 0): Promise<string> {
     const strategyResult = await this.tryFormatStrategies(url)
     if (strategyResult) return strategyResult
 
     await this.runListFormatsDiagnostic(url)
-    return this.tryDumpJsonFallback(url)
+
+    try {
+      return await this.tryDumpJsonFallback(url)
+    } catch (err) {
+      const msg = getErrorMessage(err)
+      if (retries === 0 && isCookieError(msg)) {
+        logger.warn("audio", "Posible error de cookies, intentando refrescar")
+        const refreshed = await refreshCookies()
+        if (refreshed.success) {
+          logger.info("audio", "Cookies refrescadas, reintentando")
+          return this.getAudioUrl(url, 1)
+        }
+      }
+      throw err
+    }
   }
 
   async createResource(url: string, seekTo?: number): Promise<AudioResource> {

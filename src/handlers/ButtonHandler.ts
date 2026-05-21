@@ -1,10 +1,10 @@
 import { ButtonInteraction } from "discord.js"
-import { guildManager } from "../services/guild/GuildManager"
-import { refreshQueueMessage, getQueuePage } from "../commands/queue/queue"
-import { logger } from "../utils/logger"
-import { requireSession } from "../utils/guards"
-import { LOOP_LABELS } from "../constants"
-import { getErrorMessage } from "../utils/error"
+import { guildManager } from "@/services/guild/GuildManager"
+import { refreshQueueMessage, getQueuePage } from "@/commands/queue/queue"
+import { logger } from "@/utils/logger"
+import { requireSession } from "@/utils/guards"
+import { LOOP_LABELS } from "@/constants"
+import { getErrorMessage } from "@/utils/error"
 
 const SEEK_BACK_SECONDS = 15
 
