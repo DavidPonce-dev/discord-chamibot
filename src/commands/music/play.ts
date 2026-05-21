@@ -1,12 +1,12 @@
 import { ChatInputCommandInteraction } from "discord.js";
 import { joinVoiceChannel } from "@discordjs/voice";
-import { resolveQuery } from "../utils/search";
-import { guildManager } from "../services/GuildManager";
-import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage } from "./queue";
-import { editTemporary } from "../utils/messages";
-import { logger } from "../utils/logger";
-import { TRACKS_PER_PAGE } from "../constants";
-import { calcTotalPages } from "../utils/format";
+import { resolveQuery } from "../../utils/search";
+import { guildManager } from "../../services/guild/GuildManager";
+import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage } from "../queue/queue";
+import { editTemporary } from "../../utils/messages";
+import { logger } from "../../utils/logger";
+import { TRACKS_PER_PAGE } from "../../constants";
+import { calcTotalPages } from "../../utils/format";
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
 

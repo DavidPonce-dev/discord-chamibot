@@ -1,10 +1,10 @@
 import type { LoopMode } from "./core/types"
 
-export const LOOP_LABELS: Record<LoopMode, string> = {
+export const LOOP_LABELS = {
   none: "❌ Desactivado",
   one: "🔂 Repetir uno",
   all: "🔁 Repetir todo",
-}
+} as const
 
 export const TRACKS_PER_PAGE = 3
 

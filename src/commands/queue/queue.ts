@@ -1,10 +1,10 @@
 import { ChatInputCommandInteraction, MessageComponentInteraction } from "discord.js"
-import { guildManager } from "../services/GuildManager"
-import { buildQueueContent, buildEmptyEmbed } from "../ui/QueueEmbed"
-import { buildTrackRows, buildNavRow, buildPlaybackRow } from "../ui/QueueComponents"
-import { TRACKS_PER_PAGE } from "../constants"
+import { guildManager } from "../../services/guild/GuildManager"
+import { buildQueueContent, buildEmptyEmbed } from "../../ui/embeds/QueueEmbed"
+import { buildTrackRows, buildNavRow, buildPlaybackRow } from "../../ui/components/QueueComponents"
+import { TRACKS_PER_PAGE } from "../../constants"
 export { TRACKS_PER_PAGE }
-import { calcTotalPages } from "../utils/format"
+import { calcTotalPages } from "../../utils/format"
 
 const queuePages = new Map<string, number>()
 

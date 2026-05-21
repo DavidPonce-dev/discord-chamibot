@@ -1,6 +1,6 @@
 import { ButtonInteraction } from "discord.js"
-import { guildManager } from "../services/GuildManager"
-import { refreshQueueMessage, getQueuePage } from "../commands/queue"
+import { guildManager } from "../services/guild/GuildManager"
+import { refreshQueueMessage, getQueuePage } from "../commands/queue/queue"
 import { logger } from "../utils/logger"
 import { requireSession } from "../utils/guards"
 import { LOOP_LABELS } from "../constants"

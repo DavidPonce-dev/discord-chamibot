@@ -1,9 +1,9 @@
 import { ChatInputCommandInteraction } from "discord.js"
-import { guildManager } from "../services/GuildManager"
-import { buildNowPlayingEmbed } from "../ui/NowPlayingEmbed"
-import { buildNowPlayingButtons } from "../ui/QueueComponents"
-import { replyTemporaryEmbed } from "../utils/messages"
-import { requireQueue } from "../utils/guards"
+import { guildManager } from "../../services/guild/GuildManager"
+import { buildNowPlayingEmbed } from "../../ui/embeds/NowPlayingEmbed"
+import { buildNowPlayingButtons } from "../../ui/components/QueueComponents"
+import { replyTemporaryEmbed } from "../../utils/messages"
+import { requireQueue } from "../../utils/guards"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const queue = requireQueue(interaction)

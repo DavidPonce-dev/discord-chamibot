@@ -1,6 +1,6 @@
-import { Track } from "../core/types"
-import { YouTubeRecommender } from "../radio/YouTubeRecommender"
-import { logger } from "../utils/logger"
+import { Track } from "../../core/types"
+import { YouTubeRecommender } from "../../radio/YouTubeRecommender"
+import { logger } from "../../utils/logger"
 
 export class RadioService {
   private recommender: YouTubeRecommender

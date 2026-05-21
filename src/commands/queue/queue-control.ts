@@ -1,9 +1,9 @@
 import { ChatInputCommandInteraction } from "discord.js"
-import { guildManager } from "../services/GuildManager"
+import { guildManager } from "../../services/guild/GuildManager"
 import { updateQueueForGuild } from "./queue"
-import { replyTemporary, replyAndDelete } from "../utils/messages"
-import { requireSession } from "../utils/guards"
-import { LOOP_LABELS } from "../constants"
+import { replyTemporary, replyAndDelete } from "../../utils/messages"
+import { requireSession } from "../../utils/guards"
+import { LOOP_LABELS } from "../../constants"
 
 export async function remove(interaction: ChatInputCommandInteraction) {
   const position = interaction.options.getInteger("position", true)

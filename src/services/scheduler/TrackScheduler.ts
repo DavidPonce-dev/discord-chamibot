@@ -6,11 +6,11 @@ import {
   entersState,
   VoiceConnectionStatus,
 } from "@discordjs/voice"
-import { Track, LoopMode } from "../core/types"
-import { AudioService } from "./AudioService"
-import { RadioService } from "./RadioService"
-import { normalizeTitle, extractArtist } from "../radio/YouTubeRecommender"
-import { logger } from "../utils/logger"
+import { Track, LoopMode } from "../../core/types"
+import { AudioService } from "../audio/AudioService"
+import { RadioService } from "../radio/RadioService"
+import { normalizeTitle, extractArtist } from "../../radio/YouTubeRecommender"
+import { logger } from "../../utils/logger"
 
 export class TrackScheduler {
   private queue: Track[] = []
