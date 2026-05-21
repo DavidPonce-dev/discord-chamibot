@@ -15,9 +15,6 @@ import { autocompleteSearch } from "./utils/search"
 import { handleButton } from "./handlers/ButtonHandler"
 import { execute as seek } from "./commands/seek"
 import { editTemporary } from "./utils/messages"
-import ffmpegPath from "ffmpeg-static";
-
-process.env.FFMPEG_PATH = ffmpegPath || "/usr/bin/ffmpeg";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[unhandledRejection]", reason)
