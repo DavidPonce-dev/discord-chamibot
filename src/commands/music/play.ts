@@ -141,6 +141,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       const channel = interaction.channel as GuildTextBasedChannel | undefined
       if (channel?.send) {
         await ensureQueueMessage(guildId, channel, `🎵 ${user} agregó una playlist — ${result.playlistTitle ?? "Lista"}`, lastPage())
+        startProgressUpdates(guildId)
       }
     } else {
       const track = toTrack(result.tracks[0], user)
@@ -154,6 +155,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       const channel = interaction.channel as GuildTextBasedChannel | undefined
       if (channel?.send) {
         await ensureQueueMessage(guildId, channel, `🎵 ${user} agregó una canción — ${track.title}`, lastPage())
+        startProgressUpdates(guildId)
       }
     }
   } catch (error) {
