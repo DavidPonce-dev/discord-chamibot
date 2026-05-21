@@ -1,4 +1,4 @@
-import { demuxProbe, createAudioResource, AudioResource } from "@discordjs/voice"
+import { createAudioResource, AudioResource, StreamType } from "@discordjs/voice"
 import youtubedl from "youtube-dl-exec"
 import { logger } from "../utils/logger"
 
@@ -14,7 +14,8 @@ export class AudioService {
 
   private buildOpts(seekTo?: number) {
     const opts: Record<string, string | boolean> = {
-      format: "bestaudio",
+      extractAudio: true,
+      audioFormat: "opus",
       output: "-",
       quiet: true,
       noWarnings: true,
@@ -57,9 +58,8 @@ export class AudioService {
         }
       })
 
-      const probe = await demuxProbe(stream)
-      logger.debug("audio", "Stream iniciado exitosamente", { type: probe.type })
-      return createAudioResource(probe.stream, { inputType: probe.type })
+      logger.debug("audio", "Stream iniciado exitosamente (opus)")
+      return createAudioResource(stream, { inputType: StreamType.OggOpus })
     } catch (err) {
       logger.error("audio", "Error al crear recurso de audio", {
         url: url.slice(0, 60),
