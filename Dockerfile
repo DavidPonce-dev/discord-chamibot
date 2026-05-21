@@ -4,8 +4,7 @@ FROM node:22-bookworm AS builder
 WORKDIR /app
 
 COPY package*.json ./
-ENV YOUTUBE_DL_SKIP_DOWNLOAD=1
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 COPY tsconfig.json ./
 COPY src ./src
@@ -31,7 +30,7 @@ ENV YOUTUBE_DL_SKIP_DOWNLOAD=1
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
 COPY --from=builder /app/dist ./dist
 
