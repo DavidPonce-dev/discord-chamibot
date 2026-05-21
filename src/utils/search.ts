@@ -40,7 +40,8 @@ function extractVideoId(url: string): string | undefined {
 }
 
 async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string } | null> {
-  const clients = ["web", "tv_embedded", "android"]
+  const clients = ["web", "web_music", "tv_embedded", "android"]
+  const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
   for (const client of clients) {
     try {
@@ -51,6 +52,7 @@ async function resolveWithYtDlp(url: string): Promise<{ title: string; duration:
         "--quiet",
         "--no-warnings",
         "--extractor-args", `youtube:player_client=${client}`,
+        "--user-agent", userAgent,
       ]
 
       if (cookieFile) {

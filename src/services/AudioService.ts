@@ -25,7 +25,8 @@ export class AudioService {
   }
 
   private async getAudioUrl(url: string): Promise<string> {
-    const clients = ["web", "tv_embedded", "android"]
+    const clients = ["web", "web_music", "tv_embedded", "android"]
+    const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
     for (const client of clients) {
       try {
@@ -36,6 +37,7 @@ export class AudioService {
           "--quiet",
           "--no-warnings",
           "--extractor-args", `youtube:player_client=${client}`,
+          "--user-agent", userAgent,
         ]
 
         if (cookieFile) {

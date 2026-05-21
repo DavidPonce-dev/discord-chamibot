@@ -11,13 +11,17 @@ export function setupCookies(): string | null {
     const content = fs.readFileSync(COOKIE_PATH, "utf-8")
     if (content.length > 10) {
       const lines = content.split("\n").filter((l) => l.trim() && !l.startsWith("#"))
-      const hasAuth = content.includes("__Secure-1PSID") || content.includes("__Secure-3PSID")
+      const cookieNames = lines.map((l) => l.split("\t")[5]).filter(Boolean)
+      const uniqueNames = [...new Set(cookieNames)]
+
       logger.info("cookie", "YouTube cookies found (mounted file)", {
         path: COOKIE_PATH,
         totalLines: content.split("\n").length,
         dataLines: lines.length,
-        hasAuth,
-        firstLine: lines[0]?.slice(0, 100),
+        uniqueCookies: uniqueNames.length,
+        cookieNames: uniqueNames.join(", "),
+        hasPSID: uniqueNames.some((n) => n.includes("PSID")),
+        hasSID: uniqueNames.some((n) => n === "SID" || n === "HSID" || n === "SSID"),
         sizeBytes: content.length,
       })
       return COOKIE_PATH
@@ -29,13 +33,17 @@ export function setupCookies(): string | null {
   if (cookies && cookies.length > 10) {
     fs.writeFileSync(COOKIE_PATH, cookies, { mode: 0o600 })
     const lines = cookies.split("\n").filter((l) => l.trim() && !l.startsWith("#"))
-    const hasAuth = cookies.includes("__Secure-1PSID") || cookies.includes("__Secure-3PSID")
+    const cookieNames = lines.map((l) => l.split("\t")[5]).filter(Boolean)
+    const uniqueNames = [...new Set(cookieNames)]
+
     logger.info("cookie", "YouTube cookies written from env var", {
       path: COOKIE_PATH,
       totalLines: cookies.split("\n").length,
       dataLines: lines.length,
-      hasAuth,
-      firstLine: lines[0]?.slice(0, 100),
+      uniqueCookies: uniqueNames.length,
+      cookieNames: uniqueNames.join(", "),
+      hasPSID: uniqueNames.some((n) => n.includes("PSID")),
+      hasSID: uniqueNames.some((n) => n === "SID" || n === "HSID" || n === "SSID"),
       sizeBytes: cookies.length,
     })
     return COOKIE_PATH
