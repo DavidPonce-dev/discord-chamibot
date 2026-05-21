@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { GuildManager } from "../src/services/GuildManager"
+import { GuildManager } from "../src/services/guild/GuildManager"
 
 const createMockQueueMethods = vi.hoisted(() => {
   return () => ({

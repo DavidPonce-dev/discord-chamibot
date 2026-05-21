@@ -6,7 +6,7 @@ const mockCreateResource = vi.hoisted(() => vi.fn<() => Promise<AudioResource>>(
 const mockKillProcess = vi.hoisted(() => vi.fn())
 const mockFindRelated = vi.hoisted(() => vi.fn())
 
-vi.mock("../src/services/AudioService", () => ({
+vi.mock("../src/services/audio/AudioService", () => ({
   AudioService: class {
     constructor() {
       return {
@@ -17,7 +17,7 @@ vi.mock("../src/services/AudioService", () => ({
   },
 }))
 
-vi.mock("../src/services/RadioService", () => ({
+vi.mock("../src/services/radio/RadioService", () => ({
   RadioService: class {
     constructor() {
       return { findRelated: mockFindRelated } as any
@@ -25,7 +25,7 @@ vi.mock("../src/services/RadioService", () => ({
   },
 }))
 
-const { TrackScheduler } = await import("../src/services/TrackScheduler")
+const { TrackScheduler } = await import("../src/services/scheduler/TrackScheduler")
 
 function makeTrack(overrides: Partial<Track> = {}): Track {
   return {

@@ -1,7 +1,7 @@
 import { VoiceConnection } from "@discordjs/voice"
 import { Message } from "discord.js"
-import { TrackScheduler } from "./TrackScheduler"
-import { logger } from "../utils/logger"
+import { TrackScheduler } from "../scheduler/TrackScheduler"
+import { logger } from "../../utils/logger"
 
 export class GuildManager {
   private sessions = new Map<string, TrackScheduler>()

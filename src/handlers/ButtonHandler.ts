@@ -1,133 +1,61 @@
 import { ButtonInteraction } from "discord.js"
-import { guildManager } from "../services/GuildManager"
-import { refreshQueueMessage, getQueuePage } from "../commands/queue"
+import { guildManager } from "../services/guild/GuildManager"
+import { refreshQueueMessage, getQueuePage } from "../commands/queue/queue"
 import { logger } from "../utils/logger"
+import { requireSession } from "../utils/guards"
+import { LOOP_LABELS } from "../constants"
+import { getErrorMessage } from "../utils/error"
+
+const SEEK_BACK_SECONDS = 15
+
+interface QueueButtonAction {
+  action: (scheduler: import("../services/scheduler/TrackScheduler").TrackScheduler, idx: number) => void
+  logEvent: string
+}
+
+const queueIndexActions: Record<string, QueueButtonAction> = {
+  q_up_: { action: (s, idx) => s.moveUp(idx), logEvent: "Move up" },
+  q_down_: { action: (s, idx) => s.moveDown(idx), logEvent: "Move down" },
+  q_del_: { action: (s, idx) => s.remove(idx), logEvent: "Delete from queue" },
+}
 
 export async function handleButton(interaction: ButtonInteraction) {
   const guildId = interaction.guildId!
   const user = interaction.user.username
-  const queue = guildManager.get(guildId)
+  const scheduler = requireSession(interaction)
 
-  if (!queue) {
+  if (!scheduler) {
     logger.warn("button", "Botón sin sesión activa", { user, guildId, customId: interaction.customId })
-    await interaction.reply({ content: "No hay una sesión activa", ephemeral: true })
     return
   }
 
   try {
-    if (interaction.customId.startsWith("q_up_")) {
-      const idx = parseInt(interaction.customId.slice(5), 10)
-      queue.moveUp(idx)
-      logger.event("button", "Move up", { user, guildId, index: idx })
-      await refreshQueueMessage(interaction)
-      return
+    // Handle queue index buttons (q_up_N, q_down_N, q_del_N)
+    for (const [prefix, { action, logEvent }] of Object.entries(queueIndexActions)) {
+      if (interaction.customId.startsWith(prefix)) {
+        const idx = parseInt(interaction.customId.slice(prefix.length), 10)
+        action(scheduler, idx)
+        logger.event("button", logEvent, { user, guildId, index: idx })
+        await refreshQueueMessage(interaction)
+        return
+      }
     }
-    if (interaction.customId.startsWith("q_down_")) {
-      const idx = parseInt(interaction.customId.slice(7), 10)
-      queue.moveDown(idx)
-      logger.event("button", "Move down", { user, guildId, index: idx })
-      await refreshQueueMessage(interaction)
-      return
-    }
-    if (interaction.customId.startsWith("q_del_")) {
-      const idx = parseInt(interaction.customId.slice(6), 10)
-      queue.remove(idx)
-      logger.event("button", "Delete from queue", { user, guildId, index: idx })
-      await refreshQueueMessage(interaction)
+
+    // Handle exact-match buttons
+    const handler = buttonHandlers[interaction.customId]
+    if (handler) {
+      await handler(scheduler, interaction, guildId, user)
       return
     }
 
-    switch (interaction.customId) {
-      case "q_page_prev":
-        logger.event("button", "Page prev", { user, guildId })
-        await refreshQueueMessage(interaction, Math.max(1, (getQueuePage(guildId) || 1) - 1))
-        break
-      case "q_page_next":
-        logger.event("button", "Page next", { user, guildId })
-        await refreshQueueMessage(interaction, getQueuePage(guildId) + 1)
-        break
-      case "q_playback_pause":
-        queue.togglePause()
-        logger.event("button", "Pause/Resume toggle", { user, guildId })
-        await refreshQueueMessage(interaction)
-        break
-      case "q_playback_skip":
-        queue.skip()
-        logger.event("button", "Skip", { user, guildId })
-        await refreshQueueMessage(interaction, 1)
-        break
-      case "q_playback_shuffle":
-        queue.shuffle()
-        logger.event("button", "Shuffle", { user, guildId })
-        await refreshQueueMessage(interaction)
-        break
-      case "q_playback_clear":
-        queue.clear()
-        logger.event("button", "Clear queue", { user, guildId })
-        await refreshQueueMessage(interaction)
-        break
-      case "q_playback_autoplay":
-        queue.toggleAutoplay()
-        guildManager.toggleAutoplayPref(guildId)
-        logger.event("button", "Autoplay toggle", { user, guildId })
-        await refreshQueueMessage(interaction)
-        break
-
-      case "np_pause":
-        queue.pause()
-        logger.event("button", "Now Playing pause", { user, guildId })
-        await interaction.update({ components: [] })
-        await interaction.followUp({ content: "⏸ Pausado", ephemeral: true })
-        break
-      case "np_resume":
-        queue.resume()
-        logger.event("button", "Now Playing resume", { user, guildId })
-        await interaction.update({ components: [] })
-        await interaction.followUp({ content: "▶ Reanudado", ephemeral: true })
-        break
-      case "np_skip":
-        queue.skip()
-        logger.event("button", "Now Playing skip", { user, guildId })
-        await interaction.update({ components: [] })
-        await interaction.followUp({ content: "⏭ Saltado", ephemeral: true })
-        break
-      case "np_loop": {
-        const mode = queue.toggleLoop()
-        const labels: Record<string, string> = {
-          none: "❌ Loop desactivado",
-          one: "🔂 Repetir uno",
-          all: "🔁 Repetir todo",
-        }
-        logger.event("button", "Now Playing loop", { user, guildId, mode })
-        await interaction.update({ components: [] })
-        await interaction.followUp({ content: labels[mode], ephemeral: true })
-        break
-      }
-      case "np_shuffle":
-        queue.shuffle()
-        logger.event("button", "Now Playing shuffle", { user, guildId })
-        await interaction.update({ components: [] })
-        await interaction.followUp({ content: "🔀 Cola mezclada", ephemeral: true })
-        break
-      case "np_seek_back": {
-        const pos = Math.max(0, queue.getPosition() - 15)
-        await queue.seek(pos)
-        logger.event("button", "Now Playing seek back", { user, guildId, position: pos })
-        await interaction.update({ components: [] })
-        await interaction.followUp({ content: "⏪ -15s", ephemeral: true })
-        break
-      }
-      default:
-        logger.warn("button", "Acción no reconocida", { user, guildId, customId: interaction.customId })
-        await interaction.reply({ content: "Acción no reconocida", ephemeral: true })
-        break
-    }
+    logger.warn("button", "Acción no reconocida", { user, guildId, customId: interaction.customId })
+    await interaction.reply({ content: "Acción no reconocida", ephemeral: true })
   } catch (error) {
     logger.error("button", "Error en botón", {
       user,
       guildId,
       customId: interaction.customId,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     })
     try {
       if (interaction.replied || interaction.deferred) {
@@ -137,4 +65,89 @@ export async function handleButton(interaction: ButtonInteraction) {
       }
     } catch { /* interaction might be expired */ }
   }
+}
+
+type ButtonHandler = (
+  scheduler: import("../services/scheduler/TrackScheduler").TrackScheduler,
+  interaction: ButtonInteraction,
+  guildId: string,
+  user: string,
+) => Promise<void>
+
+const buttonHandlers: Record<string, ButtonHandler> = {
+  // Queue navigation
+  q_page_prev: async (s, interaction, guildId, user) => {
+    logger.event("button", "Page prev", { user, guildId })
+    await refreshQueueMessage(interaction, Math.max(1, (getQueuePage(guildId) || 1) - 1))
+  },
+  q_page_next: async (s, interaction, guildId, user) => {
+    logger.event("button", "Page next", { user, guildId })
+    await refreshQueueMessage(interaction, getQueuePage(guildId) + 1)
+  },
+
+  // Queue playback
+  q_playback_pause: async (s, interaction, guildId, user) => {
+    s.togglePause()
+    logger.event("button", "Pause/Resume toggle", { user, guildId })
+    await refreshQueueMessage(interaction)
+  },
+  q_playback_skip: async (s, interaction, guildId, user) => {
+    s.skip()
+    logger.event("button", "Skip", { user, guildId })
+    await refreshQueueMessage(interaction, 1)
+  },
+  q_playback_shuffle: async (s, interaction, guildId, user) => {
+    s.shuffle()
+    logger.event("button", "Shuffle", { user, guildId })
+    await refreshQueueMessage(interaction)
+  },
+  q_playback_clear: async (s, interaction, guildId, user) => {
+    s.clear()
+    logger.event("button", "Clear queue", { user, guildId })
+    await refreshQueueMessage(interaction)
+  },
+  q_playback_autoplay: async (s, interaction, guildId, user) => {
+    s.toggleAutoplay()
+    guildManager.toggleAutoplayPref(guildId)
+    logger.event("button", "Autoplay toggle", { user, guildId })
+    await refreshQueueMessage(interaction)
+  },
+
+  // Now Playing controls
+  np_pause: async (s, interaction, guildId, user) => {
+    s.pause()
+    logger.event("button", "Now Playing pause", { user, guildId })
+    await clearButtonsAndFollowUp(interaction, "⏸ Pausado")
+  },
+  np_resume: async (s, interaction, guildId, user) => {
+    s.resume()
+    logger.event("button", "Now Playing resume", { user, guildId })
+    await clearButtonsAndFollowUp(interaction, "▶ Reanudado")
+  },
+  np_skip: async (s, interaction, guildId, user) => {
+    s.skip()
+    logger.event("button", "Now Playing skip", { user, guildId })
+    await clearButtonsAndFollowUp(interaction, "⏭ Saltado")
+  },
+  np_loop: async (s, interaction, guildId, user) => {
+    const mode = s.toggleLoop()
+    logger.event("button", "Now Playing loop", { user, guildId, mode })
+    await clearButtonsAndFollowUp(interaction, LOOP_LABELS[mode])
+  },
+  np_shuffle: async (s, interaction, guildId, user) => {
+    s.shuffle()
+    logger.event("button", "Now Playing shuffle", { user, guildId })
+    await clearButtonsAndFollowUp(interaction, "🔀 Cola mezclada")
+  },
+  np_seek_back: async (s, interaction, guildId, user) => {
+    const pos = Math.max(0, s.getPosition() - SEEK_BACK_SECONDS)
+    await s.seek(pos)
+    logger.event("button", "Now Playing seek back", { user, guildId, position: pos })
+    await clearButtonsAndFollowUp(interaction, "⏪ -15s")
+  },
+}
+
+async function clearButtonsAndFollowUp(interaction: ButtonInteraction, content: string) {
+  await interaction.update({ components: [] })
+  await interaction.followUp({ content, ephemeral: true })
 }

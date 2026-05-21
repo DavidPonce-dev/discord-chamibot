@@ -4,24 +4,26 @@ import {
   ChatInputCommandInteraction,
 } from "discord.js"
 import dotenv from "dotenv"
-import { execute as play } from "./commands/play"
-import { execute as queue } from "./commands/queue"
-import { execute as np } from "./commands/np"
-import { execute as help } from "./commands/help"
-import { execute as autoplay } from "./commands/autoplay"
-import { pause, resume, skip, stop } from "./commands/playback"
-import { remove, shuffle, loop } from "./commands/queue-control"
-import { autocompleteSearch, setCookieFile as setSearchCookieFile } from "./utils/search"
+import { execute as play } from "./commands/music/play"
+import { execute as queue } from "./commands/queue/queue"
+import { execute as np } from "./commands/music/np"
+import { execute as help } from "./commands/general/help"
+import { execute as autoplay } from "./commands/general/autoplay"
+import { pause, resume, skip, stop } from "./commands/playback/playback"
+import { remove, shuffle, loop } from "./commands/queue/queue-control"
+import { autocompleteSearch } from "./utils/search"
 import { handleButton } from "./handlers/ButtonHandler"
-import { execute as seek } from "./commands/seek"
+import { execute as seek } from "./commands/music/seek"
 import { editTemporary } from "./utils/messages"
 import { logger } from "./utils/logger"
-import { setupCookies } from "./utils/cookieSetup"
-import { setCookieFile as setAudioCookieFile } from "./services/AudioService"
+import { setupCookies } from "./utils/cookie-setup"
+import { setCookieFile } from "./utils/cookies"
+import { getErrorMessage } from "./utils/error"
 
+// Filter known discord.js voice errors that are expected during normal operation
+// "IP discovery" and "socket closed" occur when voice connections are interrupted
 process.on("unhandledRejection", (reason) => {
   const msg = String(reason)
-  // Errores conocidos de voz que no requieren acción
   if (msg.includes("IP discovery") || msg.includes("socket closed")) {
     logger.debug("process", "Error de voz conocido (ignorado)", { reason: msg })
     return
@@ -38,8 +40,7 @@ dotenv.config()
 
 // Setup YouTube cookies from environment variable
 const cookiePath = setupCookies()
-setSearchCookieFile(cookiePath)
-setAudioCookieFile(cookiePath)
+setCookieFile(cookiePath)
 if (cookiePath) {
   logger.info("bot", "YouTube cookies configuradas", { path: cookiePath })
 } else {
@@ -138,7 +139,7 @@ client.on("interactionCreate", async (interaction) => {
         logger.error("command", `Error en comando /${cmd}`, {
           user: userTag,
           guild: guildName,
-          error: err instanceof Error ? err.message : String(err),
+          error: getErrorMessage(err),
         })
         if (interaction.replied || interaction.deferred) {
           await editTemporary(interaction, "Ocurrió un error al ejecutar el comando")

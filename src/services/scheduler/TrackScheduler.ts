@@ -6,11 +6,16 @@ import {
   entersState,
   VoiceConnectionStatus,
 } from "@discordjs/voice"
-import { Track, LoopMode } from "../core/types"
-import { AudioService } from "./AudioService"
-import { RadioService } from "./RadioService"
-import { normalizeTitle, extractArtist } from "../radio/YouTubeRecommender"
-import { logger } from "../utils/logger"
+import { Track, LoopMode } from "../../core/types"
+import { AudioService } from "../audio/AudioService"
+import { YouTubeRecommender } from "../../radio/YouTubeRecommender"
+import { normalizeTitle, extractArtist } from "../../radio/YouTubeRecommender"
+import { logger } from "../../utils/logger"
+import { getErrorMessage } from "../../utils/error"
+
+const VOICE_RECONNECT_TIMEOUT_MS = 5_000
+const SEEK_SETTLE_DELAY_MS = 100
+const MS_PER_SECOND = 1_000
 
 export class TrackScheduler {
   private queue: Track[] = []
@@ -35,7 +40,7 @@ export class TrackScheduler {
   private readonly MAX_ARTIST_HISTORY = 10
 
   private audio: AudioService
-  private radioService: RadioService
+  private radio: YouTubeRecommender
 
   onTrackChange?: (guildId: string) => void
   onDisconnect?: (guildId: string) => void
@@ -46,7 +51,7 @@ export class TrackScheduler {
     this.player = createAudioPlayer()
     this.connection.subscribe(this.player)
     this.audio = new AudioService()
-    this.radioService = new RadioService()
+    this.radio = new YouTubeRecommender()
     this.registerEvents()
     logger.info("scheduler", "Scheduler creado", {
       guildId: connection.joinConfig.guildId,
@@ -62,74 +67,23 @@ export class TrackScheduler {
         const willAutoplay = this.autoplay && !!finished && this.queue.length === 0
 
         if (finished?.title) {
-          const norm = normalizeTitle(finished.title)
-          this.trackHistory.unshift(norm)
-          if (this.trackHistory.length > this.MAX_HISTORY) this.trackHistory.pop()
-
-          const artist = extractArtist(finished.title)
-          if (artist && artist === this.currentArtist) {
-            this.sameArtistStreak++
-          } else if (artist) {
-            this.sameArtistStreak = 1
-            this.currentArtist = artist
-            this.artistHistory.unshift(artist)
-            if (this.artistHistory.length > this.MAX_ARTIST_HISTORY) this.artistHistory.pop()
-          }
-
-          logger.event("scheduler", "Track finalizado", {
-            title: finished.title,
-            guildId: this.connection.joinConfig.guildId,
-            willAutoplay,
-            queueSize: this.queue.length,
-          })
+          this.handleTrackFinished(finished, willAutoplay)
         }
 
         if (!willAutoplay) {
-          if (this.loopMode === "one" && finished) {
-            this.queue.unshift({ ...finished })
-            logger.debug("scheduler", "Loop one: reencolando track", { title: finished.title })
-          } else if (this.loopMode === "all" && finished) {
-            this.queue.push({ ...finished })
-            logger.debug("scheduler", "Loop all: reencolando track al final", { title: finished.title })
-          }
+          this.applyLoopMode(finished)
         }
 
         if (willAutoplay) {
-          const shouldSwitch = this.sameArtistStreak >= this.ARTIST_ROTATION_LIMIT
-          logger.debug("scheduler", "Autoplay buscando track relacionado", {
-            lastTitle: finished.title,
-            sameArtistStreak: this.sameArtistStreak,
-            shouldSwitch,
-          })
-          const next = await this.radioService.findRelated(
-            finished,
-            this.lastTrackTitle,
-            new Set(this.trackHistory),
-            this.currentArtist,
-            shouldSwitch,
-          )
-          if (next) {
-            this.queue.unshift(next as Track)
-            logger.event("scheduler", "Autoplay encontró track", {
-              title: next.title,
-              id: next.id,
-            })
-          } else {
-            logger.warn("scheduler", "Autoplay no encontró tracks relacionados")
-          }
+          await this.handleAutoplay(finished)
         }
 
-        this.audio.killProcess()
-        this.isPlaying = false
-        this.current = null
-        this.playbackStart = null
-        this.pauseOffset = 0
-        this.pauseTime = null
+        this.resetPlaybackState()
         await this.processQueue()
         await this.onTrackChange?.(this.connection.joinConfig.guildId)
       } catch (error) {
         logger.error("scheduler", "Error en Idle handler", {
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         })
       }
     })
@@ -137,42 +91,111 @@ export class TrackScheduler {
     this.player.on("error", async (err) => {
       try {
         logger.error("scheduler", "Error del AudioPlayer", {
-          error: err instanceof Error ? err.message : String(err),
+          error: getErrorMessage(err),
           guildId: this.connection.joinConfig.guildId,
         })
-        this.isPlaying = false
-        this.current = null
-        this.playbackStart = null
-        this.pauseOffset = 0
-        this.pauseTime = null
+        this.resetPlaybackState()
         await this.processQueue()
         await this.onTrackChange?.(this.connection.joinConfig.guildId)
       } catch (error) {
         logger.error("scheduler", "Error en Player handler", {
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         })
       }
     })
 
     this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
-      logger.event("scheduler", "Conexión de voz desconectada", {
+      await this.handleVoiceDisconnect()
+    })
+  }
+
+  private handleTrackFinished(finished: Track, willAutoplay: boolean) {
+    const norm = normalizeTitle(finished.title)
+    this.trackHistory.unshift(norm)
+    if (this.trackHistory.length > this.MAX_HISTORY) this.trackHistory.pop()
+
+    const artist = extractArtist(finished.title)
+    if (artist && artist === this.currentArtist) {
+      this.sameArtistStreak++
+    } else if (artist) {
+      this.sameArtistStreak = 1
+      this.currentArtist = artist
+      this.artistHistory.unshift(artist)
+      if (this.artistHistory.length > this.MAX_ARTIST_HISTORY) this.artistHistory.pop()
+    }
+
+    logger.event("scheduler", "Track finalizado", {
+      title: finished.title,
+      guildId: this.connection.joinConfig.guildId,
+      willAutoplay,
+      queueSize: this.queue.length,
+    })
+  }
+
+  private applyLoopMode(finished: Track | null) {
+    if (!finished) return
+    if (this.loopMode === "one") {
+      this.queue.unshift({ ...finished })
+      logger.debug("scheduler", "Loop one: reencolando track", { title: finished.title })
+    } else if (this.loopMode === "all") {
+      this.queue.push({ ...finished })
+      logger.debug("scheduler", "Loop all: reencolando track al final", { title: finished.title })
+    }
+  }
+
+  private async handleAutoplay(finished: Track | null) {
+    if (!finished) return
+    const shouldSwitch = this.sameArtistStreak >= this.ARTIST_ROTATION_LIMIT
+    logger.debug("radio", "Buscando track relacionado", {
+      currentTrack: finished.title,
+      lastTitle: this.lastTrackTitle,
+      shouldSwitch,
+      excludeCount: this.trackHistory.length,
+    })
+    const next = await this.radio.findRelated(
+      finished,
+      this.lastTrackTitle,
+      new Set(this.trackHistory),
+      this.currentArtist,
+      shouldSwitch,
+    )
+    if (next) {
+      this.queue.unshift(next as Track)
+      logger.info("radio", "Track relacionado encontrado", {
+        title: next.title,
+        id: next.id,
+      })
+    } else {
+      logger.warn("radio", "No se encontró track relacionado")
+    }
+  }
+
+  private async handleVoiceDisconnect() {
+    logger.event("scheduler", "Conexión de voz desconectada", {
+      guildId: this.connection.joinConfig.guildId,
+    })
+    try {
+      await Promise.race([
+        entersState(this.connection, VoiceConnectionStatus.Signalling, VOICE_RECONNECT_TIMEOUT_MS),
+        entersState(this.connection, VoiceConnectionStatus.Connecting, VOICE_RECONNECT_TIMEOUT_MS),
+      ])
+      logger.info("scheduler", "Conexión de voz reconectada", {
         guildId: this.connection.joinConfig.guildId,
       })
-      try {
-        await Promise.race([
-          entersState(this.connection, VoiceConnectionStatus.Signalling, 5_000),
-          entersState(this.connection, VoiceConnectionStatus.Connecting, 5_000),
-        ])
-        logger.info("scheduler", "Conexión de voz reconectada", {
-          guildId: this.connection.joinConfig.guildId,
-        })
-      } catch {
-        const guildId = this.connection.joinConfig.guildId
-        logger.warn("scheduler", "Conexión de voz perdida, destruyendo scheduler", { guildId })
-        this.destroy()
-        await this.onDisconnect?.(guildId)
-      }
-    })
+    } catch {
+      const guildId = this.connection.joinConfig.guildId
+      logger.warn("scheduler", "Conexión de voz perdida, destruyendo scheduler", { guildId })
+      this.destroy()
+      await this.onDisconnect?.(guildId)
+    }
+  }
+
+  private resetPlaybackState() {
+    this.isPlaying = false
+    this.current = null
+    this.playbackStart = null
+    this.pauseOffset = 0
+    this.pauseTime = null
   }
 
   async add(track: Track) {
@@ -208,12 +231,6 @@ export class TrackScheduler {
     })
   }
 
-  private resetPlaybackState() {
-    this.playbackStart = null
-    this.pauseOffset = 0
-    this.pauseTime = null
-  }
-
   private async processQueue() {
     if (this.isPlaying) return
 
@@ -234,8 +251,7 @@ export class TrackScheduler {
     try {
       if (!nextTrack.url) {
         logger.warn("scheduler", "Track sin URL, saltando", { title: nextTrack.title })
-        this.isPlaying = false
-        this.current = null
+        this.resetPlaybackState()
         await this.processQueue()
         return
       }
@@ -251,22 +267,22 @@ export class TrackScheduler {
       logger.error("scheduler", "Error al reproducir track", {
         title: nextTrack.title,
         url: nextTrack.url?.slice(0, 60),
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       })
-      this.isPlaying = false
-      this.current = null
       this.resetPlaybackState()
       await this.processQueue()
     }
   }
 
+  // Calculates current playback position in seconds, accounting for pauses
+  // pauseOffset accumulates total paused time, pauseTime tracks current pause start
   getPosition(): number {
     if (!this.playbackStart) return 0
     let elapsed = Date.now() - this.playbackStart - this.pauseOffset
     if (this.pauseTime !== null) {
       elapsed -= Date.now() - this.pauseTime
     }
-    return Math.floor(elapsed / 1000)
+    return Math.floor(elapsed / MS_PER_SECOND)
   }
 
   shuffle() {
@@ -330,7 +346,8 @@ export class TrackScheduler {
     this.seeking = true
     this.audio.killProcess()
     this.player.stop()
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    // Brief delay to let FFmpeg process settle before starting new stream
+    await new Promise((resolve) => setTimeout(resolve, SEEK_SETTLE_DELAY_MS))
     this.isPlaying = true
 
     logger.event("scheduler", "Seeking", {
@@ -349,10 +366,8 @@ export class TrackScheduler {
     } catch (error) {
       logger.error("scheduler", "Error al buscar (seek)", {
         time,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       })
-      this.isPlaying = false
-      this.current = null
       this.resetPlaybackState()
       await this.processQueue()
     } finally {

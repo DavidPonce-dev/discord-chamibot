@@ -1,15 +1,15 @@
 import { EmbedBuilder } from "discord.js"
-import { TrackScheduler } from "../services/TrackScheduler"
-import { parseDuration, buildProgressBar } from "../utils/format"
-
-export const TRACKS_PER_PAGE = 3
+import { TrackScheduler } from "../../services/scheduler/TrackScheduler"
+import { parseDuration, buildProgressBar, calcTotalPages, clampPage } from "../../utils/format"
+import { TRACKS_PER_PAGE } from "../../constants"
+export { TRACKS_PER_PAGE }
 
 export function buildQueueContent(queue: TrackScheduler, page: number, statusTitle?: string) {
   const tracks = queue.getQueue()
   const current = queue.getCurrentTrack()
   const isPaused = queue.isPaused()
-  const totalPages = Math.max(1, Math.ceil(tracks.length / TRACKS_PER_PAGE))
-  const clampedPage = Math.min(Math.max(1, page), totalPages)
+  const totalPages = calcTotalPages(tracks.length, TRACKS_PER_PAGE)
+  const clampedPage = clampPage(page, totalPages)
   const startIdx = (clampedPage - 1) * TRACKS_PER_PAGE
   const pageTracks = tracks.slice(startIdx, startIdx + TRACKS_PER_PAGE)
 
