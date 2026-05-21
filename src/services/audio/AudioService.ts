@@ -4,6 +4,7 @@ import { logger } from "../../utils/logger"
 import { getCookieFile } from "../../utils/cookies"
 import { buildYtDlpArgs, spawnYtDlp, USER_AGENT } from "../../utils/ytDlp"
 import { formatTimeFFmpeg } from "../../utils/format"
+import { getErrorMessage } from "../../utils/error"
 
 const ERROR_MSG_MAX_LENGTH = 200
 const LOG_ERROR_MAX_LENGTH = 150
@@ -187,7 +188,7 @@ export class AudioService {
     } catch (err) {
       logger.error("audio", "Error al crear recurso de audio", {
         url: url.slice(0, 60),
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
         seek: seekTo,
       })
       throw err

@@ -1,4 +1,4 @@
-import { REST, Routes } from "discord.js"
+import { REST, Routes, ApplicationCommandOptionType } from "discord.js"
 import dotenv from "dotenv"
 
 dotenv.config()
@@ -11,7 +11,7 @@ const commands = [
       {
         name: "query",
         description: "URL o texto de búsqueda",
-        type: 3,
+        type: ApplicationCommandOptionType.String,
         required: true,
         autocomplete: true,
       },
@@ -56,7 +56,7 @@ const commands = [
       {
         name: "position",
         description: "Número de posición en la cola",
-        type: 4,
+        type: ApplicationCommandOptionType.Integer,
         required: true,
         min_value: 1,
       },
@@ -77,7 +77,7 @@ const commands = [
       {
         name: "seconds",
         description: "Segundos a avanzar (ej: 120 para 2 minutos)",
-        type: 10,
+        type: ApplicationCommandOptionType.Number,
         required: true,
         min_value: 0,
       },

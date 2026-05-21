@@ -11,6 +11,7 @@ import { AudioService } from "../audio/AudioService"
 import { RadioService } from "../radio/RadioService"
 import { normalizeTitle, extractArtist } from "../../radio/YouTubeRecommender"
 import { logger } from "../../utils/logger"
+import { getErrorMessage } from "../../utils/error"
 
 const VOICE_RECONNECT_TIMEOUT_MS = 5_000
 const SEEK_SETTLE_DELAY_MS = 100
@@ -82,7 +83,7 @@ export class TrackScheduler {
         await this.onTrackChange?.(this.connection.joinConfig.guildId)
       } catch (error) {
         logger.error("scheduler", "Error en Idle handler", {
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         })
       }
     })
@@ -90,7 +91,7 @@ export class TrackScheduler {
     this.player.on("error", async (err) => {
       try {
         logger.error("scheduler", "Error del AudioPlayer", {
-          error: err instanceof Error ? err.message : String(err),
+          error: getErrorMessage(err),
           guildId: this.connection.joinConfig.guildId,
         })
         this.resetPlaybackState()
@@ -98,7 +99,7 @@ export class TrackScheduler {
         await this.onTrackChange?.(this.connection.joinConfig.guildId)
       } catch (error) {
         logger.error("scheduler", "Error en Player handler", {
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         })
       }
     })
@@ -265,7 +266,7 @@ export class TrackScheduler {
       logger.error("scheduler", "Error al reproducir track", {
         title: nextTrack.title,
         url: nextTrack.url?.slice(0, 60),
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       })
       this.resetPlaybackState()
       await this.processQueue()
@@ -361,7 +362,7 @@ export class TrackScheduler {
     } catch (error) {
       logger.error("scheduler", "Error al buscar (seek)", {
         time,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       })
       this.resetPlaybackState()
       await this.processQueue()

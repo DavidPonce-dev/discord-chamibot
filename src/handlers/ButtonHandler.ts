@@ -4,6 +4,7 @@ import { refreshQueueMessage, getQueuePage } from "../commands/queue/queue"
 import { logger } from "../utils/logger"
 import { requireSession } from "../utils/guards"
 import { LOOP_LABELS } from "../constants"
+import { getErrorMessage } from "../utils/error"
 
 export async function handleButton(interaction: ButtonInteraction) {
   const guildId = interaction.guildId!
@@ -123,7 +124,7 @@ export async function handleButton(interaction: ButtonInteraction) {
       user,
       guildId,
       customId: interaction.customId,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     })
     try {
       if (interaction.replied || interaction.deferred) {

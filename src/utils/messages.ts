@@ -1,6 +1,6 @@
-import { ChatInputCommandInteraction, Message } from "discord.js"
+import { ChatInputCommandInteraction, Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder } from "discord.js"
 
-const AUTO_DELETE_MS = 5000
+const AUTO_DELETE_MS = 5_000
 
 function scheduleDelete(msg: Message) {
   setTimeout(() => msg.delete().catch(() => {}), AUTO_DELETE_MS)
@@ -10,19 +10,17 @@ export async function replyTemporary(
   interaction: ChatInputCommandInteraction,
   content: string,
 ): Promise<Message> {
-  const msg = (await interaction.reply({ content, fetchReply: true } as any)) as unknown as Message
+  const msg = await interaction.reply({ content, fetchReply: true }) as Message
   scheduleDelete(msg)
   return msg
 }
 
 export async function replyTemporaryEmbed(
   interaction: ChatInputCommandInteraction,
-  embeds: any[],
-  components?: any[],
+  embeds: EmbedBuilder[],
+  components?: ActionRowBuilder<ButtonBuilder>[],
 ): Promise<Message> {
-  const opts: any = { embeds, fetchReply: true }
-  if (components) opts.components = components
-  const msg = (await interaction.reply(opts)) as unknown as Message
+  const msg = await interaction.reply({ embeds, components, fetchReply: true }) as Message
   scheduleDelete(msg)
   return msg
 }
@@ -31,7 +29,7 @@ export async function editTemporary(
   interaction: ChatInputCommandInteraction,
   content: string,
 ): Promise<Message> {
-  const msg = (await interaction.editReply({ content, fetchReply: true } as any)) as unknown as Message
+  const msg = await interaction.editReply({ content }) as Message
   scheduleDelete(msg)
   return msg
 }

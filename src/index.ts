@@ -18,6 +18,7 @@ import { editTemporary } from "./utils/messages"
 import { logger } from "./utils/logger"
 import { setupCookies } from "./utils/cookieSetup"
 import { setCookieFile } from "./utils/cookies"
+import { getErrorMessage } from "./utils/error"
 
 process.on("unhandledRejection", (reason) => {
   const msg = String(reason)
@@ -136,7 +137,7 @@ client.on("interactionCreate", async (interaction) => {
         logger.error("command", `Error en comando /${cmd}`, {
           user: userTag,
           guild: guildName,
-          error: err instanceof Error ? err.message : String(err),
+          error: getErrorMessage(err),
         })
         if (interaction.replied || interaction.deferred) {
           await editTemporary(interaction, "Ocurrió un error al ejecutar el comando")

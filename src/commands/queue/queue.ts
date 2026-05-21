@@ -1,10 +1,24 @@
-import { ChatInputCommandInteraction, MessageComponentInteraction } from "discord.js"
+import {
+  ChatInputCommandInteraction,
+  MessageComponentInteraction,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+} from "discord.js"
+import type { GuildTextBasedChannel } from "discord.js"
 import { guildManager } from "../../services/guild/GuildManager"
 import { buildQueueContent, buildEmptyEmbed } from "../../ui/embeds/QueueEmbed"
 import { buildTrackRows, buildNavRow, buildPlaybackRow } from "../../ui/components/QueueComponents"
 import { TRACKS_PER_PAGE } from "../../constants"
 export { TRACKS_PER_PAGE }
 import { calcTotalPages } from "../../utils/format"
+import { logger } from "../../utils/logger"
+import { getErrorMessage } from "../../utils/error"
+
+type QueueMessagePayload = {
+  embeds: EmbedBuilder[]
+  components: ActionRowBuilder<ButtonBuilder>[]
+}
 
 const queuePages = new Map<string, number>()
 
@@ -20,8 +34,8 @@ export function clearQueuePage(guildId: string) {
   queuePages.delete(guildId)
 }
 
-function buildQueuePayload(queue: ReturnType<typeof guildManager.get>, page: number, statusTitle?: string) {
-  if (!queue) return { embeds: [buildEmptyEmbed()], components: [] as import("discord.js").ActionRowBuilder<import("discord.js").ButtonBuilder>[] }
+function buildQueuePayload(queue: ReturnType<typeof guildManager.get>, page: number, statusTitle?: string): QueueMessagePayload {
+  if (!queue) return { embeds: [buildEmptyEmbed()], components: [] }
 
   const embed = buildQueueContent(queue, page, statusTitle)
   const tracks = queue.getQueue()
@@ -35,8 +49,8 @@ function buildQueuePayload(queue: ReturnType<typeof guildManager.get>, page: num
   return { embeds: [embed], components: rows }
 }
 
-function buildEmptyPayload() {
-  return { embeds: [buildEmptyEmbed()], components: [] as import("discord.js").ActionRowBuilder<import("discord.js").ButtonBuilder>[] }
+function buildEmptyPayload(): QueueMessagePayload {
+  return { embeds: [buildEmptyEmbed()], components: [] }
 }
 
 export async function execute(interaction: ChatInputCommandInteraction) {
@@ -51,9 +65,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   queuePages.set(interaction.guildId!, 1)
   await interaction.deferReply()
   await interaction.deleteReply().catch(() => {})
-  const channel = interaction.channel
-  if (channel && "send" in channel) {
-    const sent = await (channel as any).send(buildQueuePayload(queue, 1))
+  const channel = interaction.channel as GuildTextBasedChannel | null
+  if (channel?.send) {
+    const sent = await channel.send(buildQueuePayload(queue, 1))
     guildManager.setQueueMessage(interaction.guildId!, sent)
   }
 }
@@ -66,7 +80,9 @@ export async function updateQueueForGuild(guildId: string, statusTitle?: string,
   if (queue.getSize() === 0 && !queue.getCurrentTrack()) {
     try {
       await msg.delete()
-    } catch { /* message might be gone */ }
+    } catch (err) {
+      logger.debug("queue", "Message already deleted", { guildId, error: getErrorMessage(err) })
+    }
     guildManager.clearQueueMessage(guildId)
     clearQueuePage(guildId)
     guildManager.delete(guildId)
@@ -78,14 +94,17 @@ export async function updateQueueForGuild(guildId: string, statusTitle?: string,
   try {
     if (queue.getSize() === 0 && !queue.getCurrentTrack()) return
     await msg.edit(buildQueuePayload(queue, currentPage, statusTitle))
-  } catch {
-    console.log("[Queue] Error al editar mensaje (transitorio, se reintenta)")
+  } catch (err) {
+    logger.debug("queue", "Error editing queue message (transient, will retry)", {
+      guildId,
+      error: getErrorMessage(err),
+    })
   }
 }
 
 export async function ensureQueueMessage(
   guildId: string,
-  channel: { send: (content: any) => Promise<any> } | undefined,
+  channel: GuildTextBasedChannel | undefined,
   statusTitle?: string,
   page?: number,
 ) {
@@ -104,8 +123,11 @@ export async function ensureQueueMessage(
   try {
     const msg = await channel.send(buildQueuePayload(queue, currentPage, statusTitle))
     guildManager.setQueueMessage(guildId, msg)
-  } catch {
-    // channel might not be sendable
+  } catch (err) {
+    logger.debug("queue", "Failed to send queue message (channel not sendable)", {
+      guildId,
+      error: getErrorMessage(err),
+    })
   }
 }
 

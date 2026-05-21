@@ -1,4 +1,5 @@
 import { ChatInputCommandInteraction } from "discord.js";
+import type { GuildTextBasedChannel } from "discord.js";
 import { joinVoiceChannel } from "@discordjs/voice";
 import { resolveQuery } from "../../utils/search";
 import { guildManager } from "../../services/guild/GuildManager";
@@ -7,6 +8,22 @@ import { editTemporary } from "../../utils/messages";
 import { logger } from "../../utils/logger";
 import { TRACKS_PER_PAGE } from "../../constants";
 import { calcTotalPages } from "../../utils/format";
+import { getErrorMessage } from "../../utils/error";
+import type { Track } from "../../core/types";
+import type { ResolveResult } from "../../utils/search";
+
+const PROGRESS_UPDATE_INTERVAL_MS = 3_000
+
+function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track {
+  return {
+    title: video.title,
+    url: video.url,
+    requestedBy,
+    duration: video.duration,
+    id: video.id,
+    thumbnail: video.thumbnail,
+  }
+}
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
 
@@ -25,7 +42,7 @@ function updateProgress(guildId: string) {
 
 function startProgressUpdates(guildId: string) {
   stopProgressUpdates(guildId)
-  progressIntervals.set(guildId, setInterval(() => updateProgress(guildId), 3000))
+  progressIntervals.set(guildId, setInterval(() => updateProgress(guildId), PROGRESS_UPDATE_INTERVAL_MS))
 }
 
 function stopProgressUpdates(guildId: string) {
@@ -107,14 +124,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     const lastPage = () => calcTotalPages(queue!.getSize(), TRACKS_PER_PAGE)
 
     if (result.tracks.length > 1) {
-      const tracks = result.tracks.map((t) => ({
-        title: t.title,
-        url: t.url,
-        requestedBy: user,
-        duration: t.duration,
-        id: t.id,
-        thumbnail: t.thumbnail,
-      }))
+      const tracks = result.tracks.map((t) => toTrack(t, user))
       await queue.addMultiple(tracks)
       logger.event("command", "Playlist añadida", {
         title: result.playlistTitle,
@@ -123,29 +133,22 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         guildId,
       })
       await interaction.editReply(`Añadida playlist: **${result.playlistTitle ?? "Lista"}** (${tracks.length} temas)`)
-      const channel = interaction.channel
-      if (channel && "send" in channel) {
-        await ensureQueueMessage(guildId, channel as any, `🎵 ${user} agregó una playlist — ${result.playlistTitle ?? "Lista"}`, lastPage())
+      const channel = interaction.channel as GuildTextBasedChannel | undefined
+      if (channel?.send) {
+        await ensureQueueMessage(guildId, channel, `🎵 ${user} agregó una playlist — ${result.playlistTitle ?? "Lista"}`, lastPage())
       }
     } else {
-      const track = result.tracks[0]
-      await queue.add({
-        title: track.title,
-        url: track.url,
-        requestedBy: user,
-        duration: track.duration,
-        id: track.id,
-        thumbnail: track.thumbnail,
-      })
+      const track = toTrack(result.tracks[0], user)
+      await queue.add(track)
       logger.event("command", "Track añadido", {
         title: track.title,
         user,
         guildId,
       })
       await interaction.editReply(`Añadido: **${track.title}**`)
-      const channel = interaction.channel
-      if (channel && "send" in channel) {
-        await ensureQueueMessage(guildId, channel as any, `🎵 ${user} agregó una canción — ${track.title}`, lastPage())
+      const channel = interaction.channel as GuildTextBasedChannel | undefined
+      if (channel?.send) {
+        await ensureQueueMessage(guildId, channel, `🎵 ${user} agregó una canción — ${track.title}`, lastPage())
       }
     }
   } catch (error) {
@@ -153,7 +156,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       query,
       user,
       guildId,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     })
     await editTemporary(interaction, "Error al procesar el tema");
   }
