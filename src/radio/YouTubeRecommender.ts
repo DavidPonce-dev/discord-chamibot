@@ -1,26 +1,8 @@
 import play from "play-dl"
 import { Track } from "../core/types"
 import { parseDurationSec } from "../utils/format"
-import { VideoResult, searchPlayDl } from "./RadioSearchService"
-
-const MAX_AUTOPLAY_SEC = 1500
-const MAX_RETRIES = 3
-const ARTIST_ROTATION_LIMIT = 3
-
-const GENRE_KEYWORDS = [
-  "rock", "pop", "metal", "hip hop", "rap", "r&b", "jazz", "blues",
-  "country", "electronic", "dance", "classical", "reggae", "punk",
-  "alternative", "indie", "soul", "funk", "disco", "folk", "latin",
-  "edm", "techno", "house", "trance", "dubstep", "ambient", "grunge",
-  "punk rock", "alternative rock", "hard rock", "heavy metal", "nu metal",
-  "hip-hop", "trap", "lo-fi", "synthwave", "progressive", "acoustic",
-]
-
-const NON_MUSIC_KEYWORDS = [
-  "podcast", "interview", "tutorial", "review", "reaction",
-  "vlog", "gameplay", "comedy", "lecture", "documentary",
-  "asmr", "full album", "live stream", "audiobook",
-]
+import { MAX_AUTOPLAY_SEC, MAX_RETRIES, GENRE_KEYWORDS, NON_MUSIC_KEYWORDS } from "../constants"
+import { searchPlayDl, VideoResult } from "./RadioSearchService"
 
 export function extractArtist(title: string): string {
   const sep = title.search(/ [-–|]/)

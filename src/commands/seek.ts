@@ -1,23 +1,19 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { guildManager } from "../services/GuildManager"
 import { editTemporary } from "../utils/messages"
+import { requireQueue } from "../utils/guards"
+import { formatTimeFFmpeg } from "../utils/format"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const seconds = interaction.options.getNumber("seconds", true)
-  const queue = guildManager.get(interaction.guildId!)
-
-  if (!queue || !queue.getCurrentTrack()) {
-    await interaction.reply({ content: "No hay nada reproduciéndose", ephemeral: true })
-    return
-  }
+  const queue = requireQueue(interaction)
+  if (!queue) return
 
   await interaction.deferReply()
 
   try {
     await queue.seek(seconds)
-    const m = Math.floor(seconds / 60)
-    const s = seconds % 60
-    await editTemporary(interaction, `⏩ Saltado a ${m}:${String(s).padStart(2, "0")}`)
+    await editTemporary(interaction, `⏩ Saltado a ${formatTimeFFmpeg(seconds)}`)
   } catch {
     await editTemporary(interaction, "Error al buscar")
   }

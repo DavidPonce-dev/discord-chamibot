@@ -2,8 +2,9 @@ import { ChatInputCommandInteraction, MessageComponentInteraction } from "discor
 import { guildManager } from "../services/GuildManager"
 import { buildQueueContent, buildEmptyEmbed } from "../ui/QueueEmbed"
 import { buildTrackRows, buildNavRow, buildPlaybackRow } from "../ui/QueueComponents"
-import { TRACKS_PER_PAGE } from "../ui/QueueEmbed"
+import { TRACKS_PER_PAGE } from "../constants"
 export { TRACKS_PER_PAGE }
+import { calcTotalPages } from "../utils/format"
 
 const queuePages = new Map<string, number>()
 
@@ -24,7 +25,7 @@ function buildQueuePayload(queue: ReturnType<typeof guildManager.get>, page: num
 
   const embed = buildQueueContent(queue, page, statusTitle)
   const tracks = queue.getQueue()
-  const totalPages = Math.max(1, Math.ceil(tracks.length / TRACKS_PER_PAGE))
+  const totalPages = calcTotalPages(tracks.length, TRACKS_PER_PAGE)
 
   const rows = buildTrackRows(queue, page)
   const navRow = buildNavRow(page, totalPages)

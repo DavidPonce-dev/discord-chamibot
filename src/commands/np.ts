@@ -3,14 +3,11 @@ import { guildManager } from "../services/GuildManager"
 import { buildNowPlayingEmbed } from "../ui/NowPlayingEmbed"
 import { buildNowPlayingButtons } from "../ui/QueueComponents"
 import { replyTemporaryEmbed } from "../utils/messages"
+import { requireQueue } from "../utils/guards"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-  const queue = guildManager.get(interaction.guildId!)
-
-  if (!queue || !queue.getCurrentTrack()) {
-    await interaction.reply({ content: "No hay nada reproduciéndose", ephemeral: true })
-    return
-  }
+  const queue = requireQueue(interaction)
+  if (!queue) return
 
   const embed = buildNowPlayingEmbed(queue)
   const row = buildNowPlayingButtons(queue)

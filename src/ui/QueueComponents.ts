@@ -4,12 +4,13 @@ import {
   ButtonStyle,
 } from "discord.js"
 import { TrackScheduler } from "../services/TrackScheduler"
-import { TRACKS_PER_PAGE } from "./QueueEmbed"
+import { TRACKS_PER_PAGE } from "../constants"
+import { calcTotalPages, clampPage } from "../utils/format"
 
 export function buildTrackRows(queue: TrackScheduler, page: number) {
   const tracks = queue.getQueue()
-  const totalPages = Math.max(1, Math.ceil(tracks.length / TRACKS_PER_PAGE))
-  const clampedPage = Math.min(Math.max(1, page), totalPages)
+  const totalPages = calcTotalPages(tracks.length, TRACKS_PER_PAGE)
+  const clampedPage = clampPage(page, totalPages)
   const startIdx = (clampedPage - 1) * TRACKS_PER_PAGE
   const pageTracks = tracks.slice(startIdx, startIdx + TRACKS_PER_PAGE)
 

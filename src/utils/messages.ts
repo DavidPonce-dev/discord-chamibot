@@ -35,3 +35,11 @@ export async function editTemporary(
   scheduleDelete(msg)
   return msg
 }
+
+export async function replyAndDelete(
+  interaction: ChatInputCommandInteraction,
+  content: string,
+): Promise<void> {
+  await interaction.reply(content)
+  await interaction.deleteReply().catch(() => {})
+}

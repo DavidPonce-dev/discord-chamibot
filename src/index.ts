@@ -11,17 +11,16 @@ import { execute as help } from "./commands/help"
 import { execute as autoplay } from "./commands/autoplay"
 import { pause, resume, skip, stop } from "./commands/playback"
 import { remove, shuffle, loop } from "./commands/queue-control"
-import { autocompleteSearch, setCookieFile as setSearchCookieFile } from "./utils/search"
+import { autocompleteSearch } from "./utils/search"
 import { handleButton } from "./handlers/ButtonHandler"
 import { execute as seek } from "./commands/seek"
 import { editTemporary } from "./utils/messages"
 import { logger } from "./utils/logger"
 import { setupCookies } from "./utils/cookieSetup"
-import { setCookieFile as setAudioCookieFile } from "./services/AudioService"
+import { setCookieFile } from "./utils/cookies"
 
 process.on("unhandledRejection", (reason) => {
   const msg = String(reason)
-  // Errores conocidos de voz que no requieren acción
   if (msg.includes("IP discovery") || msg.includes("socket closed")) {
     logger.debug("process", "Error de voz conocido (ignorado)", { reason: msg })
     return
@@ -38,8 +37,7 @@ dotenv.config()
 
 // Setup YouTube cookies from environment variable
 const cookiePath = setupCookies()
-setSearchCookieFile(cookiePath)
-setAudioCookieFile(cookiePath)
+setCookieFile(cookiePath)
 if (cookiePath) {
   logger.info("bot", "YouTube cookies configuradas", { path: cookiePath })
 } else {

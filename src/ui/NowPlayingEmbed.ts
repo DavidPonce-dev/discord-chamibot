@@ -1,12 +1,11 @@
 import { EmbedBuilder } from "discord.js"
 import { TrackScheduler } from "../services/TrackScheduler"
+import { formatTime } from "../utils/format"
 
 export function buildNowPlayingEmbed(queue: TrackScheduler) {
   const track = queue.getCurrentTrack()!
   const position = queue.getPosition()
-  const minutes = Math.floor(position / 60)
-  const seconds = position % 60
-  const progress = `${minutes}:${String(seconds).padStart(2, "0")}`
+  const progress = formatTime(position)
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)

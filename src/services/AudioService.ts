@@ -1,12 +1,9 @@
 import { createAudioResource, AudioResource, StreamType } from "@discordjs/voice"
 import { spawn } from "child_process"
 import { logger } from "../utils/logger"
-
-let cookieFile: string | null = null
-
-export function setCookieFile(path: string | null) {
-  cookieFile = path
-}
+import { getCookieFile } from "../utils/cookies"
+import { buildYtDlpArgs, spawnYtDlp, USER_AGENT } from "../utils/ytDlp"
+import { formatTimeFFmpeg } from "../utils/format"
 
 export class AudioService {
   private activeFfmpeg: ReturnType<typeof spawn> | null = null
@@ -18,34 +15,15 @@ export class AudioService {
     this.activeFfmpeg = null
   }
 
-  private formatTime(seconds: number): string {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, "0")}`
-  }
-
   private async tryGetUrlWithFormat(format: string, url: string): Promise<string> {
-    const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-    const args = ["--get-url", "--js-runtimes", "deno", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", userAgent]
-    if (format) args.push("--format", format)
-    if (cookieFile) args.push("--cookies", cookieFile)
+    const args = buildYtDlpArgs(["--get-url"], format ? ["--format", format] : [])
     args.push(url)
 
-    return new Promise((resolve, reject) => {
-      const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] })
-      let stdout = ""
-      let stderr = ""
-      proc.stdout.on("data", (d) => (stdout += d))
-      proc.stderr.on("data", (d) => (stderr += d))
-      proc.on("close", (code) => {
-        if (code !== 0 || !stdout.trim()) {
-          reject(new Error(stderr.slice(0, 200) || `code ${code}`))
-        } else {
-          resolve(stdout.trim())
-        }
-      })
-      proc.on("error", reject)
-    })
+    const result = await spawnYtDlp(args)
+    if (result.code !== 0 || !result.stdout.trim()) {
+      throw new Error(result.stderr.slice(0, 200) || `code ${result.code}`)
+    }
+    return result.stdout.trim()
   }
 
   private async getAudioUrl(url: string): Promise<string> {
@@ -70,9 +48,9 @@ export class AudioService {
     }
 
     // All strategies failed - diagnostic: list available formats
-    const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     logger.warn("audio", "All format strategies failed, running --list-formats for diagnostics")
-    const listArgs = ["--list-formats", "--js-runtimes", "deno", "--no-playlist", "--user-agent", userAgent]
+    const listArgs = ["--list-formats", "--js-runtimes", "deno", "--no-playlist", "--user-agent", USER_AGENT]
+    const cookieFile = getCookieFile()
     if (cookieFile) listArgs.push("--cookies", cookieFile)
     listArgs.push(url)
 
@@ -92,8 +70,7 @@ export class AudioService {
 
     // Try --dump-json fallback anyway
     logger.debug("audio", "Trying --dump-json fallback")
-    const jsonArgs = ["--dump-json", "--js-runtimes", "deno", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", userAgent]
-    if (cookieFile) jsonArgs.push("--cookies", cookieFile)
+    const jsonArgs = buildYtDlpArgs(["--dump-json"])
     jsonArgs.push(url)
 
     return new Promise((resolve, reject) => {
@@ -153,7 +130,7 @@ export class AudioService {
       ]
 
       if (seekTo !== undefined) {
-        ffmpegArgs.push("-ss", this.formatTime(seekTo))
+        ffmpegArgs.push("-ss", formatTimeFFmpeg(seekTo))
       }
 
       ffmpegArgs.push(

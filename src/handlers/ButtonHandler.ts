@@ -2,15 +2,16 @@ import { ButtonInteraction } from "discord.js"
 import { guildManager } from "../services/GuildManager"
 import { refreshQueueMessage, getQueuePage } from "../commands/queue"
 import { logger } from "../utils/logger"
+import { requireSession } from "../utils/guards"
+import { LOOP_LABELS } from "../constants"
 
 export async function handleButton(interaction: ButtonInteraction) {
   const guildId = interaction.guildId!
   const user = interaction.user.username
-  const queue = guildManager.get(guildId)
+  const queue = requireSession(interaction)
 
   if (!queue) {
     logger.warn("button", "Botón sin sesión activa", { user, guildId, customId: interaction.customId })
-    await interaction.reply({ content: "No hay una sesión activa", ephemeral: true })
     return
   }
 
@@ -93,14 +94,9 @@ export async function handleButton(interaction: ButtonInteraction) {
         break
       case "np_loop": {
         const mode = queue.toggleLoop()
-        const labels: Record<string, string> = {
-          none: "❌ Loop desactivado",
-          one: "🔂 Repetir uno",
-          all: "🔁 Repetir todo",
-        }
         logger.event("button", "Now Playing loop", { user, guildId, mode })
         await interaction.update({ components: [] })
-        await interaction.followUp({ content: labels[mode], ephemeral: true })
+        await interaction.followUp({ content: LOOP_LABELS[mode], ephemeral: true })
         break
       }
       case "np_shuffle":

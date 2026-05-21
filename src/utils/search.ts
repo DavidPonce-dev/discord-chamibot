@@ -1,6 +1,9 @@
 import play, { YouTubePlayList } from "play-dl"
 import { spawn } from "child_process"
 import { logger } from "./logger"
+import { getCookieFile } from "./cookies"
+import { buildYtDlpArgs, USER_AGENT } from "./ytDlp"
+import { formatTime } from "./format"
 
 export interface ResolveResult {
   tracks: {
@@ -11,12 +14,6 @@ export interface ResolveResult {
     thumbnail?: string
   }[]
   playlistTitle?: string
-}
-
-let cookieFile: string | null = null
-
-export function setCookieFile(path: string | null) {
-  cookieFile = path
 }
 
 function sanitizeYouTubeUrl(url: string): string {
@@ -40,21 +37,7 @@ function extractVideoId(url: string): string | undefined {
 }
 
 async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string } | null> {
-  const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-
-  const args = [
-    "--dump-json",
-    "--js-runtimes", "deno",
-    "--no-playlist",
-    "--quiet",
-    "--no-warnings",
-    "--user-agent", userAgent,
-  ]
-
-  if (cookieFile) {
-    args.push("--cookies", cookieFile)
-  }
-
+  const args = buildYtDlpArgs(["--dump-json"])
   args.push(url)
 
   return new Promise((resolve) => {
@@ -80,7 +63,7 @@ async function resolveWithYtDlp(url: string): Promise<{ title: string; duration:
         const title = data.title ?? "Unknown"
         const duration = data.duration ?? 0
         const id = data.id ?? extractVideoId(url) ?? ""
-        const durationStr = duration ? `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, "0")}` : "0:00"
+        const durationStr = formatTime(duration)
         resolve({ title, duration: durationStr, id })
       } catch {
         resolve(null)

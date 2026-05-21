@@ -20,6 +20,20 @@ export function formatTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`
 }
 
+export function formatTimeFFmpeg(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${String(s).padStart(2, "0")}`
+}
+
+export function calcTotalPages(itemCount: number, perPage: number): number {
+  return Math.max(1, Math.ceil(itemCount / perPage))
+}
+
+export function clampPage(page: number, totalPages: number): number {
+  return Math.min(Math.max(1, page), totalPages)
+}
+
 const EMPTY = "\u2591"
 
 export function buildProgressBar(pos: number, total: number, width = 36): string {

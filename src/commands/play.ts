@@ -2,9 +2,11 @@ import { ChatInputCommandInteraction } from "discord.js";
 import { joinVoiceChannel } from "@discordjs/voice";
 import { resolveQuery } from "../utils/search";
 import { guildManager } from "../services/GuildManager";
-import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage, TRACKS_PER_PAGE } from "./queue";
+import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage } from "./queue";
 import { editTemporary } from "../utils/messages";
 import { logger } from "../utils/logger";
+import { TRACKS_PER_PAGE } from "../constants";
+import { calcTotalPages } from "../utils/format";
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
 
@@ -102,7 +104,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       }
     }
 
-    const lastPage = () => Math.max(1, Math.ceil(queue!.getSize() / TRACKS_PER_PAGE))
+    const lastPage = () => calcTotalPages(queue!.getSize(), TRACKS_PER_PAGE)
 
     if (result.tracks.length > 1) {
       const tracks = result.tracks.map((t) => ({
@@ -146,8 +148,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         await ensureQueueMessage(guildId, channel as any, `🎵 ${user} agregó una canción — ${track.title}`, lastPage())
       }
     }
-
-    // Mensaje de confirmación ya enviado por editReply, no borrar
   } catch (error) {
     logger.error("command", "Error al procesar el tema", {
       query,
