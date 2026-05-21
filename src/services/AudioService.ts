@@ -25,19 +25,27 @@ export class AudioService {
   }
 
   private async getAudioUrl(url: string): Promise<string> {
-    const clients = ["web", "web_music", "tv_embedded", "android"]
     const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
-    for (const client of clients) {
+    // Try default client first (no extractor-args), then specific clients
+    const configs = [
+      { client: "default", args: [] as string[] },
+      { client: "web", args: ["--extractor-args", "youtube:player_client=web"] },
+      { client: "web_music", args: ["--extractor-args", "youtube:player_client=web_music"] },
+      { client: "tv_embedded", args: ["--extractor-args", "youtube:player_client=tv_embedded"] },
+      { client: "android", args: ["--extractor-args", "youtube:player_client=android"] },
+    ]
+
+    for (const { client, args: extraArgs } of configs) {
       try {
         const args = [
           "--dump-single-json",
           "--no-playlist",
-          "--format", "bestaudio",
+          "--format", "bestaudio[ext=webm]/bestaudio/best",
           "--quiet",
           "--no-warnings",
-          "--extractor-args", `youtube:player_client=${client}`,
           "--user-agent", userAgent,
+          ...extraArgs,
         ]
 
         if (cookieFile) {
