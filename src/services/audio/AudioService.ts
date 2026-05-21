@@ -2,7 +2,7 @@ import { createAudioResource, AudioResource, StreamType } from "@discordjs/voice
 import { spawn } from "child_process"
 import { logger } from "../../utils/logger"
 import { getCookieFile } from "../../utils/cookies"
-import { buildYtDlpArgs, spawnYtDlp, USER_AGENT } from "../../utils/ytDlp"
+import { buildYtDlpArgs, spawnYtDlp, USER_AGENT } from "../../utils/ytdlp"
 import { formatTimeFFmpeg } from "../../utils/format"
 import { getErrorMessage } from "../../utils/error"
 

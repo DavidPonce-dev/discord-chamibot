@@ -5,7 +5,7 @@ dotenv.config()
 
 const commands = [
   {
-    name: "p",
+    name: "play",
     description: "Reproduce o añade a la cola un tema de YouTube",
     options: [
       {
@@ -18,31 +18,31 @@ const commands = [
     ],
   },
   {
-    name: "s",
+    name: "skip",
     description: "Salta al siguiente tema",
   },
   {
-    name: "q",
+    name: "queue",
     description: "Muestra la cola de reproducción",
   },
   {
-    name: "pa",
+    name: "pause",
     description: "Pausa la reproducción",
   },
   {
-    name: "r",
+    name: "resume",
     description: "Reanuda la reproducción",
   },
   {
-    name: "st",
+    name: "stop",
     description: "Detiene y limpia la cola",
   },
   {
-    name: "ap",
+    name: "autoplay",
     description: "Activa/desactiva el autoplay",
   },
   {
-    name: "h",
+    name: "help",
     description: "Muestra todos los comandos disponibles",
   },
   {
@@ -63,7 +63,7 @@ const commands = [
     ],
   },
   {
-    name: "np",
+    name: "nowplaying",
     description: "Muestra el tema que se está reproduciendo",
   },
   {

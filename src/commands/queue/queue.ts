@@ -54,9 +54,9 @@ function buildEmptyPayload(): QueueMessagePayload {
 }
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-  const queue = guildManager.get(interaction.guildId!)
+  const scheduler = guildManager.get(interaction.guildId!)
 
-  if (!queue || (queue.getSize() === 0 && !queue.getCurrentTrack())) {
+  if (!scheduler || (scheduler.getSize() === 0 && !scheduler.getCurrentTrack())) {
     await interaction.deferReply()
     await interaction.deleteReply().catch(() => {})
     return
@@ -67,17 +67,17 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   await interaction.deleteReply().catch(() => {})
   const channel = interaction.channel as GuildTextBasedChannel | null
   if (channel?.send) {
-    const sent = await channel.send(buildQueuePayload(queue, 1))
+    const sent = await channel.send(buildQueuePayload(scheduler, 1))
     guildManager.setQueueMessage(interaction.guildId!, sent)
   }
 }
 
 export async function updateQueueForGuild(guildId: string, statusTitle?: string, page?: number) {
-  const queue = guildManager.get(guildId)
+  const scheduler = guildManager.get(guildId)
   const msg = guildManager.getQueueMessage(guildId)
-  if (!queue || !msg) return
+  if (!scheduler || !msg) return
 
-  if (queue.getSize() === 0 && !queue.getCurrentTrack()) {
+  if (scheduler.getSize() === 0 && !scheduler.getCurrentTrack()) {
     try {
       await msg.delete()
     } catch (err) {
@@ -92,8 +92,8 @@ export async function updateQueueForGuild(guildId: string, statusTitle?: string,
   const currentPage = page ?? queuePages.get(guildId) ?? 1
   queuePages.set(guildId, currentPage)
   try {
-    if (queue.getSize() === 0 && !queue.getCurrentTrack()) return
-    await msg.edit(buildQueuePayload(queue, currentPage, statusTitle))
+    if (scheduler.getSize() === 0 && !scheduler.getCurrentTrack()) return
+    await msg.edit(buildQueuePayload(scheduler, currentPage, statusTitle))
   } catch (err) {
     logger.debug("queue", "Error editing queue message (transient, will retry)", {
       guildId,
@@ -115,13 +115,13 @@ export async function ensureQueueMessage(
   }
   if (!channel) return
 
-  const queue = guildManager.get(guildId)
-  if (!queue) return
+  const scheduler = guildManager.get(guildId)
+  if (!scheduler) return
 
   const currentPage = page ?? queuePages.get(guildId) ?? 1
   queuePages.set(guildId, currentPage)
   try {
-    const msg = await channel.send(buildQueuePayload(queue, currentPage, statusTitle))
+    const msg = await channel.send(buildQueuePayload(scheduler, currentPage, statusTitle))
     guildManager.setQueueMessage(guildId, msg)
   } catch (err) {
     logger.debug("queue", "Failed to send queue message (channel not sendable)", {
@@ -133,10 +133,10 @@ export async function ensureQueueMessage(
 
 export async function refreshQueueMessage(interaction: MessageComponentInteraction, page?: number) {
   const guildId = interaction.guildId!
-  const queue = guildManager.get(guildId)
+  const scheduler = guildManager.get(guildId)
   const msg = guildManager.getQueueMessage(guildId)
 
-  if (!queue || (queue.getSize() === 0 && !queue.getCurrentTrack())) {
+  if (!scheduler || (scheduler.getSize() === 0 && !scheduler.getCurrentTrack())) {
     if (msg) {
       await interaction.deferUpdate()
       await msg.edit(buildEmptyPayload()).catch(() => {})
@@ -151,8 +151,8 @@ export async function refreshQueueMessage(interaction: MessageComponentInteracti
 
   if (msg) {
     await interaction.deferUpdate()
-    await msg.edit(buildQueuePayload(queue, currentPage)).catch(() => {})
+    await msg.edit(buildQueuePayload(scheduler, currentPage)).catch(() => {})
   } else {
-    await interaction.update(buildQueuePayload(queue, currentPage))
+    await interaction.update(buildQueuePayload(scheduler, currentPage))
   }
 }

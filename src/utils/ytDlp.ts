@@ -11,6 +11,8 @@ export interface YtDlpResult {
 }
 
 export function buildYtDlpArgs(baseArgs: string[], extraArgs: string[] = []): string[] {
+  // yt-dlp requires a JS runtime to execute YouTube's obfuscated JavaScript
+  // deno is the default supported runtime for YouTube extraction
   const args = [...baseArgs, "--js-runtimes", "deno", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", USER_AGENT, ...extraArgs]
   const cookieFile = getCookieFile()
   if (cookieFile) args.push("--cookies", cookieFile)

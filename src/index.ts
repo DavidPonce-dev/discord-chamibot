@@ -16,10 +16,12 @@ import { handleButton } from "./handlers/ButtonHandler"
 import { execute as seek } from "./commands/music/seek"
 import { editTemporary } from "./utils/messages"
 import { logger } from "./utils/logger"
-import { setupCookies } from "./utils/cookieSetup"
+import { setupCookies } from "./utils/cookie-setup"
 import { setCookieFile } from "./utils/cookies"
 import { getErrorMessage } from "./utils/error"
 
+// Filter known discord.js voice errors that are expected during normal operation
+// "IP discovery" and "socket closed" occur when voice connections are interrupted
 process.on("unhandledRejection", (reason) => {
   const msg = String(reason)
   if (msg.includes("IP discovery") || msg.includes("socket closed")) {

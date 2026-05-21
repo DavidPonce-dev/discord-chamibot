@@ -7,10 +7,10 @@ import { LOOP_LABELS } from "../../constants"
 
 export async function remove(interaction: ChatInputCommandInteraction) {
   const position = interaction.options.getInteger("position", true)
-  const queue = requireSession(interaction)
-  if (!queue) return
+  const scheduler = requireSession(interaction)
+  if (!scheduler) return
 
-  const removed = queue.remove(position - 1)
+  const removed = scheduler.remove(position - 1)
   if (!removed) {
     await interaction.reply({ content: "Posición inválida", ephemeral: true })
     return
@@ -22,19 +22,19 @@ export async function remove(interaction: ChatInputCommandInteraction) {
 }
 
 export async function shuffle(interaction: ChatInputCommandInteraction) {
-  const queue = guildManager.get(interaction.guildId!)
-  if (!queue || queue.getSize() === 0) {
+  const scheduler = guildManager.get(interaction.guildId!)
+  if (!scheduler || scheduler.getSize() === 0) {
     await interaction.reply({ content: "La cola está vacía", ephemeral: true })
     return
   }
-  queue.shuffle()
+  scheduler.shuffle()
   await replyAndDelete(interaction, "🔀 Cola mezclada")
   await updateQueueForGuild(interaction.guildId!)
 }
 
 export async function loop(interaction: ChatInputCommandInteraction) {
-  const queue = requireSession(interaction)
-  if (!queue) return
-  const mode = queue.toggleLoop()
+  const scheduler = requireSession(interaction)
+  if (!scheduler) return
+  const mode = scheduler.toggleLoop()
   await replyTemporary(interaction, `Loop: ${LOOP_LABELS[mode]}`)
 }

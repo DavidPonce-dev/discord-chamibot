@@ -8,7 +8,7 @@ import {
 } from "@discordjs/voice"
 import { Track, LoopMode } from "../../core/types"
 import { AudioService } from "../audio/AudioService"
-import { RadioService } from "../radio/RadioService"
+import { YouTubeRecommender } from "../../radio/YouTubeRecommender"
 import { normalizeTitle, extractArtist } from "../../radio/YouTubeRecommender"
 import { logger } from "../../utils/logger"
 import { getErrorMessage } from "../../utils/error"
@@ -40,7 +40,7 @@ export class TrackScheduler {
   private readonly MAX_ARTIST_HISTORY = 10
 
   private audio: AudioService
-  private radioService: RadioService
+  private radio: YouTubeRecommender
 
   onTrackChange?: (guildId: string) => void
   onDisconnect?: (guildId: string) => void
@@ -51,7 +51,7 @@ export class TrackScheduler {
     this.player = createAudioPlayer()
     this.connection.subscribe(this.player)
     this.audio = new AudioService()
-    this.radioService = new RadioService()
+    this.radio = new YouTubeRecommender()
     this.registerEvents()
     logger.info("scheduler", "Scheduler creado", {
       guildId: connection.joinConfig.guildId,
@@ -146,12 +146,13 @@ export class TrackScheduler {
   private async handleAutoplay(finished: Track | null) {
     if (!finished) return
     const shouldSwitch = this.sameArtistStreak >= this.ARTIST_ROTATION_LIMIT
-    logger.debug("scheduler", "Autoplay buscando track relacionado", {
-      lastTitle: finished.title,
-      sameArtistStreak: this.sameArtistStreak,
+    logger.debug("radio", "Buscando track relacionado", {
+      currentTrack: finished.title,
+      lastTitle: this.lastTrackTitle,
       shouldSwitch,
+      excludeCount: this.trackHistory.length,
     })
-    const next = await this.radioService.findRelated(
+    const next = await this.radio.findRelated(
       finished,
       this.lastTrackTitle,
       new Set(this.trackHistory),
@@ -160,12 +161,12 @@ export class TrackScheduler {
     )
     if (next) {
       this.queue.unshift(next as Track)
-      logger.event("scheduler", "Autoplay encontró track", {
+      logger.info("radio", "Track relacionado encontrado", {
         title: next.title,
         id: next.id,
       })
     } else {
-      logger.warn("scheduler", "Autoplay no encontró tracks relacionados")
+      logger.warn("radio", "No se encontró track relacionado")
     }
   }
 
@@ -273,6 +274,8 @@ export class TrackScheduler {
     }
   }
 
+  // Calculates current playback position in seconds, accounting for pauses
+  // pauseOffset accumulates total paused time, pauseTime tracks current pause start
   getPosition(): number {
     if (!this.playbackStart) return 0
     let elapsed = Date.now() - this.playbackStart - this.pauseOffset
@@ -343,6 +346,7 @@ export class TrackScheduler {
     this.seeking = true
     this.audio.killProcess()
     this.player.stop()
+    // Brief delay to let FFmpeg process settle before starting new stream
     await new Promise((resolve) => setTimeout(resolve, SEEK_SETTLE_DELAY_MS))
     this.isPlaying = true
 

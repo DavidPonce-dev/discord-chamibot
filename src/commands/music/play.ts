@@ -27,9 +27,34 @@ function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track 
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
 
+// Sets up scheduler lifecycle callbacks for queue UI updates and cleanup
+function setupSchedulerCallbacks(scheduler: import("../../services/scheduler/TrackScheduler").TrackScheduler, guildId: string) {
+  if (!scheduler.onTrackChange) {
+    scheduler.onTrackChange = (gId) => {
+      setQueuePage(gId, 1)
+      updateQueueForGuild(gId)
+      const s = guildManager.get(gId)
+      if (s?.getCurrentTrack()) {
+        startProgressUpdates(gId)
+      }
+    }
+  }
+
+  if (!scheduler.onDisconnect) {
+    scheduler.onDisconnect = (gId) => {
+      const msg = guildManager.getQueueMessage(gId)
+      if (msg) msg.delete().catch(() => {})
+      guildManager.clearQueueMessage(gId)
+      clearQueuePage(gId)
+      stopProgressUpdates(gId)
+      guildManager.delete(gId)
+    }
+  }
+}
+
 function updateProgress(guildId: string) {
-  const queue = guildManager.get(guildId)
-  if (!queue || (!queue.getCurrentTrack() && queue.getSize() === 0)) {
+  const scheduler = guildManager.get(guildId)
+  if (!scheduler || (!scheduler.getCurrentTrack() && scheduler.getSize() === 0)) {
     const iv = progressIntervals.get(guildId)
     if (iv) {
       clearInterval(iv)
@@ -82,9 +107,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       guildId,
     })
 
-    let queue = guildManager.get(guildId);
+    let scheduler = guildManager.get(guildId);
 
-    if (!queue) {
+    if (!scheduler) {
       logger.event("command", "Creando conexión de voz", {
         guildId,
         channel: voiceChannel.name,
@@ -96,36 +121,16 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         adapterCreator: voiceChannel.guild.voiceAdapterCreator,
       });
 
-      queue = guildManager.create(guildId, connection);
+      scheduler = guildManager.create(guildId, connection);
     }
 
-    if (!queue.onTrackChange) {
-      queue.onTrackChange = (gId) => {
-        setQueuePage(gId, 1)
-        updateQueueForGuild(gId)
-        const q = guildManager.get(gId)
-        if (q?.getCurrentTrack()) {
-          startProgressUpdates(gId)
-        }
-      }
-    }
+    setupSchedulerCallbacks(scheduler, guildId)
 
-    if (!queue.onDisconnect) {
-      queue.onDisconnect = (gId) => {
-        const msg = guildManager.getQueueMessage(gId)
-        if (msg) msg.delete().catch(() => {})
-        guildManager.clearQueueMessage(gId)
-        clearQueuePage(gId)
-        stopProgressUpdates(gId)
-        guildManager.delete(gId)
-      }
-    }
-
-    const lastPage = () => calcTotalPages(queue!.getSize(), TRACKS_PER_PAGE)
+    const lastPage = () => calcTotalPages(scheduler!.getSize(), TRACKS_PER_PAGE)
 
     if (result.tracks.length > 1) {
       const tracks = result.tracks.map((t) => toTrack(t, user))
-      await queue.addMultiple(tracks)
+      await scheduler.addMultiple(tracks)
       logger.event("command", "Playlist añadida", {
         title: result.playlistTitle,
         trackCount: tracks.length,
@@ -139,7 +144,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       }
     } else {
       const track = toTrack(result.tracks[0], user)
-      await queue.add(track)
+      await scheduler.add(track)
       logger.event("command", "Track añadido", {
         title: track.title,
         user,

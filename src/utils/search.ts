@@ -2,7 +2,7 @@ import play, { YouTubePlayList } from "play-dl"
 import { spawn } from "child_process"
 import { logger } from "./logger"
 import { getCookieFile } from "./cookies"
-import { buildYtDlpArgs, USER_AGENT } from "./ytDlp"
+import { buildYtDlpArgs, USER_AGENT } from "./ytdlp"
 import { formatTime } from "./format"
 
 export interface ResolveResult {
