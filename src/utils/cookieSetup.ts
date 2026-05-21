@@ -17,8 +17,11 @@ export function setupCookies(): string | null {
 
   logger.info("cookie", "YouTube cookies escritas", {
     path: cookiePath,
-    lines: lines.length,
+    totalLines: cookies.split("\n").length,
+    dataLines: lines.length,
     hasAuth,
+    firstLine: lines[0]?.slice(0, 100),
+    sizeBytes: cookies.length,
   })
 
   return cookiePath
