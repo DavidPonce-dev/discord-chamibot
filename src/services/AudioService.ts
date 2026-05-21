@@ -158,10 +158,9 @@ export class AudioService {
 
       ffmpegArgs.push(
         "-i", audioUrl,
-        "-f", "opus",
-        "-c:a", "libopus",
-        "-b:a", "128k",
-        "-application", "audio",
+        "-f", "s16le",
+        "-ac", "2",
+        "-ar", "48000",
         "-v", "quiet",
         "pipe:1",
       )
@@ -185,7 +184,7 @@ export class AudioService {
       })
 
       logger.debug("audio", "Stream iniciado exitosamente (opus via FFmpeg)")
-      return createAudioResource(ffmpeg.stdout!, { inputType: StreamType.Opus })
+      return createAudioResource(ffmpeg.stdout!, { inputType: StreamType.Raw })
     } catch (err) {
       logger.error("audio", "Error al crear recurso de audio", {
         url: url.slice(0, 60),
