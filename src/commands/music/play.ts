@@ -33,6 +33,7 @@ async function sendQueueStatus(
   statusTitle: string,
   totalPages: number,
 ) {
+  guildManager.setStatusTitle(guildId, statusTitle)
   if (!channel?.send) return
   await ensureQueueMessage(guildId, channel, statusTitle, totalPages)
   startProgressUpdates(guildId)
@@ -45,7 +46,8 @@ function setupSchedulerCallbacks(scheduler: import("../../services/scheduler/Tra
   if (!scheduler.onTrackChange) {
     scheduler.onTrackChange = (gId) => {
       setQueuePage(gId, 1)
-      updateQueueForGuild(gId)
+      const statusTitle = guildManager.getStatusTitle(gId)
+      updateQueueForGuild(gId, statusTitle)
       const s = guildManager.get(gId)
       if (s?.getCurrentTrack()) {
         startProgressUpdates(gId)
@@ -55,9 +57,11 @@ function setupSchedulerCallbacks(scheduler: import("../../services/scheduler/Tra
 
   if (!scheduler.onDisconnect) {
     scheduler.onDisconnect = (gId) => {
+      stopProgressUpdates(gId)
       const msg = guildManager.getQueueMessage(gId)
       if (msg) msg.delete().catch(() => {})
       guildManager.clearQueueMessage(gId)
+      guildManager.clearStatusTitle(gId)
       clearQueuePage(gId)
     }
   }
@@ -73,7 +77,8 @@ function updateProgress(guildId: string) {
     }
     return
   }
-  updateQueueForGuild(guildId)
+  const statusTitle = guildManager.getStatusTitle(guildId)
+  updateQueueForGuild(guildId, statusTitle)
 }
 
 function startProgressUpdates(guildId: string) {
@@ -87,6 +92,10 @@ function stopProgressUpdates(guildId: string) {
     clearInterval(iv)
     progressIntervals.delete(guildId)
   }
+}
+
+export function stopProgressForGuild(guildId: string) {
+  stopProgressUpdates(guildId)
 }
 
 export async function execute(interaction: ChatInputCommandInteraction) {
@@ -148,7 +157,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         user,
         guildId,
       })
-      await interaction.editReply(`Añadida playlist: **${result.playlistTitle ?? "Lista"}** (${tracks.length} temas)`)
+      await interaction.deleteReply().catch(() => {})
       await sendQueueStatus(guildId, interaction.channel as GuildTextBasedChannel | undefined, `🎵 ${user} agregó una playlist — ${result.playlistTitle ?? "Lista"}`, lastPage())
     } else {
       const track = toTrack(result.tracks[0], user)
@@ -158,7 +167,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         user,
         guildId,
       })
-      await interaction.editReply(`Añadido: **${track.title}**`)
+      await interaction.deleteReply().catch(() => {})
       await sendQueueStatus(guildId, interaction.channel as GuildTextBasedChannel | undefined, `🎵 ${user} agregó una canción — ${track.title}`, lastPage())
     }
   } catch (error) {

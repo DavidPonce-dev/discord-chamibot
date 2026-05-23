@@ -12,6 +12,7 @@ export interface ResolveResult {
     thumbnail?: string
   }[]
   playlistTitle?: string
+  type?: "single" | "album" | "playlist"
 }
 
 function sanitizeYouTubeUrl(url: string): string {
@@ -136,34 +137,49 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
   }
 }
 
-const ALBUM_KEYWORDS = /\b(album|full\s*album|ep|lp|discography|complete|edición|cd)\b/i
+const ALBUM_KEYWORDS = /\b(album|full\s*album|ep\b|lp\b|discography|complete\s*album|official\s*album|deluxe\s*edition|remastered|edición\s*completa|album\s*completo)\b/i
+const PLAYLIST_KEYWORDS = /\b(playlist|mix|compilation|best\s*of|top\s*\d+|hits|radio|chill|lofi|lo-fi|vibes|party|workout|study|sleep|focus|gym|drive|road\s*trip|karaoke|instrumental|cover|live\s*session|podcast)\b/i
 
-function isAlbumLike(title: string, videoCount: number): boolean {
-  return videoCount >= 3 && videoCount <= 20 || ALBUM_KEYWORDS.test(title)
+function classifyPlaylist(title: string, videoCount: number): "album" | "playlist" {
+  const isAlbumByKeywords = ALBUM_KEYWORDS.test(title)
+  const isPlaylistByKeywords = PLAYLIST_KEYWORDS.test(title)
+
+  if (isAlbumByKeywords && !isPlaylistByKeywords) return "album"
+  if (isPlaylistByKeywords && !isAlbumByKeywords) return "playlist"
+
+  if (isAlbumByKeywords && isPlaylistByKeywords) {
+    return videoCount <= 25 ? "album" : "playlist"
+  }
+
+  if (videoCount >= 2 && videoCount <= 25) return "album"
+  if (videoCount > 25) return "playlist"
+
+  return "playlist"
 }
 
 export async function autocompleteSearch(query: string): Promise<{ name: string; value: string }[]> {
   try {
     const [videos, playlistResults] = await Promise.all([
-      play.search(query, { source: { youtube: "video" }, limit: 5 }),
-      play.search(query, { source: { youtube: "playlist" }, limit: 15 }),
+      play.search(query, { source: { youtube: "video" }, limit: 10 }),
+      play.search(query, { source: { youtube: "playlist" }, limit: 20 }),
     ])
 
     const albums: YouTubePlayList[] = []
     const playlists: YouTubePlayList[] = []
 
     for (const p of playlistResults) {
-      if (isAlbumLike(p.title ?? "", p.videoCount ?? 0)) {
-        if (albums.length < 5) albums.push(p)
+      const classification = classifyPlaylist(p.title ?? "", p.videoCount ?? 0)
+      if (classification === "album") {
+        if (albums.length < 4) albums.push(p)
       } else {
-        if (playlists.length < 3) playlists.push(p)
+        if (playlists.length < 2) playlists.push(p)
       }
     }
 
     const results: { name: string; value: string }[] = []
 
-    for (const v of videos) {
-      if (results.length >= 25) break
+    for (const v of videos.slice(0, 4)) {
+      if (results.length >= 10) break
       const name = `🎵 ${v.title ?? "Unknown"}`
       results.push({
         name: name.length > 100 ? name.slice(0, 97) + "..." : name,
@@ -171,8 +187,8 @@ export async function autocompleteSearch(query: string): Promise<{ name: string;
       })
     }
 
-    for (const a of albums) {
-      if (results.length >= 25) break
+    for (const a of albums.slice(0, 4)) {
+      if (results.length >= 10) break
       const name = `💿 ${a.title ?? "Unknown"}`
       results.push({
         name: name.length > 100 ? name.slice(0, 97) + "..." : name,
@@ -180,8 +196,8 @@ export async function autocompleteSearch(query: string): Promise<{ name: string;
       })
     }
 
-    for (const p of playlists) {
-      if (results.length >= 25) break
+    for (const p of playlists.slice(0, 2)) {
+      if (results.length >= 10) break
       const name = `📋 ${p.title ?? "Unknown"}`
       results.push({
         name: name.length > 100 ? name.slice(0, 97) + "..." : name,
@@ -189,7 +205,18 @@ export async function autocompleteSearch(query: string): Promise<{ name: string;
       })
     }
 
-    return results.slice(0, 25)
+    if (results.length < 10) {
+      for (const v of videos.slice(4)) {
+        if (results.length >= 10) break
+        const name = `🎵 ${v.title ?? "Unknown"}`
+        results.push({
+          name: name.length > 100 ? name.slice(0, 97) + "..." : name,
+          value: v.url ?? `https://youtube.com/watch?v=${v.id}`,
+        })
+      }
+    }
+
+    return results
   } catch {
     return []
   }

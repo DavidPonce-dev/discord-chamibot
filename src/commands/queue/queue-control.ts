@@ -1,9 +1,7 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
 import { updateQueueForGuild } from "@/commands/queue/queue"
-import { replyTemporary, replyAndDelete } from "@/utils/messages"
 import { requireSession } from "@/utils/guards"
-import { LOOP_LABELS } from "@/constants"
 
 export async function remove(interaction: ChatInputCommandInteraction) {
   const position = interaction.options.getInteger("position", true)
@@ -16,7 +14,7 @@ export async function remove(interaction: ChatInputCommandInteraction) {
     return
   }
 
-  await interaction.reply(`Eliminado: **${removed.title}**`)
+  await interaction.deferReply()
   await interaction.deleteReply().catch(() => {})
   await updateQueueForGuild(interaction.guildId!)
 }
@@ -28,13 +26,16 @@ export async function shuffle(interaction: ChatInputCommandInteraction) {
     return
   }
   scheduler.shuffle()
-  await replyAndDelete(interaction, "🔀 Cola mezclada")
+  await interaction.deferReply()
+  await interaction.deleteReply().catch(() => {})
   await updateQueueForGuild(interaction.guildId!)
 }
 
 export async function loop(interaction: ChatInputCommandInteraction) {
   const scheduler = requireSession(interaction)
   if (!scheduler) return
-  const mode = scheduler.toggleLoop()
-  await replyTemporary(interaction, `Loop: ${LOOP_LABELS[mode]}`)
+  scheduler.toggleLoop()
+  await interaction.deferReply()
+  await interaction.deleteReply().catch(() => {})
+  await updateQueueForGuild(interaction.guildId!)
 }

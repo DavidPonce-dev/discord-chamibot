@@ -154,7 +154,7 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isAutocomplete()) {
     const query = interaction.options.getFocused()
     const results = await autocompleteSearch(query)
-    await interaction.respond(results.slice(0, 10))
+    await interaction.respond(results)
     return
   }
 

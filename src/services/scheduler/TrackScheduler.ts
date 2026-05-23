@@ -78,9 +78,9 @@ export class TrackScheduler {
           await this.handleAutoplay(finished)
         }
 
-        this.resetPlaybackState()
         await this.processQueue()
         await this.onTrackChange?.(this.connection.joinConfig.guildId)
+        this.resetPlaybackState()
       } catch (error) {
         logger.error("scheduler", "Error en Idle handler", {
           error: getErrorMessage(error),
@@ -94,9 +94,9 @@ export class TrackScheduler {
           error: getErrorMessage(err),
           guildId: this.connection.joinConfig.guildId,
         })
-        this.resetPlaybackState()
         await this.processQueue()
         await this.onTrackChange?.(this.connection.joinConfig.guildId)
+        this.resetPlaybackState()
       } catch (error) {
         logger.error("scheduler", "Error en Player handler", {
           error: getErrorMessage(error),

@@ -1,5 +1,5 @@
 import { VoiceConnection } from "@discordjs/voice"
-import { Message } from "discord.js"
+import { Message, GuildTextBasedChannel } from "discord.js"
 import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
 import { logger } from "@/utils/logger"
 
@@ -14,6 +14,32 @@ export class GuildManager {
   private sessions = new Map<string, TrackScheduler>()
   private autoplayPrefs = new Map<string, boolean>()
   private queueMessages = new Map<string, Message>()
+  private queueChannels = new Map<string, GuildTextBasedChannel>()
+  private statusTitles = new Map<string, string>()
+
+  getQueueChannel(guildId: string): GuildTextBasedChannel | undefined {
+    return this.queueChannels.get(guildId)
+  }
+
+  setQueueChannel(guildId: string, channel: GuildTextBasedChannel) {
+    this.queueChannels.set(guildId, channel)
+  }
+
+  clearQueueChannel(guildId: string) {
+    this.queueChannels.delete(guildId)
+  }
+
+  getStatusTitle(guildId: string): string | undefined {
+    return this.statusTitles.get(guildId)
+  }
+
+  setStatusTitle(guildId: string, title: string) {
+    this.statusTitles.set(guildId, title)
+  }
+
+  clearStatusTitle(guildId: string) {
+    this.statusTitles.delete(guildId)
+  }
 
   getAutoplayPref(guildId: string): boolean {
     return this.autoplayPrefs.get(guildId) ?? false
@@ -47,6 +73,9 @@ export class GuildManager {
       session.destroy()
     }
     this.sessions.delete(guildId)
+    this.queueMessages.delete(guildId)
+    this.queueChannels.delete(guildId)
+    this.statusTitles.delete(guildId)
     for (const cb of cleanupCallbacks) {
       cb(guildId)
     }

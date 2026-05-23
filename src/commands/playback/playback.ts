@@ -1,7 +1,6 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
 import { updateQueueForGuild, setQueuePage } from "@/commands/queue/queue"
-import { replyTemporary, replyAndDelete } from "@/utils/messages"
 import { requireScheduler, requireSession } from "@/utils/guards"
 
 export async function pause(interaction: ChatInputCommandInteraction) {
@@ -12,7 +11,9 @@ export async function pause(interaction: ChatInputCommandInteraction) {
     return
   }
   scheduler.pause()
-  await replyTemporary(interaction, "⏸ Pausado")
+  await interaction.deferReply()
+  await interaction.deleteReply().catch(() => {})
+  await updateQueueForGuild(interaction.guildId!)
 }
 
 export async function resume(interaction: ChatInputCommandInteraction) {
@@ -23,7 +24,9 @@ export async function resume(interaction: ChatInputCommandInteraction) {
     return
   }
   scheduler.resume()
-  await replyTemporary(interaction, "▶ Reanudado")
+  await interaction.deferReply()
+  await interaction.deleteReply().catch(() => {})
+  await updateQueueForGuild(interaction.guildId!)
 }
 
 export async function skip(interaction: ChatInputCommandInteraction) {
@@ -31,7 +34,8 @@ export async function skip(interaction: ChatInputCommandInteraction) {
   if (!scheduler) return
   scheduler.skip()
   setQueuePage(interaction.guildId!, 1)
-  await replyAndDelete(interaction, "⏭ Saltado")
+  await interaction.deferReply()
+  await interaction.deleteReply().catch(() => {})
   await updateQueueForGuild(interaction.guildId!)
 }
 
@@ -41,5 +45,6 @@ export async function stop(interaction: ChatInputCommandInteraction) {
   session.stop()
   guildManager.delete(interaction.guildId!)
   guildManager.clearQueueMessage(interaction.guildId!)
-  await replyAndDelete(interaction, "⏹ Detenido y cola limpiada")
+  await interaction.deferReply()
+  await interaction.deleteReply().catch(() => {})
 }
