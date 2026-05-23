@@ -21,6 +21,7 @@ type QueueMessagePayload = {
 
 const queuePages = new Map<string, number>()
 const DELETED_MESSAGE_CODES = [10008, 50001, 10004]
+const EMPTY_MESSAGE_TIMEOUT_MS = 5_000
 
 function isMessageDeletedError(err: unknown): boolean {
   const msg = getErrorMessage(err)
@@ -187,5 +188,16 @@ export async function refreshQueueMessage(interaction: MessageComponentInteracti
   if (msg && !isSameMessage) {
     await msg.edit(payload).catch(() => {})
   }
-  await interaction.update(payload)
+  const sent = await interaction.update(payload)
+  
+  if (isEmpty) {
+    setTimeout(async () => {
+      const message = await interaction.channel?.messages.fetch(sent.id).catch(() => null)
+      if (message) {
+        await message.delete().catch(() => {})
+        guildManager.clearQueueMessage(guildId)
+        clearQueuePage(guildId)
+      }
+    }, EMPTY_MESSAGE_TIMEOUT_MS)
+  }
 }
