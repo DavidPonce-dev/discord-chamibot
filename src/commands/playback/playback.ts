@@ -1,7 +1,7 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
-import { updateQueueForGuild, setQueuePage } from "@/commands/queue/queue"
-import { requireScheduler, requireSession } from "@/utils/guards"
+import { updateQueueForGuild, setQueuePage } from "@/services/queue/QueueUIManager"
+import { requireScheduler, requireSession, requireGuild } from "@/utils/guards"
 
 export async function pause(interaction: ChatInputCommandInteraction) {
   const scheduler = requireScheduler(interaction)
@@ -13,7 +13,8 @@ export async function pause(interaction: ChatInputCommandInteraction) {
   scheduler.pause()
   await interaction.deferReply()
   await interaction.deleteReply().catch(() => {})
-  await updateQueueForGuild(interaction.guildId!)
+  const guildId = requireGuild(interaction)
+  if (guildId) await updateQueueForGuild(guildId)
 }
 
 export async function resume(interaction: ChatInputCommandInteraction) {
@@ -26,25 +27,31 @@ export async function resume(interaction: ChatInputCommandInteraction) {
   scheduler.resume()
   await interaction.deferReply()
   await interaction.deleteReply().catch(() => {})
-  await updateQueueForGuild(interaction.guildId!)
+  const guildId = requireGuild(interaction)
+  if (guildId) await updateQueueForGuild(guildId)
 }
 
 export async function skip(interaction: ChatInputCommandInteraction) {
   const scheduler = requireScheduler(interaction)
   if (!scheduler) return
   scheduler.skip()
-  setQueuePage(interaction.guildId!, 1)
+  const guildId = requireGuild(interaction)
+  if (guildId) {
+    setQueuePage(guildId, 1)
+    await updateQueueForGuild(guildId)
+  }
   await interaction.deferReply()
   await interaction.deleteReply().catch(() => {})
-  await updateQueueForGuild(interaction.guildId!)
 }
 
 export async function stop(interaction: ChatInputCommandInteraction) {
   const session = requireSession(interaction)
   if (!session) return
+  const guildId = requireGuild(interaction)
+  if (!guildId) return
   session.stop()
-  guildManager.delete(interaction.guildId!)
-  guildManager.clearQueueMessage(interaction.guildId!)
+  guildManager.delete(guildId)
+  guildManager.clearQueueMessage(guildId)
   await interaction.deferReply()
   await interaction.deleteReply().catch(() => {})
 }

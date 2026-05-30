@@ -1,8 +1,8 @@
 import play from "play-dl"
 import { Track } from "@/core/types"
 import { parseDurationSec } from "@/utils/format"
-import { MAX_AUTOPLAY_SEC, MAX_RETRIES, GENRE_KEYWORDS, NON_MUSIC_KEYWORDS } from "@/constants"
-import { searchPlayDl, VideoResult } from "./RadioSearchService"
+import { MAX_AUTOPLAY_SEC, MAX_RETRIES, GENRE_KEYWORDS, NON_MUSIC_KEYWORDS } from "@/config/radio"
+import { searchPlayDl, VideoResult } from "@/radio/RadioSearchService"
 
 export function extractArtist(title: string): string {
   const sep = title.search(/ [-–|]/)

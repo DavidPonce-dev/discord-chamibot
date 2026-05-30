@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3001"
-      - "6080:6080"
+      - "127.0.0.1:6080:6080"
     volumes:
       - ./data/cookies:/cookies
       - ./data/browser-profile:/profile

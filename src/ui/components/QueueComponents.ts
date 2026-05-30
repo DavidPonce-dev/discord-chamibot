@@ -7,6 +7,13 @@ import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
 import { TRACKS_PER_PAGE } from "@/constants"
 import { calcTotalPages, clampPage } from "@/utils/format"
 
+const MAX_TRACK_LABEL = 50
+
+function truncateLabel(text: string, max: number): string {
+  if (text.length <= max) return text
+  return text.slice(0, max - 3) + "..."
+}
+
 export function buildTrackRows(queue: TrackScheduler, page: number) {
   const tracks = queue.getQueue()
   const totalPages = calcTotalPages(tracks.length, TRACKS_PER_PAGE)
@@ -22,7 +29,9 @@ export function buildTrackRows(queue: TrackScheduler, page: number) {
     const canMoveDown = idx < tracks.length - 1
     const pos = idx + 1
     const dur = t.duration ?? ""
-    const label = `${pos}. ${t.title}${dur ? ` (${dur})` : ""}`
+    const titlePart = `${pos}. ${t.title}`
+    const durPart = dur ? ` (${dur})` : ""
+    const label = truncateLabel(titlePart, MAX_TRACK_LABEL - durPart.length) + durPart
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()

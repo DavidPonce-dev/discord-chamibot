@@ -13,8 +13,7 @@ import { normalizeTitle, extractArtist } from "@/radio/YouTubeRecommender"
 import { logger } from "@/utils/logger"
 import { getErrorMessage } from "@/utils/error"
 
-const VOICE_RECONNECT_TIMEOUT_MS = 5_000
-const SEEK_SETTLE_DELAY_MS = 100
+import { VOICE_RECONNECT_TIMEOUT_MS, SEEK_SETTLE_DELAY_MS } from "@/config/timeouts"
 const MS_PER_SECOND = 1_000
 
 export class TrackScheduler {
@@ -38,6 +37,7 @@ export class TrackScheduler {
 
   private readonly MAX_HISTORY = 20
   private readonly MAX_ARTIST_HISTORY = 10
+  private destroyed = false
 
   private audio: AudioService
   private radio: YouTubeRecommender
@@ -61,7 +61,7 @@ export class TrackScheduler {
 
   private registerEvents() {
     this.player.on(AudioPlayerStatus.Idle, async () => {
-      if (this.seeking) return
+      if (this.seeking || this.destroyed) return
       try {
         const finished = this.current
         const willAutoplay = this.autoplay && !!finished && this.queue.length === 0
@@ -89,6 +89,7 @@ export class TrackScheduler {
     })
 
     this.player.on("error", async (err) => {
+      if (this.destroyed) return
       try {
         logger.error("scheduler", "Error del AudioPlayer", {
           error: getErrorMessage(err),
@@ -171,6 +172,7 @@ export class TrackScheduler {
   }
 
   private async handleVoiceDisconnect() {
+    if (this.destroyed) return
     logger.event("scheduler", "Conexión de voz desconectada", {
       guildId: this.connection.joinConfig.guildId,
     })
@@ -451,6 +453,8 @@ export class TrackScheduler {
   }
 
   destroy() {
+    if (this.destroyed) return
+    this.destroyed = true
     logger.info("scheduler", "Scheduler destruido", {
       guildId: this.connection.joinConfig.guildId,
     })
@@ -481,5 +485,9 @@ export class TrackScheduler {
 
   getSize(): number {
     return this.queue.length
+  }
+
+  isDestroyed(): boolean {
+    return this.destroyed
   }
 }

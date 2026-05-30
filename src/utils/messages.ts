@@ -1,6 +1,5 @@
 import { ChatInputCommandInteraction, Message, EmbedBuilder, ActionRowBuilder, ButtonBuilder } from "discord.js"
-
-const AUTO_DELETE_MS = 5_000
+import { AUTO_DELETE_MS } from "@/config/timeouts"
 
 function scheduleDelete(msg: Message) {
   setTimeout(() => msg.delete().catch(() => {}), AUTO_DELETE_MS)

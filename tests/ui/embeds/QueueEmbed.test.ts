@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest"
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from "discord.js"
-import { buildQueueContent, buildEmptyEmbed } from "../src/ui/embeds/QueueEmbed"
-import { buildTrackRows, buildNavRow, buildPlaybackRow, buildNowPlayingButtons } from "../src/ui/components/QueueComponents"
-import { TRACKS_PER_PAGE } from "../src/constants"
-import type { TrackScheduler } from "../src/services/scheduler/TrackScheduler"
-import type { Track } from "../src/core/types"
+import { buildQueueContent, buildEmptyEmbed } from "@/ui/embeds/QueueEmbed"
+import { buildTrackRows, buildNavRow, buildPlaybackRow, buildNowPlayingButtons } from "@/ui/components/QueueComponents"
+import { TRACKS_PER_PAGE } from "@/constants"
+import type { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import type { Track } from "@/core/types"
 
 function makeTrack(overrides: Partial<Track> = {}): Track {
   return {

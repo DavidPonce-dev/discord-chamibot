@@ -10,8 +10,8 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
   try {
     await scheduler.seek(seconds)
+    await interaction.deleteReply().catch(() => {})
   } catch {
-    // silent fail
+    await interaction.editReply("No se pudo buscar en esa posición. Verificá que el timestamp sea válido.").catch(() => {})
   }
-  await interaction.deleteReply().catch(() => {})
 }

@@ -5,9 +5,14 @@ import { logger } from "@/utils/logger"
 
 type CleanupFn = (guildId: string) => void
 const cleanupCallbacks: CleanupFn[] = []
+const preDestroyCallbacks: CleanupFn[] = []
 
 export function registerCleanup(cb: CleanupFn) {
   cleanupCallbacks.push(cb)
+}
+
+export function registerPreDestroyCleanup(cb: CleanupFn) {
+  preDestroyCallbacks.push(cb)
 }
 
 export class GuildManager {
@@ -68,6 +73,9 @@ export class GuildManager {
 
   delete(guildId: string) {
     logger.event("guild", "Sesión de música eliminada", { guildId })
+    for (const cb of preDestroyCallbacks) {
+      cb(guildId)
+    }
     const session = this.sessions.get(guildId)
     if (session) {
       session.destroy()

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { AudioResource } from "@discordjs/voice"
-import type { Track } from "../src/core/types"
+import type { Track } from "@/core/types"
 
 const mockCreateResource = vi.hoisted(() => vi.fn<() => Promise<AudioResource>>())
 const mockKillProcess = vi.hoisted(() => vi.fn())
 const mockFindRelated = vi.hoisted(() => vi.fn())
 
-vi.mock("../src/services/audio/AudioService", () => ({
+vi.mock("@/services/audio/AudioService", () => ({
   AudioService: class {
     constructor() {
       return {
@@ -17,7 +17,7 @@ vi.mock("../src/services/audio/AudioService", () => ({
   },
 }))
 
-vi.mock("../src/services/radio/RadioService", () => ({
+vi.mock("@/services/radio/RadioService", () => ({
   RadioService: class {
     constructor() {
       return { findRelated: mockFindRelated } as any
@@ -25,7 +25,7 @@ vi.mock("../src/services/radio/RadioService", () => ({
   },
 }))
 
-const { TrackScheduler } = await import("../src/services/scheduler/TrackScheduler")
+const { TrackScheduler } = await import("@/services/scheduler/TrackScheduler")
 
 function makeTrack(overrides: Partial<Track> = {}): Track {
   return {

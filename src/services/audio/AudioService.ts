@@ -1,11 +1,10 @@
 import { createAudioResource, AudioResource, StreamType } from "@discordjs/voice"
 import { spawn } from "child_process"
 import { logger } from "@/utils/logger"
-import { getCookieFile } from "@/utils/cookies"
+import { getCookieFile, isCookieError, refreshCookies } from "@/services/cookie/CookieManager"
 import { buildYtDlpArgs, spawnYtDlp, USER_AGENT } from "@/utils/ytdlp"
-import { formatTimeFFmpeg } from "@/utils/format"
+import { formatTime } from "@/utils/format"
 import { getErrorMessage } from "@/utils/error"
-import { isCookieError, refreshCookies } from "@/utils/cookieRefresher"
 
 const ERROR_MSG_MAX_LENGTH = 200
 const LOG_ERROR_MAX_LENGTH = 150
@@ -155,7 +154,7 @@ export class AudioService {
       ]
 
       if (seekTo !== undefined) {
-        ffmpegArgs.push("-ss", formatTimeFFmpeg(seekTo))
+        ffmpegArgs.push("-ss", formatTime(seekTo, true))
       }
 
       ffmpegArgs.push(

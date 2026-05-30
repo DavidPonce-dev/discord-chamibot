@@ -3,22 +3,24 @@ import {
   GatewayIntentBits,
   ChatInputCommandInteraction,
 } from "discord.js"
-import dotenv from "dotenv"
 import { execute as play } from "@/commands/music/play"
 import { execute as queue } from "@/commands/queue/queue"
-import { execute as np } from "@/commands/music/np"
+import { execute as nowplaying } from "@/commands/music/now-playing"
 import { execute as help } from "@/commands/general/help"
 import { execute as autoplay } from "@/commands/general/autoplay"
-import { pause, resume, skip, stop } from "@/commands/playback/playback"
+import { execute as pause } from "@/commands/playback/pause"
+import { execute as resume } from "@/commands/playback/resume"
+import { execute as skip } from "@/commands/playback/skip"
+import { execute as stop } from "@/commands/playback/stop"
 import { remove, shuffle, loop } from "@/commands/queue/queue-control"
-import { autocompleteSearch } from "@/utils/search"
+import { autocompleteSearch } from "@/services/search/YouTubeResolver"
 import { handleButton } from "@/handlers/ButtonHandler"
 import { execute as seek } from "@/commands/music/seek"
 import { editTemporary } from "@/utils/messages"
 import { logger } from "@/utils/logger"
-import { setupCookies } from "@/utils/cookie-setup"
-import { setCookieFile } from "@/utils/cookies"
+import { setupCookies, setCookieFile } from "@/services/cookie/CookieManager"
 import { getErrorMessage } from "@/utils/error"
+import { config } from "@/config"
 
 // Filter known discord.js voice errors that are expected during normal operation
 // "IP discovery" and "socket closed" occur when voice connections are interrupted
@@ -35,8 +37,6 @@ process.on("uncaughtException", (err) => {
   logger.error("process", "Uncaught exception", { error: err.message, stack: err.stack })
   process.exit(1)
 })
-
-dotenv.config()
 
 // Setup YouTube cookies from environment variable
 const cookiePath = setupCookies()
@@ -63,11 +63,11 @@ commands.set("r", resume)
 commands.set("st", stop)
 commands.set("ap", autoplay)
 commands.set("h", help)
-commands.set("shuffle", shuffle)
-commands.set("remove", remove)
-commands.set("np", np)
-commands.set("loop", loop)
-commands.set("seek", seek)
+commands.set("sh", shuffle)
+commands.set("rm", remove)
+commands.set("np", nowplaying)
+commands.set("l", loop)
+commands.set("sk", seek)
 
 client.once("clientReady", () => {
   if (!client.user) {
@@ -170,7 +170,7 @@ client.on("interactionCreate", async (interaction) => {
 })
 
 logger.info("bot", "Iniciando conexión a Discord...")
-client.login(process.env.DISCORD_TOKEN).catch((err) => {
+client.login(config.discord.token).catch((err) => {
   logger.error("discord", "Error al iniciar sesión", { error: err.message })
   process.exit(1)
 })

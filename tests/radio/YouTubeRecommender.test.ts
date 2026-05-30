@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { YouTubeRecommender, isMusic, normalizeTitle } from "../src/radio/YouTubeRecommender"
-import type { Track } from "../src/core/types"
+import { YouTubeRecommender, isMusic, normalizeTitle } from "@/radio/YouTubeRecommender"
+import type { Track } from "@/core/types"
 
 const mockSearchPlayDl = vi.hoisted(() => vi.fn())
 const mockPlayVideoInfo = vi.hoisted(() => vi.fn())
@@ -11,7 +11,7 @@ vi.mock("play-dl", () => ({
   },
 }))
 
-vi.mock("../src/radio/RadioSearchService", () => ({
+vi.mock("@/radio/RadioSearchService", () => ({
   searchPlayDl: mockSearchPlayDl,
 }))
 

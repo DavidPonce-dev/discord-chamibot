@@ -1,18 +1,18 @@
 import { ChatInputCommandInteraction } from "discord.js";
 import type { GuildTextBasedChannel } from "discord.js";
 import { joinVoiceChannel } from "@discordjs/voice";
-import { resolveQuery } from "@/utils/search";
-import { guildManager, registerCleanup } from "@/services/guild/GuildManager";
-import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage } from "@/commands/queue/queue";
+import { resolveQuery } from "@/services/search/YouTubeResolver";
+import { guildManager } from "@/services/guild/GuildManager";
+import { setupSchedulerCallbacks, initializeQueueDisplay } from "@/services/queue/QueueProgressTracker";
+import { updateQueueForGuild, setQueuePage } from "@/services/queue/QueueUIManager";
 import { editTemporary } from "@/utils/messages";
 import { logger } from "@/utils/logger";
 import { TRACKS_PER_PAGE } from "@/constants";
 import { calcTotalPages } from "@/utils/format";
 import { getErrorMessage } from "@/utils/error";
+import { requireGuild } from "@/utils/guards";
 import type { Track } from "@/core/types";
-import type { ResolveResult } from "@/utils/search";
-
-const PROGRESS_UPDATE_INTERVAL_MS = 3_000
+import type { ResolveResult } from "@/services/search/YouTubeResolver";
 
 function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track {
   return {
@@ -25,83 +25,13 @@ function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track 
   }
 }
 
-registerCleanup(stopProgressUpdates)
-
-async function sendQueueStatus(
-  guildId: string,
-  channel: GuildTextBasedChannel | undefined,
-  statusTitle: string,
-  totalPages: number,
-) {
-  guildManager.setStatusTitle(guildId, statusTitle)
-  if (!channel?.send) return
-  await ensureQueueMessage(guildId, channel, statusTitle, totalPages)
-  startProgressUpdates(guildId)
-}
-
-const progressIntervals = new Map<string, NodeJS.Timeout>()
-
-// Sets up scheduler lifecycle callbacks for queue UI updates and cleanup
-function setupSchedulerCallbacks(scheduler: import("../../services/scheduler/TrackScheduler").TrackScheduler, guildId: string) {
-  if (!scheduler.onTrackChange) {
-    scheduler.onTrackChange = (gId) => {
-      setQueuePage(gId, 1)
-      const statusTitle = guildManager.getStatusTitle(gId)
-      updateQueueForGuild(gId, statusTitle)
-      const s = guildManager.get(gId)
-      if (s?.getCurrentTrack()) {
-        startProgressUpdates(gId)
-      }
-    }
-  }
-
-  if (!scheduler.onDisconnect) {
-    scheduler.onDisconnect = (gId) => {
-      stopProgressUpdates(gId)
-      const msg = guildManager.getQueueMessage(gId)
-      if (msg) msg.delete().catch(() => {})
-      guildManager.clearQueueMessage(gId)
-      guildManager.clearStatusTitle(gId)
-      clearQueuePage(gId)
-    }
-  }
-}
-
-function updateProgress(guildId: string) {
-  const scheduler = guildManager.get(guildId)
-  if (!scheduler || (!scheduler.getCurrentTrack() && scheduler.getSize() === 0)) {
-    const iv = progressIntervals.get(guildId)
-    if (iv) {
-      clearInterval(iv)
-      progressIntervals.delete(guildId)
-    }
-    return
-  }
-  const statusTitle = guildManager.getStatusTitle(guildId)
-  updateQueueForGuild(guildId, statusTitle)
-}
-
-function startProgressUpdates(guildId: string) {
-  stopProgressUpdates(guildId)
-  progressIntervals.set(guildId, setInterval(() => updateProgress(guildId), PROGRESS_UPDATE_INTERVAL_MS))
-}
-
-function stopProgressUpdates(guildId: string) {
-  const iv = progressIntervals.get(guildId)
-  if (iv) {
-    clearInterval(iv)
-    progressIntervals.delete(guildId)
-  }
-}
-
-export function stopProgressForGuild(guildId: string) {
-  stopProgressUpdates(guildId)
-}
-
 export async function execute(interaction: ChatInputCommandInteraction) {
   const query = interaction.options.getString("query", true);
-  const guildId = interaction.guildId!
+  const guildId = requireGuild(interaction)
+  if (!guildId) return
   const user = interaction.user.username
+
+  logger.info("command", "/play ejecutado", { query, user, guildId })
 
   const member = interaction.guild?.members.cache.get(interaction.user.id);
   const voiceChannel = member?.voice.channel;
@@ -158,7 +88,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         guildId,
       })
       await interaction.deleteReply().catch(() => {})
-      await sendQueueStatus(guildId, interaction.channel as GuildTextBasedChannel | undefined, `🎵 ${user} agregó una playlist — ${result.playlistTitle ?? "Lista"}`, lastPage())
+      await initializeQueueDisplay(guildId, interaction.channel as GuildTextBasedChannel | undefined, `🎵 ${user} agregó una playlist — ${result.playlistTitle ?? "Lista"}`, lastPage())
     } else {
       const track = toTrack(result.tracks[0], user)
       await scheduler.add(track)
@@ -168,7 +98,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         guildId,
       })
       await interaction.deleteReply().catch(() => {})
-      await sendQueueStatus(guildId, interaction.channel as GuildTextBasedChannel | undefined, `🎵 ${user} agregó una canción — ${track.title}`, lastPage())
+      await initializeQueueDisplay(guildId, interaction.channel as GuildTextBasedChannel | undefined, `🎵 ${user} agregó una canción — ${track.title}`, lastPage())
     }
   } catch (error) {
     logger.error("command", "Error al procesar el tema", {

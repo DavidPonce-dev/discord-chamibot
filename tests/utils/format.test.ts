@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { parseDuration, parseDurationSec, formatTime, buildProgressBar } from "../src/utils/format"
+import { parseDuration, parseDurationSec, formatTime, buildProgressBar } from "@/utils/format"
 
 describe("parseDuration", () => {
   it("undefined devuelve 0", () => {

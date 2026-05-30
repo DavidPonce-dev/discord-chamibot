@@ -1,12 +1,23 @@
 import { ButtonInteraction } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
-import { refreshQueueMessage, getQueuePage } from "@/commands/queue/queue"
+import { refreshQueueMessage, getQueuePage } from "@/services/queue/QueueUIManager"
 import { logger } from "@/utils/logger"
-import { requireSession } from "@/utils/guards"
-import { LOOP_LABELS } from "@/constants"
+import { requireSession, requireGuild } from "@/utils/guards"
+import { LOOP_LABELS } from "@/config/ui"
+import { BUTTON_COOLDOWN_MS, SEEK_BACK_SECONDS } from "@/config/timeouts"
 import { getErrorMessage } from "@/utils/error"
 
-const SEEK_BACK_SECONDS = 15
+const userCooldowns = new Map<string, number>()
+
+function isOnCooldown(userId: string): boolean {
+  const last = userCooldowns.get(userId)
+  if (!last) return false
+  return Date.now() - last < BUTTON_COOLDOWN_MS
+}
+
+function setCooldown(userId: string) {
+  userCooldowns.set(userId, Date.now())
+}
 
 interface QueueButtonAction {
   action: (scheduler: import("../services/scheduler/TrackScheduler").TrackScheduler, idx: number) => void
@@ -20,8 +31,17 @@ const queueIndexActions: Record<string, QueueButtonAction> = {
 }
 
 export async function handleButton(interaction: ButtonInteraction) {
-  const guildId = interaction.guildId!
+  const guildId = requireGuild(interaction)
+  if (!guildId) return
   const user = interaction.user.username
+  const userId = interaction.user.id
+
+  if (isOnCooldown(userId)) {
+    await interaction.reply({ content: "Esperá un momento antes de usar otro botón", ephemeral: true }).catch(() => {})
+    return
+  }
+
+  setCooldown(userId)
   const scheduler = requireSession(interaction)
 
   if (!scheduler) {

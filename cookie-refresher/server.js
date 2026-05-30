@@ -11,7 +11,6 @@ const PORT = process.env.PORT || 3001
 const VNC_PORT = process.env.VNC_PORT || 6080
 const COOKIE_FILE = process.env.COOKIE_FILE || "/cookies/youtube-cookies.txt"
 const BROWSER_PROFILE = process.env.BROWSER_PROFILE || "/profile"
-const VNC_PASSWORD = process.env.VNC_PASSWORD || "secret"
 
 let xvfb = null
 let noVNC = null

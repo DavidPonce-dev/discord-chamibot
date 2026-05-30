@@ -22,16 +22,28 @@ export function buildYtDlpArgs(baseArgs: string[], extraArgs: string[] = []): st
 export function spawnYtDlp(args: string[], timeoutMs = 30000): Promise<YtDlpResult> {
   return new Promise((resolve) => {
     const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] })
-    let stdout = ""
-    let stderr = ""
-    proc.stdout.on("data", (d) => (stdout += d))
-    proc.stderr.on("data", (d) => (stderr += d))
-    proc.on("close", (code) => resolve({ stdout, stderr, code }))
-    proc.on("error", () => resolve({ stdout, stderr: "spawn failed", code: -1 }))
+    const stdoutChunks: Buffer[] = []
+    const stderrChunks: Buffer[] = []
+    proc.stdout.on("data", (d) => stdoutChunks.push(d))
+    proc.stderr.on("data", (d) => stderrChunks.push(d))
+    proc.on("close", (code) => resolve({
+      stdout: Buffer.concat(stdoutChunks).toString(),
+      stderr: Buffer.concat(stderrChunks).toString(),
+      code,
+    }))
+    proc.on("error", () => resolve({
+      stdout: Buffer.concat(stdoutChunks).toString(),
+      stderr: Buffer.concat(stderrChunks).toString() || "spawn failed",
+      code: -1,
+    }))
 
     const timer = setTimeout(() => {
       if (!proc.killed) proc.kill("SIGKILL")
-      resolve({ stdout, stderr: "timeout", code: -1 })
+      resolve({
+        stdout: Buffer.concat(stdoutChunks).toString(),
+        stderr: Buffer.concat(stderrChunks).toString() || "timeout",
+        code: -1,
+      })
     }, timeoutMs)
 
     proc.on("close", () => clearTimeout(timer))

@@ -1,11 +1,9 @@
 import { REST, Routes, ApplicationCommandOptionType } from "discord.js"
-import dotenv from "dotenv"
-
-dotenv.config()
+import { config } from "@/config"
 
 const commands = [
   {
-    name: "play",
+    name: "p",
     description: "Reproduce o añade a la cola un tema de YouTube",
     options: [
       {
@@ -18,39 +16,39 @@ const commands = [
     ],
   },
   {
-    name: "skip",
+    name: "s",
     description: "Salta al siguiente tema",
   },
   {
-    name: "queue",
+    name: "q",
     description: "Muestra la cola de reproducción",
   },
   {
-    name: "pause",
+    name: "pa",
     description: "Pausa la reproducción",
   },
   {
-    name: "resume",
+    name: "r",
     description: "Reanuda la reproducción",
   },
   {
-    name: "stop",
+    name: "st",
     description: "Detiene y limpia la cola",
   },
   {
-    name: "autoplay",
+    name: "ap",
     description: "Activa/desactiva el autoplay",
   },
   {
-    name: "help",
+    name: "h",
     description: "Muestra todos los comandos disponibles",
   },
   {
-    name: "shuffle",
+    name: "sh",
     description: "Mezcla aleatoriamente la cola",
   },
   {
-    name: "remove",
+    name: "rm",
     description: "Elimina un tema de la cola por su posición",
     options: [
       {
@@ -63,15 +61,15 @@ const commands = [
     ],
   },
   {
-    name: "nowplaying",
+    name: "np",
     description: "Muestra el tema que se está reproduciendo",
   },
   {
-    name: "loop",
+    name: "l",
     description: "Cambia el modo de repetición (none / one / all)",
   },
   {
-    name: "seek",
+    name: "sk",
     description: "Adelanta o atrasa la reproducción",
     options: [
       {
@@ -85,11 +83,11 @@ const commands = [
   },
 ]
 
-const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!)
+const rest = new REST({ version: "10" }).setToken(config.discord.token)
 
 async function main() {
   console.log("Registrando comandos...")
-  await rest.put(Routes.applicationCommands(process.env.CLIENT_ID!), { body: commands })
+  await rest.put(Routes.applicationCommands(config.discord.clientId), { body: commands })
   console.log("Comandos registrados")
 }
 
