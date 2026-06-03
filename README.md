@@ -19,7 +19,7 @@ Un bot de música autocontenido para Discord que no depende de APIs externas de 
 - **Controles completos** — Loop (none/one/all), seek, shuffle, remove por posición
 - **Reproductor resiliente** — Si borran el mensaje de la cola, lo recrea automáticamente
 - **Multi-guild** — Cada servidor tiene su propia sesión, cola y preferencias independientes
-- **Cookies de YouTube** — Sistema de refresco automático de cookies para evitar bloqueos en servidores cloud
+- **Cookies de YouTube** — Sistema integrado de refresco automático con Playwright (sin servicio separado)
 
 ---
 
@@ -68,8 +68,7 @@ docker compose run --rm bot npm run register
 ```
 
 El `docker-compose.yml` incluye:
-- **Bot** — Construido desde Dockerfile multi-stage con yt-dlp, FFmpeg y Deno
-- **Cookie Refresher** — Servicio opcional para refrescar cookies de YouTube automáticamente (con VNC para login manual)
+- **Bot** — Construido desde Dockerfile multi-stage con yt-dlp, FFmpeg, Deno y Playwright integrado
 
 ### Opción B: Local
 
@@ -100,6 +99,55 @@ npm run dev
 
 ---
 
+## Configuración de cookies de YouTube
+
+El bot usa cookies de YouTube para evitar bloqueos en servidores cloud y acceder a contenido restringido.
+
+### Sistema integrado con Playwright
+
+A diferencia de versiones anteriores que usaban un servicio separado, ahora Playwright está **integrado directamente en el bot**:
+
+- **Auto-refresh programado** — Cada 12 horas (configurable) refresca cookies automáticamente
+- **Refresh on-demand** — Si detecta error de cookies (403, sign-in required), refresca inmediatamente
+- **Perfil persistente** — Chromium guarda la sesión en `data/browser-profile/`
+- **Un solo contenedor** — No más servicio `cookie-refresher` separado
+
+### Login inicial (primera vez)
+
+1. Iniciá el bot con `docker compose up -d`
+2. Conectate al VNC para login: `http://localhost:6080/vnc.html?autoconnect=true`
+3. Navegá a `youtube.com` e iniciá sesión con tu cuenta de Google
+4. Cerrá el navegador — las cookies se guardan automáticamente
+5. El scheduler se activa automáticamente
+
+Para iniciar el login manualmente:
+
+```bash
+# Ejecutar dentro del contenedor
+docker compose exec bot node -e "
+  const { setupCookiesForLogin } = require('./dist/services/cookie/CookieManager');
+  setupCookiesForLogin().then(console.log);
+"
+```
+
+### Variables de entorno
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `COOKIE_DIR` | `data/cookies` | Directorio para archivo de cookies |
+| `BROWSER_PROFILE` | `data/browser-profile` | Directorio para perfil de Chromium |
+| `COOKIE_REFRESH_INTERVAL_MS` | `43200000` (12h) | Intervalo de auto-refresh |
+
+### Troubleshooting de cookies
+
+| Problema | Causa | Solución |
+|----------|-------|----------|
+| `Sin YouTube cookies` | Primera ejecución | Hacer login inicial via VNC |
+| `Error de cookies` | Sesión expirada | Esperar auto-refresh o refrescar manualmente |
+| `Xvfb not available` | Falta dependencia | `apt-get install xvfb x11vnc novnc websockify` |
+
+---
+
 ## Configuración de Discord
 
 1. Ir a [Discord Developer Portal](https://discord.com/developers/applications)
@@ -117,8 +165,10 @@ npm run dev
 |----------|-----------|-------------|
 | `DISCORD_TOKEN` | Sí | Token del bot (Discord Developer Portal) |
 | `CLIENT_ID` | Sí | Application ID del bot |
-| `YOUTUBE_COOKIES` | No | Ruta a archivo de cookies de YouTube (para servidores cloud) |
-| `COOKIE_REFRESHER_URL` | No | URL del servicio de refresco de cookies (default: `http://cookie-refresher:3001`) |
+| `YOUTUBE_COOKIES` | No | Contenido de cookies de YouTube en formato Netscape |
+| `COOKIE_DIR` | No | Directorio para almacenar cookies (default: `data/cookies`) |
+| `BROWSER_PROFILE` | No | Directorio para perfil de Chromium (default: `data/browser-profile`) |
+| `COOKIE_REFRESH_INTERVAL_MS` | No | Intervalo de refresco automático en ms (default: `43200000` = 12h) |
 
 ---
 
@@ -260,8 +310,13 @@ src/
 │   │   └── PipedService.ts   # Alternative audio source
 │   ├── scheduler/
 │   │   └── TrackScheduler.ts # Cola, autoplay, loop, playback
-│   └── guild/
-│       └── GuildManager.ts   # Sesiones por servidor
+│   ├── guild/
+│   │   └── GuildManager.ts   # Sesiones por servidor
+│   └── cookie/
+│       ├── CookieManager.ts      # Setup y estado de cookies
+│       ├── CookieRefresherService.ts # Playwright refresh
+│       ├── CookieScheduler.ts    # Auto-refresh programado
+│       └── types.ts              # Tipos de cookies
 ├── handlers/
 │   └── ButtonHandler.ts      # Manejo de botones interactivos
 ├── radio/
@@ -281,12 +336,12 @@ src/
 │   ├── guards.ts             # Validación de sesión
 │   ├── format.ts             # Formato de tiempo y progress bar
 │   ├── error.ts              # Helper de mensajes de error
-│   ├── cookies.ts            # Estado global de cookies
-│   ├── cookie-setup.ts       # Setup de cookies desde env/file
-│   ├── cookieRefresher.ts    # Cliente de refresco de cookies
+│   ├── cookies.ts            # Re-exports de cookie/
+│   ├── cookie-setup.ts       # Re-exports de cookie/
+│   ├── cookieRefresher.ts    # Re-exports de cookie/
 │   └── logger.ts             # Logger estructurado
 ├── constants.ts              # Constantes globales
-├── index.ts                  # Entry point, client, registro de handlers
+├── index.ts                  # Entry point, client, scheduler
 └── register.ts               # Script para registrar comandos slash
 ```
 
@@ -314,7 +369,7 @@ npm run test:watch # Tests en modo watch
 | `No hay audio` | Bot no tiene permisos de voz | Verificar permisos `Connect` y `Speak` |
 | `Error al reproducir` | URL inválida o video restringido | Probar con otra URL o búsqueda por texto |
 | `yt-dlp falla` | Versión desactualizada | Ejecutar `yt-dlp -U` o reconstruir Docker |
-| `Error de cookies` | Sesión de YouTube expirada | Usar el cookie-refresher o actualizar manualmente |
+| `Error de cookies` | Sesión de YouTube expirada | Esperar auto-refresh (12h) o refrescar manualmente |
 | `El reproductor desaparece` | Mensaje borrado | Se recrea automáticamente en el siguiente tick (3s) |
 
 ---

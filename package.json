@@ -14,15 +14,16 @@
     "@discordjs/voice": "^0.19.2",
     "discord.js": "^14.18.0",
     "dotenv": "^16.4.7",
-    "play-dl": "^1.9.7"
+    "play-dl": "^1.9.7",
+    "playwright": "^1.60.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
     "cross-env": "^7.0.3",
+    "rimraf": "^6.0.0",
     "tsc-alias": "^1.8.17",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vitest": "^4.1.6",
-    "rimraf": "^6.0.0"
+    "vitest": "^4.1.6"
   }
 }

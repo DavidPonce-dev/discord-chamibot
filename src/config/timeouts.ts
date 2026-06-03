@@ -8,3 +8,4 @@ export const SEEK_SETTLE_DELAY_MS = 100
 export const YTDL_TIMEOUT_MS = 30_000
 export const YTDL_RESOLVE_TIMEOUT_MS = 15_000
 export const COOKIE_REFRESH_TIMEOUT_MS = 60_000
+export const COOKIE_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000

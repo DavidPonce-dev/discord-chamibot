@@ -18,12 +18,53 @@ import { handleButton } from "@/handlers/ButtonHandler"
 import { execute as seek } from "@/commands/music/seek"
 import { editTemporary } from "@/utils/messages"
 import { logger } from "@/utils/logger"
-import { setupCookies, setCookieFile } from "@/services/cookie/CookieManager"
+import { setupCookies, setCookieFile, validateCookies, getRefresherInstance } from "@/services/cookie/CookieManager"
+import { CookieScheduler } from "@/services/cookie/CookieScheduler"
 import { getErrorMessage } from "@/utils/error"
 import { config } from "@/config"
 
-// Filter known discord.js voice errors that are expected during normal operation
-// "IP discovery" and "socket closed" occur when voice connections are interrupted
+let cookieScheduler: CookieScheduler | null = null
+
+function startCookieScheduler(cookiePath: string | null) {
+  if (!cookiePath) {
+    logger.warn("cookies", "No cookies available, scheduler not started")
+    return
+  }
+
+  const validation = validateCookies()
+  if (!validation.isValid) {
+    logger.warn("cookies", "Invalid cookies, scheduler not started")
+    return
+  }
+
+  const refresher = getRefresherInstance()
+  cookieScheduler = new CookieScheduler(refresher, config.youtube.cookieRefreshIntervalMs)
+  cookieScheduler.start()
+
+  logger.info("cookies", "Cookie scheduler initialized", {
+    intervalHours: config.youtube.cookieRefreshIntervalMs / (1000 * 60 * 60),
+  })
+}
+
+async function stopCookieScheduler() {
+  if (cookieScheduler) {
+    cookieScheduler.stop()
+    cookieScheduler = null
+  }
+}
+
+process.on("SIGINT", async () => {
+  logger.info("process", "Shutting down...")
+  await stopCookieScheduler()
+  process.exit(0)
+})
+
+process.on("SIGTERM", async () => {
+  logger.info("process", "Shutting down...")
+  await stopCookieScheduler()
+  process.exit(0)
+})
+
 process.on("unhandledRejection", (reason) => {
   const msg = String(reason)
   if (msg.includes("IP discovery") || msg.includes("socket closed")) {
@@ -38,11 +79,11 @@ process.on("uncaughtException", (err) => {
   process.exit(1)
 })
 
-// Setup YouTube cookies from environment variable
 const cookiePath = setupCookies()
 setCookieFile(cookiePath)
 if (cookiePath) {
   logger.info("bot", "YouTube cookies configuradas", { path: cookiePath })
+  startCookieScheduler(cookiePath)
 } else {
   logger.warn("bot", "Sin YouTube cookies (YOUTUBE_COOKIES no configurada)")
 }

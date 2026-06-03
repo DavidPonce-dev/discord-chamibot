@@ -19,6 +19,30 @@ RUN apt-get update && apt-get install -y \
   curl \
   ca-certificates \
   unzip \
+  # Playwright dependencies (for headless refresh)
+  libnss3 \
+  libatk1.0-0 \
+  libatk-bridge2.0-0 \
+  libcups2 \
+  libdrm2 \
+  libxkbcommon0 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxrandr2 \
+  libgbm1 \
+  libpango-1.0-0 \
+  libcairo2 \
+  libasound2 \
+  libxshmfence1 \
+  libx11-xcb1 \
+  fonts-liberation \
+  xdg-utils \
+  # Xvfb + VNC (only needed for interactive login setup)
+  xvfb \
+  x11vnc \
+  novnc \
+  websockify \
+  --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 # Install deno (required by yt-dlp for YouTube JS extraction)
@@ -36,5 +60,12 @@ COPY package*.json ./
 RUN npm ci --omit=dev --ignore-scripts
 
 COPY --from=builder /app/dist ./dist
+
+# Install Playwright and Chromium
+RUN npx playwright install chromium \
+  && npx playwright install-deps chromium
+
+# Create directories for cookies and browser profile
+RUN mkdir -p /cookies /profile
 
 CMD ["npm", "run", "start"]

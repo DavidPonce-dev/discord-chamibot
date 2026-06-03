@@ -3,11 +3,12 @@ import path from "path"
 import { logger } from "@/utils/logger"
 import { COOKIE_REFRESH_TIMEOUT_MS } from "@/config/timeouts"
 import { config } from "@/config"
+import { CookieRefresherService } from "./CookieRefresherService"
+import { CookieValidationResult } from "./types"
 
 const COOKIE_DIR = config.youtube.cookieDir
 const COOKIE_PATH = path.join(COOKIE_DIR, "youtube-cookies.txt")
 const MIN_COOKIE_LENGTH = 10
-const REFRESHER_URL = config.services.cookieRefresherUrl
 
 const COOKIE_ERROR_PATTERNS = [
   "sign in to confirm",
@@ -21,6 +22,20 @@ const COOKIE_ERROR_PATTERNS = [
 ]
 
 let cookieFile: string | null = null
+let refresherInstance: CookieRefresherService | null = null
+
+function getRefresher(): CookieRefresherService {
+  if (!refresherInstance) {
+    refresherInstance = new CookieRefresherService({
+      cookieDir: COOKIE_DIR,
+      cookieFile: COOKIE_PATH,
+      browserProfile: config.youtube.browserProfile,
+      refreshIntervalMs: config.youtube.cookieRefreshIntervalMs,
+      refreshTimeoutMs: COOKIE_REFRESH_TIMEOUT_MS,
+    })
+  }
+  return refresherInstance
+}
 
 export function isCookieError(error: string): boolean {
   const lower = error.toLowerCase()
@@ -28,36 +43,20 @@ export function isCookieError(error: string): boolean {
 }
 
 export async function refreshCookies(): Promise<{ success: boolean; cookieCount?: number }> {
-  logger.info("cookies", "Refreshing YouTube cookies via refresher service")
-
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), COOKIE_REFRESH_TIMEOUT_MS)
-
-    const response = await fetch(`${REFRESHER_URL}/refresh`, {
-      method: "POST",
-      signal: controller.signal,
-    })
-
-    clearTimeout(timeout)
-
-    if (!response.ok) {
-      const text = await response.text()
-      throw new Error(`Refresher returned ${response.status}: ${text.slice(0, 200)}`)
-    }
-
-    const result = await response.json()
-    logger.info("cookies", "Cookies refreshed successfully", {
-      count: result.cookieCount,
-      names: result.cookieNames?.slice(0, 10),
-    })
-
-    return { success: true, cookieCount: result.cookieCount }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    logger.error("cookies", "Failed to refresh cookies", { error: msg })
+    const result = await getRefresher().refreshCookies()
+    return { success: result.success, cookieCount: result.cookieCount }
+  } catch {
     return { success: false }
   }
+}
+
+export function validateCookies(): CookieValidationResult {
+  return getRefresher().validateCookies()
+}
+
+export async function setupCookiesForLogin(): Promise<{ url: string; instructions: string }> {
+  return getRefresher().setupForLogin()
 }
 
 export function getCookieFile(): string | null {
@@ -69,13 +68,11 @@ export function setCookieFile(filePath: string | null) {
 }
 
 export function setupCookies(): string | null {
-  // Ensure cookie directory exists
   if (!fs.existsSync(COOKIE_DIR)) {
     fs.mkdirSync(COOKIE_DIR, { recursive: true, mode: 0o700 })
     logger.info("cookie", "Cookie directory created", { path: COOKIE_DIR })
   }
 
-  // Option 1: File already exists (Docker volume or previous run)
   if (fs.existsSync(COOKIE_PATH)) {
     const content = fs.readFileSync(COOKIE_PATH, "utf-8")
     if (content.length > MIN_COOKIE_LENGTH) {
@@ -97,7 +94,6 @@ export function setupCookies(): string | null {
     }
   }
 
-  // Option 2: Write from env var
   const cookies = config.youtube.cookiesEnv
   if (cookies && cookies.length > MIN_COOKIE_LENGTH) {
     fs.writeFileSync(COOKIE_PATH, cookies, { mode: 0o600 })
@@ -119,4 +115,8 @@ export function setupCookies(): string | null {
   }
 
   return null
+}
+
+export function getRefresherInstance(): CookieRefresherService {
+  return getRefresher()
 }
