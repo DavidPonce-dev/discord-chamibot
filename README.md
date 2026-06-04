@@ -114,20 +114,43 @@ A diferencia de versiones anteriores que usaban un servicio separado, ahora Play
 
 ### Login inicial (primera vez)
 
-1. Iniciá el bot con `docker compose up -d`
-2. Conectate al VNC para login: `http://localhost:6080/vnc.html?autoconnect=true`
+1. Iniciá el bot con `docker compose up -d --build`
+2. Iniciá el login interactivo:
+
+```bash
+# Opción A: Usando curl
+curl -X POST http://localhost:3002/cookies/setup
+
+# Opción B: Usando el navegador (VNC)
+http://localhost:6080/vnc.html?autoconnect=true
+```
+
 3. Navegá a `youtube.com` e iniciá sesión con tu cuenta de Google
 4. Cerrá el navegador — las cookies se guardan automáticamente
 5. El scheduler se activa automáticamente
 
-Para iniciar el login manualmente:
+### Admin Server
+
+El bot incluye un servidor HTTP de administración en el puerto `3002`:
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/cookies/status` | GET | Estado actual de las cookies |
+| `/cookies/refresh` | POST | Refrescar cookies manualmente |
+| `/cookies/setup` | POST | Iniciar login interactivo (VNC) |
+
+Ejemplos:
 
 ```bash
-# Ejecutar dentro del contenedor
-docker compose exec bot node -e "
-  const { setupCookiesForLogin } = require('./dist/services/cookie/CookieManager');
-  setupCookiesForLogin().then(console.log);
-"
+# Ver estado de cookies
+curl http://localhost:3002/cookies/status
+
+# Refrescar cookies manualmente
+curl -X POST http://localhost:3002/cookies/refresh
+
+# Iniciar login interactivo
+curl -X POST http://localhost:3002/cookies/setup
 ```
 
 ### Variables de entorno

@@ -20,6 +20,7 @@ import { editTemporary } from "@/utils/messages"
 import { logger } from "@/utils/logger"
 import { setupCookies, setCookieFile, validateCookies, getRefresherInstance } from "@/services/cookie/CookieManager"
 import { CookieScheduler } from "@/services/cookie/CookieScheduler"
+import { startAdminServer, stopAdminServer } from "@/services/admin/AdminServer"
 import { getErrorMessage } from "@/utils/error"
 import { config } from "@/config"
 
@@ -56,12 +57,14 @@ async function stopCookieScheduler() {
 process.on("SIGINT", async () => {
   logger.info("process", "Shutting down...")
   await stopCookieScheduler()
+  await stopAdminServer()
   process.exit(0)
 })
 
 process.on("SIGTERM", async () => {
   logger.info("process", "Shutting down...")
   await stopCookieScheduler()
+  await stopAdminServer()
   process.exit(0)
 })
 
@@ -87,6 +90,9 @@ if (cookiePath) {
 } else {
   logger.warn("bot", "Sin YouTube cookies (YOUTUBE_COOKIES no configurada)")
 }
+
+const adminPort = parseInt(process.env.ADMIN_PORT || "3002", 10)
+startAdminServer(adminPort)
 
 const client = new Client({
   intents: [

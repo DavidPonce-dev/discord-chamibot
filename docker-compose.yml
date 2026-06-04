@@ -8,8 +8,10 @@ services:
       - COOKIE_DIR=/cookies
       - BROWSER_PROFILE=/profile
       - COOKIE_REFRESH_INTERVAL_MS=43200000
+      - ADMIN_PORT=3002
     ports:
       - "127.0.0.1:6080:6080"
+      - "127.0.0.1:3002:3002"
     volumes:
       - ./data/cookies:/cookies
       - ./data/browser-profile:/profile
