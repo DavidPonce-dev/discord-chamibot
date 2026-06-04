@@ -115,42 +115,41 @@ A diferencia de versiones anteriores que usaban un servicio separado, ahora Play
 ### Login inicial (primera vez)
 
 1. Iniciá el bot con `docker compose up -d --build`
-2. Iniciá el login interactivo:
+2. Abrí el dashboard en tu navegador:
 
-```bash
-# Opción A: Usando curl
-curl -X POST http://localhost:3002/cookies/setup
-
-# Opción B: Usando el navegador (VNC)
-http://localhost:6080/vnc.html?autoconnect=true
+```
+http://<tu-ip>:3002/
 ```
 
-3. Navegá a `youtube.com` e iniciá sesión con tu cuenta de Google
-4. Cerrá el navegador — las cookies se guardan automáticamente
-5. El scheduler se activa automáticamente
+3. Hacé click en **"Start Login (VNC)"** — aparece el iframe con VNC
+4. Navegá a `youtube.com` e iniciá sesión con tu cuenta de Google
+5. Cerrá el navegador — las cookies se guardan automáticamente
+6. El scheduler se activa automáticamente
 
 ### Admin Server
 
-El bot incluye un servidor HTTP de administración en el puerto `3002`:
+El bot incluye un dashboard web integrado en el puerto `3002`:
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
+| Ruta | Método | Descripción |
+|------|--------|-------------|
+| `/` | GET | Dashboard web con controles de cookies + VNC |
 | `/health` | GET | Health check |
-| `/cookies/status` | GET | Estado actual de las cookies |
-| `/cookies/refresh` | POST | Refrescar cookies manualmente |
-| `/cookies/setup` | POST | Iniciar login interactivo (VNC) |
+| `/api/cookies/status` | GET | Estado actual de las cookies |
+| `/api/cookies/refresh` | POST | Refrescar cookies manualmente |
+| `/api/cookies/setup` | POST | Iniciar login interactivo (VNC) |
+| `/api/cookies/setup/stop` | POST | Detener sesión VNC |
 
-Ejemplos:
+Ejemplos con curl:
 
 ```bash
 # Ver estado de cookies
-curl http://localhost:3002/cookies/status
+curl http://localhost:3002/api/cookies/status
 
 # Refrescar cookies manualmente
-curl -X POST http://localhost:3002/cookies/refresh
+curl -X POST http://localhost:3002/api/cookies/refresh
 
 # Iniciar login interactivo
-curl -X POST http://localhost:3002/cookies/setup
+curl -X POST http://localhost:3002/api/cookies/setup
 ```
 
 ### Variables de entorno
