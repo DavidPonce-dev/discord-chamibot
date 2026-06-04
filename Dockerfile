@@ -68,4 +68,5 @@ RUN npx playwright install chromium \
 # Create directories for cookies and browser profile
 RUN mkdir -p /cookies /profile
 
+ENV NODE_OPTIONS=--no-deprecation
 CMD ["npm", "run", "start"]
