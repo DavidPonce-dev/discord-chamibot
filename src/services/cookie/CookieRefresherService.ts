@@ -1,6 +1,5 @@
 import fs from "fs"
 import path from "path"
-import { execSync } from "child_process"
 import { chromium, BrowserContext } from "playwright"
 import { logger } from "@/utils/logger"
 import { CookieRefreshResult, CookieValidationResult, CookieRefresherConfig } from "./types"
@@ -9,7 +8,8 @@ const MIN_COOKIE_LENGTH = 10
 
 export class CookieRefresherService {
   private config: CookieRefresherConfig
-  private isLaunching = false
+  private browser: BrowserContext | null = null
+  private isInitializing = false
 
   constructor(config: CookieRefresherConfig) {
     this.config = config
@@ -21,41 +21,23 @@ export class CookieRefresherService {
     fs.mkdirSync(this.config.browserProfile, { recursive: true, mode: 0o700 })
   }
 
-  private async cleanupBeforeLaunch() {
-    if (this.isLaunching) {
-      throw new Error("Chromium launch already in progress")
+  async initBrowser() {
+    if (this.browser) {
+      logger.debug("cookies", "Browser already initialized")
+      return
     }
-    this.isLaunching = true
-
-    try {
-      execSync("pkill -f chromium || true", { stdio: "ignore" })
-      logger.debug("cookies", "Existing Chromium processes killed")
-    } catch {
-      logger.debug("cookies", "No Chromium processes to kill")
-    }
-
-    const lockFiles = ["SingletonLock", "SingletonCookie", "SingletonSocket"]
-    for (const file of lockFiles) {
-      const lockPath = path.join(this.config.browserProfile, file)
-      if (fs.existsSync(lockPath)) {
-        fs.unlinkSync(lockPath)
-        logger.debug("cookies", `Removed lock file: ${file}`)
+    if (this.isInitializing) {
+      logger.debug("cookies", "Browser initialization in progress, waiting...")
+      while (this.isInitializing) {
+        await new Promise((r) => setTimeout(r, 500))
       }
+      return
     }
-  }
 
-  private releaseLaunchLock() {
-    this.isLaunching = false
-  }
-
-  async refreshCookies(): Promise<CookieRefreshResult> {
-    logger.info("cookies", "Refreshing YouTube cookies via Playwright")
-
-    await this.cleanupBeforeLaunch()
-
-    let context: BrowserContext | null = null
+    this.isInitializing = true
     try {
-      context = await chromium.launchPersistentContext(this.config.browserProfile, {
+      logger.info("cookies", "Initializing persistent Chromium browser")
+      this.browser = await chromium.launchPersistentContext(this.config.browserProfile, {
         headless: true,
         args: [
           "--disable-blink-features=AutomationControlled",
@@ -63,8 +45,38 @@ export class CookieRefresherService {
           "--disable-setuid-sandbox",
         ],
       })
+      logger.info("cookies", "Chromium browser initialized and ready")
+    } finally {
+      this.isInitializing = false
+    }
+  }
 
-      const page = await context.newPage()
+  async closeBrowser() {
+    if (this.browser) {
+      await this.browser.close().catch(() => {})
+      this.browser = null
+      logger.info("cookies", "Chromium browser closed")
+    }
+  }
+
+  getBrowser(): BrowserContext | null {
+    return this.browser
+  }
+
+  async refreshCookies(): Promise<CookieRefreshResult> {
+    logger.info("cookies", "Refreshing YouTube cookies via Playwright")
+
+    if (!this.browser) {
+      logger.warn("cookies", "Browser not initialized, initializing now")
+      await this.initBrowser()
+    }
+
+    if (!this.browser) {
+      return { success: false, error: "Failed to initialize browser", timestamp: new Date().toISOString() }
+    }
+
+    try {
+      const page = await this.browser.newPage()
       await page.goto("https://www.youtube.com", {
         waitUntil: "domcontentloaded",
         timeout: 30000,
@@ -77,7 +89,7 @@ export class CookieRefresherService {
         logger.warn("cookies", "No active YouTube session detected in browser profile")
       }
 
-      const cookies = await context.cookies()
+      const cookies = await this.browser.cookies()
       const ytCookies = this.filterYouTubeCookies(cookies).map((c) => ({
         ...c,
         path: c.path || "/",
@@ -85,6 +97,8 @@ export class CookieRefresherService {
         expires: c.expires || 0,
         httpOnly: c.httpOnly || false,
       }))
+
+      await page.close()
 
       if (ytCookies.length === 0) {
         throw new Error("No YouTube cookies found in browser profile")
@@ -113,34 +127,31 @@ export class CookieRefresherService {
         error: msg,
         timestamp: new Date().toISOString(),
       }
-    } finally {
-      if (context) {
-        await context.close().catch(() => {})
-      }
-      this.releaseLaunchLock()
     }
   }
 
   async setupForLogin(): Promise<{ url: string; instructions: string }> {
     logger.info("cookies", "Starting interactive login session via VNC")
 
-    await this.cleanupBeforeLaunch()
-
     const display = ":99"
     const vncPort = process.env.VNC_PORT || "6080"
 
     if (!this.isXvfbAvailable()) {
-      this.releaseLaunchLock()
       throw new Error(
         "Xvfb is not available. Install it for interactive login: apt-get install xvfb x11vnc novnc websockify"
       )
+    }
+
+    // Close existing browser before launching with VNC
+    if (this.browser) {
+      await this.closeBrowser()
     }
 
     const xvfb = this.startXvfb(display)
     const vncProcesses = this.startVNC(display, vncPort)
 
     try {
-      const context = await chromium.launchPersistentContext(this.config.browserProfile, {
+      this.browser = await chromium.launchPersistentContext(this.config.browserProfile, {
         headless: false,
         args: [
           "--disable-blink-features=AutomationControlled",
@@ -150,12 +161,12 @@ export class CookieRefresherService {
         env: { ...process.env, DISPLAY: display },
       })
 
-      const page = await context.newPage()
+      const page = await this.browser.newPage()
       await page.goto("https://accounts.google.com", {
         waitUntil: "domcontentloaded",
       })
 
-      context.on("close", async () => {
+      this.browser.on("close", async () => {
         logger.info("cookies", "Browser closed, extracting cookies...")
         try {
           await this.refreshCookies()
@@ -166,6 +177,7 @@ export class CookieRefresherService {
         } finally {
           this.stopVNC(vncProcesses)
           this.stopXvfb(xvfb)
+          this.browser = null
         }
       })
 
@@ -177,7 +189,7 @@ export class CookieRefresherService {
     } catch (err) {
       this.stopVNC(vncProcesses)
       this.stopXvfb(xvfb)
-      this.releaseLaunchLock()
+      this.browser = null
       throw err
     }
   }
@@ -268,6 +280,7 @@ export class CookieRefresherService {
 
   private isXvfbAvailable(): boolean {
     try {
+      const { execSync } = require("child_process")
       execSync("which Xvfb", { stdio: "ignore" })
       return true
     } catch {

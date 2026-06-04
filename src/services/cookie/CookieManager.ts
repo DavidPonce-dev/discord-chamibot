@@ -123,6 +123,14 @@ export function setupCookies(): string | null {
   return null
 }
 
+export async function initBrowser() {
+  return getRefresher().initBrowser()
+}
+
+export async function closeBrowser() {
+  return getRefresher().closeBrowser()
+}
+
 export function getRefresherInstance(): CookieRefresherService {
   return getRefresher()
 }

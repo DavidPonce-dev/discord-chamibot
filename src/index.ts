@@ -18,7 +18,7 @@ import { handleButton } from "@/handlers/ButtonHandler"
 import { execute as seek } from "@/commands/music/seek"
 import { editTemporary } from "@/utils/messages"
 import { logger } from "@/utils/logger"
-import { setupCookies, setCookieFile, validateCookies, getRefresherInstance, setScheduler } from "@/services/cookie/CookieManager"
+import { setupCookies, setCookieFile, validateCookies, getRefresherInstance, setScheduler, initBrowser, closeBrowser } from "@/services/cookie/CookieManager"
 import { CookieScheduler } from "@/services/cookie/CookieScheduler"
 import { startAdminServer, stopAdminServer, setSchedulerInstance } from "@/services/admin/AdminServer"
 import { getErrorMessage } from "@/utils/error"
@@ -59,6 +59,7 @@ async function stopCookieScheduler() {
 process.on("SIGINT", async () => {
   logger.info("process", "Shutting down...")
   await stopCookieScheduler()
+  await closeBrowser()
   await stopAdminServer()
   process.exit(0)
 })
@@ -66,6 +67,7 @@ process.on("SIGINT", async () => {
 process.on("SIGTERM", async () => {
   logger.info("process", "Shutting down...")
   await stopCookieScheduler()
+  await closeBrowser()
   await stopAdminServer()
   process.exit(0)
 })
@@ -92,6 +94,10 @@ if (cookiePath) {
 } else {
   logger.warn("bot", "Sin YouTube cookies (YOUTUBE_COOKIES no configurada)")
 }
+
+initBrowser().catch((err) => {
+  logger.error("cookies", "Failed to initialize browser", { error: err.message })
+})
 
 const adminPort = parseInt(process.env.ADMIN_PORT || "3002", 10)
 startAdminServer(adminPort)
