@@ -130,6 +130,45 @@ export class CookieRefresherService {
     }
   }
 
+  private async waitForProfileFree(timeoutMs = 10000): Promise<void> {
+    const lockFiles = ["SingletonLock", "SingletonCookie", "SingletonSocket"]
+    const start = Date.now()
+
+    while (Date.now() - start < timeoutMs) {
+      const hasLocks = lockFiles.some((file) =>
+        fs.existsSync(path.join(this.config.browserProfile, file))
+      )
+
+      if (!hasLocks) {
+        logger.debug("cookies", "Profile released after", { elapsedMs: Date.now() - start })
+        return
+      }
+
+      // Clean up stale lock files older than 5 seconds
+      for (const file of lockFiles) {
+        const lockPath = path.join(this.config.browserProfile, file)
+        try {
+          const stat = fs.statSync(lockPath)
+          if (Date.now() - stat.mtimeMs > 5000) {
+            fs.unlinkSync(lockPath)
+            logger.debug("cookies", `Cleaned stale lock file: ${file}`)
+          }
+        } catch {}
+      }
+
+      await new Promise((r) => setTimeout(r, 500))
+    }
+
+    // Force cleanup after timeout
+    for (const file of lockFiles) {
+      const lockPath = path.join(this.config.browserProfile, file)
+      if (fs.existsSync(lockPath)) {
+        fs.unlinkSync(lockPath)
+        logger.debug("cookies", `Force removed lock file: ${file}`)
+      }
+    }
+  }
+
   async setupForLogin(): Promise<{ url: string; instructions: string }> {
     logger.info("cookies", "Starting interactive login session via VNC")
 
@@ -145,6 +184,7 @@ export class CookieRefresherService {
     // Close existing browser before launching with VNC
     if (this.browser) {
       await this.closeBrowser()
+      await this.waitForProfileFree()
     }
 
     const xvfb = this.startXvfb(display)
