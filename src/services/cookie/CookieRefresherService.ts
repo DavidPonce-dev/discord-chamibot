@@ -21,6 +21,24 @@ export class CookieRefresherService {
     fs.mkdirSync(this.config.browserProfile, { recursive: true, mode: 0o700 })
   }
 
+  private resetProfile() {
+    const filesToRemove = [
+      "Local State",
+      "SingletonLock",
+      "SingletonCookie",
+      "SingletonSocket",
+      "LOCK",
+      "machine_id",
+    ]
+    for (const file of filesToRemove) {
+      const filePath = path.join(this.config.browserProfile, file)
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+        logger.debug("cookies", `Removed stale profile file: ${file}`)
+      }
+    }
+  }
+
   async initBrowser() {
     if (this.browser) {
       logger.debug("cookies", "Browser already initialized")
@@ -36,6 +54,7 @@ export class CookieRefresherService {
 
     this.isInitializing = true
     try {
+      this.resetProfile()
       logger.info("cookies", "Initializing persistent Chromium browser")
       this.browser = await chromium.launchPersistentContext(this.config.browserProfile, {
         headless: true,
@@ -187,6 +206,8 @@ export class CookieRefresherService {
       await this.closeBrowser()
       await this.waitForProfileFree()
     }
+
+    this.resetProfile()
 
     const xvfb = this.startXvfb(display)
     const vncProcesses = this.startVNC(display, vncPort)
