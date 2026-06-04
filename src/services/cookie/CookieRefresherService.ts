@@ -293,9 +293,9 @@ export class CookieRefresherService {
 
     for (const c of cookies) {
       const domain = c.domain.startsWith(".") ? c.domain : `.${c.domain}`
-      const includeSubdomains = c.domain.startsWith(".") ? "TRUE" : "FALSE"
+      const includeSubdomains = "TRUE"
       const secure = c.secure ? "TRUE" : "FALSE"
-      const expiry = c.expires ? Math.floor(c.expires) : 0
+      const expiry = c.expires && c.expires > 0 ? Math.floor(c.expires) : 0
       const httpOnly = c.httpOnly ? "TRUE" : "FALSE"
 
       lines.push(
