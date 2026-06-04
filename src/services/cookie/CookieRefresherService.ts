@@ -43,6 +43,7 @@ export class CookieRefresherService {
           "--disable-blink-features=AutomationControlled",
           "--no-sandbox",
           "--disable-setuid-sandbox",
+          "--disable-features=ProcessSingleton",
         ],
       })
       logger.info("cookies", "Chromium browser initialized and ready")
@@ -197,6 +198,7 @@ export class CookieRefresherService {
           "--disable-blink-features=AutomationControlled",
           "--no-sandbox",
           "--disable-setuid-sandbox",
+          "--disable-features=ProcessSingleton",
         ],
         env: { ...process.env, DISPLAY: display },
       })
