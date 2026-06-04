@@ -18,9 +18,9 @@ import { handleButton } from "@/handlers/ButtonHandler"
 import { execute as seek } from "@/commands/music/seek"
 import { editTemporary } from "@/utils/messages"
 import { logger } from "@/utils/logger"
-import { setupCookies, setCookieFile, validateCookies, getRefresherInstance } from "@/services/cookie/CookieManager"
+import { setupCookies, setCookieFile, validateCookies, getRefresherInstance, setScheduler } from "@/services/cookie/CookieManager"
 import { CookieScheduler } from "@/services/cookie/CookieScheduler"
-import { startAdminServer, stopAdminServer } from "@/services/admin/AdminServer"
+import { startAdminServer, stopAdminServer, setSchedulerInstance } from "@/services/admin/AdminServer"
 import { getErrorMessage } from "@/utils/error"
 import { config } from "@/config"
 
@@ -41,6 +41,8 @@ function startCookieScheduler(cookiePath: string | null) {
   const refresher = getRefresherInstance()
   cookieScheduler = new CookieScheduler(refresher, config.youtube.cookieRefreshIntervalMs)
   cookieScheduler.start()
+  setScheduler(cookieScheduler)
+  setSchedulerInstance(cookieScheduler)
 
   logger.info("cookies", "Cookie scheduler initialized", {
     intervalHours: config.youtube.cookieRefreshIntervalMs / (1000 * 60 * 60),

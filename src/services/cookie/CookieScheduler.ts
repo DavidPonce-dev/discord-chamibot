@@ -31,6 +31,25 @@ export class CookieScheduler {
     this.timer.unref()
   }
 
+  pause() {
+    if (this.timer) {
+      clearInterval(this.timer)
+      this.timer = null
+    }
+    logger.info("cookies", "Cookie scheduler paused")
+  }
+
+  resume() {
+    if (!this.isRunning) {
+      return
+    }
+    this.timer = setInterval(() => {
+      this.runRefresh()
+    }, this.intervalMs)
+    this.timer.unref()
+    logger.info("cookies", "Cookie scheduler resumed")
+  }
+
   stop() {
     if (!this.isRunning) {
       return

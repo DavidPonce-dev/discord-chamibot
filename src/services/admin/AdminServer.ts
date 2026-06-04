@@ -1,12 +1,18 @@
 import http from "http"
 import httpProxy from "http-proxy"
 import { logger } from "@/utils/logger"
-import { getRefresherInstance, validateCookies, refreshCookies } from "@/services/cookie/CookieManager"
+import { getRefresherInstance, validateCookies, refreshCookies, setScheduler } from "@/services/cookie/CookieManager"
+import { CookieScheduler } from "@/services/cookie/CookieScheduler"
 
 let adminServer: http.Server | null = null
 let isSettingUp = false
 let vncProxy: httpProxy | null = null
 let vncActive = false
+let scheduler: CookieScheduler | null = null
+
+export function setSchedulerInstance(s: CookieScheduler | null) {
+  scheduler = s
+}
 
 const ADMIN_PAGE = `<!DOCTYPE html>
 <html lang="en">
@@ -153,6 +159,7 @@ export function startAdminServer(port: number) {
           }
 
           isSettingUp = true
+          scheduler?.pause()
           try {
             const refresher = getRefresherInstance()
             const result = await refresher.setupForLogin()
@@ -161,6 +168,7 @@ export function startAdminServer(port: number) {
             res.end(JSON.stringify(result))
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err)
+            scheduler?.resume()
             res.writeHead(500)
             res.end(JSON.stringify({ error: msg }))
           } finally {
@@ -172,6 +180,7 @@ export function startAdminServer(port: number) {
         if (path === "/api/cookies/setup/stop" && method === "POST") {
           if (vncActive) {
             vncActive = false
+            scheduler?.resume()
             res.writeHead(200)
             res.end(JSON.stringify({ message: "VNC stopped" }))
           } else {

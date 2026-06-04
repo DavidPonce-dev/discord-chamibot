@@ -1,5 +1,6 @@
 import fs from "fs"
 import path from "path"
+import { execSync } from "child_process"
 import { chromium, BrowserContext } from "playwright"
 import { logger } from "@/utils/logger"
 import { CookieRefreshResult, CookieValidationResult, CookieRefresherConfig } from "./types"
@@ -8,6 +9,7 @@ const MIN_COOKIE_LENGTH = 10
 
 export class CookieRefresherService {
   private config: CookieRefresherConfig
+  private isLaunching = false
 
   constructor(config: CookieRefresherConfig) {
     this.config = config
@@ -19,8 +21,37 @@ export class CookieRefresherService {
     fs.mkdirSync(this.config.browserProfile, { recursive: true, mode: 0o700 })
   }
 
+  private async cleanupBeforeLaunch() {
+    if (this.isLaunching) {
+      throw new Error("Chromium launch already in progress")
+    }
+    this.isLaunching = true
+
+    try {
+      execSync("pkill -f chromium || true", { stdio: "ignore" })
+      logger.debug("cookies", "Existing Chromium processes killed")
+    } catch {
+      logger.debug("cookies", "No Chromium processes to kill")
+    }
+
+    const lockFiles = ["SingletonLock", "SingletonCookie", "SingletonSocket"]
+    for (const file of lockFiles) {
+      const lockPath = path.join(this.config.browserProfile, file)
+      if (fs.existsSync(lockPath)) {
+        fs.unlinkSync(lockPath)
+        logger.debug("cookies", `Removed lock file: ${file}`)
+      }
+    }
+  }
+
+  private releaseLaunchLock() {
+    this.isLaunching = false
+  }
+
   async refreshCookies(): Promise<CookieRefreshResult> {
     logger.info("cookies", "Refreshing YouTube cookies via Playwright")
+
+    await this.cleanupBeforeLaunch()
 
     let context: BrowserContext | null = null
     try {
@@ -86,16 +117,20 @@ export class CookieRefresherService {
       if (context) {
         await context.close().catch(() => {})
       }
+      this.releaseLaunchLock()
     }
   }
 
   async setupForLogin(): Promise<{ url: string; instructions: string }> {
     logger.info("cookies", "Starting interactive login session via VNC")
 
+    await this.cleanupBeforeLaunch()
+
     const display = ":99"
     const vncPort = process.env.VNC_PORT || "6080"
 
     if (!this.isXvfbAvailable()) {
+      this.releaseLaunchLock()
       throw new Error(
         "Xvfb is not available. Install it for interactive login: apt-get install xvfb x11vnc novnc websockify"
       )
@@ -142,6 +177,7 @@ export class CookieRefresherService {
     } catch (err) {
       this.stopVNC(vncProcesses)
       this.stopXvfb(xvfb)
+      this.releaseLaunchLock()
       throw err
     }
   }
@@ -232,7 +268,7 @@ export class CookieRefresherService {
 
   private isXvfbAvailable(): boolean {
     try {
-      require("child_process").execSync("which Xvfb", { stdio: "ignore" })
+      execSync("which Xvfb", { stdio: "ignore" })
       return true
     } catch {
       return false

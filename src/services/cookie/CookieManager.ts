@@ -5,6 +5,7 @@ import { COOKIE_REFRESH_TIMEOUT_MS } from "@/config/timeouts"
 import { config } from "@/config"
 import { CookieRefresherService } from "./CookieRefresherService"
 import { CookieValidationResult } from "./types"
+import { CookieScheduler } from "./CookieScheduler"
 
 const COOKIE_DIR = config.youtube.cookieDir
 const COOKIE_PATH = path.join(COOKIE_DIR, "youtube-cookies.txt")
@@ -23,6 +24,11 @@ const COOKIE_ERROR_PATTERNS = [
 
 let cookieFile: string | null = null
 let refresherInstance: CookieRefresherService | null = null
+let schedulerInstance: CookieScheduler | null = null
+
+export function setScheduler(scheduler: CookieScheduler | null) {
+  schedulerInstance = scheduler
+}
 
 function getRefresher(): CookieRefresherService {
   if (!refresherInstance) {
