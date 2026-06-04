@@ -22,21 +22,22 @@ export class CookieRefresherService {
   }
 
   private resetProfile() {
-    const filesToRemove = [
-      "Local State",
-      "SingletonLock",
-      "SingletonCookie",
-      "SingletonSocket",
-      "LOCK",
-      "machine_id",
-    ]
-    for (const file of filesToRemove) {
-      const filePath = path.join(this.config.browserProfile, file)
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath)
-        logger.debug("cookies", `Removed stale profile file: ${file}`)
-      }
+    // Kill any existing Chromium processes that might be holding the profile
+    const { execSync } = require("child_process")
+    try {
+      execSync("pkill -9 -f chrome || true", { stdio: "ignore" })
+      logger.debug("cookies", "Chromium processes killed")
+    } catch {}
+
+    // Delete entire profile directory and recreate
+    // This is necessary because Chromium stores machine ID in multiple locations
+    // and will refuse to launch if the machine ID doesn't match the current host
+    if (fs.existsSync(this.config.browserProfile)) {
+      fs.rmSync(this.config.browserProfile, { recursive: true, force: true })
+      logger.debug("cookies", "Profile directory removed")
     }
+    fs.mkdirSync(this.config.browserProfile, { recursive: true, mode: 0o700 })
+    logger.debug("cookies", "Profile directory recreated")
   }
 
   async initBrowser() {
