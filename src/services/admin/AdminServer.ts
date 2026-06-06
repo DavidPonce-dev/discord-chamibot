@@ -141,7 +141,7 @@ async function startSetup(){
     const r=await fetch(API+'/cookies/setup',{method:'POST'});
     const d=await r.json();
     if(d.error){log('Error: '+d.error);return}
-    document.getElementById('vnc-frame').src = '/vnc/vnc.html?autoconnect=true';
+    document.getElementById('vnc-frame').src = '/vnc/vnc.html?autoconnect=true&path=/vnc/websockify';
     document.getElementById('vnc-frame').style.display='block';
     log('VNC started — login in the frame below, then close browser to extract cookies');
     checkStatus();
