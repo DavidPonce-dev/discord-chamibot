@@ -21,6 +21,7 @@ export class GuildManager {
   private queueMessages = new Map<string, Message>()
   private queueChannels = new Map<string, GuildTextBasedChannel>()
   private statusTitles = new Map<string, string>()
+  private nowPlayingMessages = new Map<string, Message>()
 
   getQueueChannel(guildId: string): GuildTextBasedChannel | undefined {
     return this.queueChannels.get(guildId)
@@ -84,6 +85,7 @@ export class GuildManager {
     this.queueMessages.delete(guildId)
     this.queueChannels.delete(guildId)
     this.statusTitles.delete(guildId)
+    this.nowPlayingMessages.delete(guildId)
     for (const cb of cleanupCallbacks) {
       cb(guildId)
     }
@@ -103,6 +105,18 @@ export class GuildManager {
 
   clearQueueMessage(guildId: string) {
     this.queueMessages.delete(guildId)
+  }
+
+  setNowPlayingMessage(guildId: string, message: Message) {
+    this.nowPlayingMessages.set(guildId, message)
+  }
+
+  getNowPlayingMessage(guildId: string): Message | undefined {
+    return this.nowPlayingMessages.get(guildId)
+  }
+
+  clearNowPlayingMessage(guildId: string) {
+    this.nowPlayingMessages.delete(guildId)
   }
 }
 

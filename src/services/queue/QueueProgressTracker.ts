@@ -1,6 +1,6 @@
 import { GuildTextBasedChannel } from "discord.js"
 import { guildManager, registerCleanup, registerPreDestroyCleanup } from "@/services/guild/GuildManager"
-import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage } from "@/services/queue/QueueUIManager"
+import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage, cancelPendingUpdates } from "@/services/queue/QueueUIManager"
 import { PROGRESS_UPDATE_INTERVAL_MS } from "@/config/timeouts"
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
@@ -51,13 +51,14 @@ export function setupSchedulerCallbacks(scheduler: import("../scheduler/TrackSch
   if (!scheduler.onDisconnect) {
     scheduler.onDisconnect = (gId) => {
       stopProgressUpdates(gId)
-      const s = guildManager.get(gId)
-      if (!s || s.isDestroyed()) return
+      cancelPendingUpdates(gId)
       const msg = guildManager.getQueueMessage(gId)
       if (msg) msg.delete().catch(() => {})
       guildManager.clearQueueMessage(gId)
+      guildManager.clearQueueChannel(gId)
       guildManager.clearStatusTitle(gId)
       clearQueuePage(gId)
+      guildManager.delete(gId)
     }
   }
 }

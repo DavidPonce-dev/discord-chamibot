@@ -21,7 +21,8 @@ type QueueMessagePayload = {
 }
 
 const queuePages = new Map<string, number>()
-const queueUpdateLocks = new Map<string, Promise<void>>()
+const activeEdits = new Map<string, Promise<void>>()
+const dirtyGuilds = new Set<string>()
 const DELETED_MESSAGE_CODES = [10008, 50001, 10004]
 
 function isMessageDeletedError(err: unknown): boolean {
@@ -81,12 +82,23 @@ export function clearQueuePage(guildId: string) {
 }
 
 export async function updateQueueForGuild(guildId: string, statusTitle?: string, page?: number) {
-  const existingLock = queueUpdateLocks.get(guildId)
-  if (existingLock) {
-    await existingLock
+  const scheduler = guildManager.get(guildId)
+  if (!scheduler || scheduler.isDestroyed()) return
+
+  if (activeEdits.has(guildId)) {
+    dirtyGuilds.add(guildId)
+    return
   }
 
-  const lock = (async () => {
+  await doEdit(guildId, statusTitle, page)
+
+  if (dirtyGuilds.delete(guildId)) {
+    await doEdit(guildId, statusTitle, page)
+  }
+}
+
+async function doEdit(guildId: string, statusTitle?: string, page?: number) {
+  const edit = (async () => {
     const scheduler = guildManager.get(guildId)
     const msg = guildManager.getQueueMessage(guildId)
     if (!scheduler || scheduler.isDestroyed()) return
@@ -129,9 +141,18 @@ export async function updateQueueForGuild(guildId: string, statusTitle?: string,
     }
   })()
 
-  queueUpdateLocks.set(guildId, lock)
-  await lock
-  queueUpdateLocks.delete(guildId)
+  activeEdits.set(guildId, edit)
+  await edit
+  activeEdits.delete(guildId)
+}
+
+export function cancelPendingUpdates(guildId: string) {
+  dirtyGuilds.delete(guildId)
+  activeEdits.delete(guildId)
+}
+
+export function hasPendingUpdates(guildId: string): boolean {
+  return activeEdits.has(guildId) || dirtyGuilds.has(guildId)
 }
 
 export async function ensureQueueMessage(

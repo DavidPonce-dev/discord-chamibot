@@ -17,5 +17,5 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const msg = await channel?.send({ embeds: [embed], components: [row] })
   await interaction.deleteReply().catch(() => {})
   const guildId = requireGuild(interaction)
-  if (guildId && msg) guildManager.setQueueMessage(guildId, msg)
+  if (guildId && msg) guildManager.setNowPlayingMessage(guildId, msg)
 }
