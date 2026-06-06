@@ -319,8 +319,6 @@ export class CookieRefresherService {
       await this.waitForProfileFree()
     }
 
-    await this.resetProfile()
-
     const xvfb = this.startXvfb(display)
     const vncProcesses = this.startVNC(display, vncPort)
 
@@ -337,7 +335,7 @@ export class CookieRefresherService {
       })
 
       const page = await this.browser.newPage()
-      await page.goto("https://accounts.google.com", {
+      await page.goto("https://www.youtube.com", {
         waitUntil: "domcontentloaded",
       })
 
@@ -351,7 +349,7 @@ export class CookieRefresherService {
       const vncUrl = `http://localhost:${vncPort}/vnc.html?autoconnect=true`
       return {
         url: vncUrl,
-        instructions: `Open ${vncUrl} in your browser, login to YouTube, then use the "Extract Cookies" button in the admin panel to save cookies.`,
+        instructions: `Open ${vncUrl} in your browser. If you're not logged in, sign in to YouTube. Then use the "Extract Cookies" button in the admin panel.`,
       }
     } catch (err) {
       this.stopVNC(vncProcesses)
