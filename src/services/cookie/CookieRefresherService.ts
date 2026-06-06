@@ -21,7 +21,7 @@ export class CookieRefresherService {
     fs.mkdirSync(this.config.browserProfile, { recursive: true, mode: 0o700 })
   }
 
-  private resetProfile() {
+  private async resetProfile() {
     // Kill any existing Chromium processes that might be holding the profile
     const { execSync } = require("child_process")
     try {
@@ -29,15 +29,35 @@ export class CookieRefresherService {
       logger.debug("cookies", "Chromium processes killed")
     } catch {}
 
-    // Delete entire profile directory and recreate
-    // This is necessary because Chromium stores machine ID in multiple locations
-    // and will refuse to launch if the machine ID doesn't match the current host
+    // Wait for profile to be free before cleaning
+    await this.waitForProfileFree()
+
+    // Empty directory contents instead of removing the mount point
+    // This is necessary because /profile is a Docker volume mount
+    // and fs.rmSync on a mount point will fail with EBUSY
     if (fs.existsSync(this.config.browserProfile)) {
-      fs.rmSync(this.config.browserProfile, { recursive: true, force: true })
-      logger.debug("cookies", "Profile directory removed")
+      const entries = fs.readdirSync(this.config.browserProfile)
+      for (const entry of entries) {
+        const fullPath = path.join(this.config.browserProfile, entry)
+        await this.forceRemoveWithRetry(fullPath)
+      }
+      logger.debug("cookies", "Profile directory emptied")
     }
-    fs.mkdirSync(this.config.browserProfile, { recursive: true, mode: 0o700 })
-    logger.debug("cookies", "Profile directory recreated")
+  }
+
+  private async forceRemoveWithRetry(fullPath: string, maxAttempts = 5) {
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        fs.rmSync(fullPath, { recursive: true, force: true })
+        return
+      } catch (err) {
+        if (i === maxAttempts - 1) {
+          logger.warn("cookies", `Could not remove after retries: ${path.basename(fullPath)}`)
+          return
+        }
+        await new Promise((r) => setTimeout(r, 500 * (i + 1)))
+      }
+    }
   }
 
   async initBrowser() {
@@ -63,7 +83,7 @@ export class CookieRefresherService {
         )
       }
 
-      this.resetProfile()
+      await this.resetProfile()
       logger.info("cookies", "Initializing persistent Chromium browser")
       this.browser = await chromium.launchPersistentContext(this.config.browserProfile, {
         headless: true,
@@ -228,7 +248,7 @@ export class CookieRefresherService {
       await this.waitForProfileFree()
     }
 
-    this.resetProfile()
+    await this.resetProfile()
 
     const xvfb = this.startXvfb(display)
     const vncProcesses = this.startVNC(display, vncPort)
