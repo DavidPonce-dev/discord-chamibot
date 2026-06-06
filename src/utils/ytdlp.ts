@@ -1,5 +1,7 @@
 import { spawn } from "child_process"
+import fs from "fs"
 import { getCookieFile } from "./cookies"
+import { logger } from "@/utils/logger"
 
 export const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
@@ -11,11 +13,20 @@ export interface YtDlpResult {
 }
 
 export function buildYtDlpArgs(baseArgs: string[], extraArgs: string[] = []): string[] {
-  // yt-dlp requires a JS runtime to execute YouTube's obfuscated JavaScript
-  // deno is the default supported runtime for YouTube extraction
   const args = [...baseArgs, "--js-runtimes", "deno", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", USER_AGENT, ...extraArgs]
   const cookieFile = getCookieFile()
-  if (cookieFile) args.push("--cookies", cookieFile)
+  if (cookieFile) {
+    const exists = fs.existsSync(cookieFile)
+    const size = exists ? fs.statSync(cookieFile).size : 0
+    logger.debug("ytdlp", "Cookie file check", { path: cookieFile, exists, size })
+    if (exists && size > 0) {
+      args.push("--cookies", cookieFile)
+    } else {
+      logger.warn("ytdlp", "Cookie file missing or empty", { path: cookieFile, exists, size })
+    }
+  } else {
+    logger.debug("ytdlp", "No cookie file configured")
+  }
   return args
 }
 
