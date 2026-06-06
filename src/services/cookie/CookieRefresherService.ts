@@ -82,6 +82,8 @@ export class CookieRefresherService {
         )
       }
 
+      await this.waitForProfileFree()
+
       logger.info("cookies", "Initializing persistent Chromium browser (preserving profile)")
       this.browser = await chromium.launchPersistentContext(this.config.browserProfile, {
         headless: true,

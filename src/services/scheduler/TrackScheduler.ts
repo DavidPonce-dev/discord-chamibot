@@ -105,6 +105,10 @@ export class TrackScheduler {
     this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
       await this.handleVoiceDisconnect()
     })
+
+    this.connection.on(VoiceConnectionStatus.Destroyed, async () => {
+      await this.handleVoiceDestroyed()
+    })
   }
 
   private handleTrackFinished(finished: Track, willAutoplay: boolean) {
@@ -187,6 +191,16 @@ export class TrackScheduler {
       this.destroy()
       await this.onDisconnect?.(guildId)
     }
+  }
+
+  private async handleVoiceDestroyed() {
+    if (this.destroyed) return
+    const guildId = this.connection.joinConfig.guildId
+    logger.event("scheduler", "Canal de voz destruido, limpiando", { guildId })
+    this.audio.killProcess()
+    this.player.stop()
+    this.destroy()
+    await this.onDisconnect?.(guildId)
   }
 
   private resetPlaybackState() {
@@ -284,10 +298,11 @@ export class TrackScheduler {
     }
   }
 
-  // Calculates current playback position in seconds, accounting for pauses
-  // pauseOffset accumulates total paused time, pauseTime tracks current pause start
   getPosition(): number {
     if (!this.playbackStart) return 0
+    const status = this.player.state.status
+    if (status === AudioPlayerStatus.Idle) return 0
+    if (this.connection.state.status === VoiceConnectionStatus.Destroyed) return 0
     let elapsed = Date.now() - this.playbackStart - this.pauseOffset
     if (this.pauseTime !== null) {
       elapsed -= Date.now() - this.pauseTime
