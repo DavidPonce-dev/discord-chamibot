@@ -273,7 +273,24 @@ export class CookieRefresherService {
       this.browser.on("close", async () => {
         logger.info("cookies", "Browser closed, extracting cookies...")
         try {
-          await this.refreshCookies()
+          const ctx = this.browser
+          if (!ctx) return
+          const cookies = await ctx.cookies()
+          const ytCookies = this.filterYouTubeCookies(cookies).map((c) => ({
+            ...c,
+            path: c.path || "/",
+            secure: c.secure || false,
+            expires: c.expires || 0,
+            httpOnly: c.httpOnly || false,
+          }))
+
+          const netscapeContent = this.cookiesToNetscape(ytCookies)
+          fs.writeFileSync(this.config.cookieFile, netscapeContent, { mode: 0o600 })
+
+          logger.info("cookies", "Cookies extracted successfully", {
+            count: ytCookies.length,
+            names: ytCookies.slice(0, 10).map((c) => c.name),
+          })
         } catch (err) {
           logger.error("cookies", "Failed to extract cookies after setup", {
             error: err instanceof Error ? err.message : String(err),
