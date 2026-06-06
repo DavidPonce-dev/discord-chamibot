@@ -1,7 +1,7 @@
 import http from "http"
 import httpProxy from "http-proxy"
 import { logger } from "@/utils/logger"
-import { getRefresherInstance, validateCookies, refreshCookies, setScheduler, initBrowser, closeBrowser, isBrowserActive } from "@/services/cookie/CookieManager"
+import { getRefresherInstance, validateCookies, refreshCookies, setScheduler, initBrowser, closeBrowser, isBrowserActive, forceResetProfile } from "@/services/cookie/CookieManager"
 import { CookieScheduler } from "@/services/cookie/CookieScheduler"
 
 let adminServer: http.Server | null = null
@@ -77,6 +77,7 @@ pre{background:#111;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.85
 <div id="browser-status" style="margin-bottom:1rem;color:#888">Unknown</div>
 <button class="btn success" onclick="startBrowser()">Start Browser</button>
 <button class="btn warning" onclick="closeBrowserAction()">Close & Extract Cookies</button>
+<button class="btn danger" onclick="forceResetProfile()">Force Reset Profile</button>
 </div>
 
 <div class="card">
@@ -151,6 +152,18 @@ async function closeBrowserAction(){
     checkStatus();
   }
   catch(e){log('Close browser failed: '+e.message)}
+}
+async function forceResetProfile(){
+  if(!confirm('This will delete all browser data and require re-login. Continue?'))return;
+  log('Force resetting browser profile...');
+  try{
+    const r=await fetch(API+'/profile/reset',{method:'POST'});
+    const d=await r.json();
+    if(d.error){log('Error: '+d.error);return}
+    log('Profile reset — use VNC login to re-authenticate');
+    checkStatus();
+  }
+  catch(e){log('Force reset failed: '+e.message)}
 }
 async function refreshCookies(){
   log('Refreshing cookies...');
@@ -289,6 +302,19 @@ export function startAdminServer(port: number) {
           await closeBrowser()
           res.writeHead(200)
           res.end(JSON.stringify({ message: "Browser closed", cookieRefresh: result }))
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          res.writeHead(500)
+          res.end(JSON.stringify({ error: msg }))
+        }
+        return
+      }
+
+      if (path === "/api/profile/reset" && method === "POST") {
+        try {
+          await forceResetProfile()
+          res.writeHead(200)
+          res.end(JSON.stringify({ message: "Profile reset — use VNC login to re-authenticate" }))
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
           res.writeHead(500)

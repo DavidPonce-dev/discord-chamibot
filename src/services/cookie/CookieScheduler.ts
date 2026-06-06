@@ -1,10 +1,13 @@
 import { logger } from "@/utils/logger"
 import { CookieRefresherService } from "./CookieRefresherService"
 
+const BROWSER_HEALTH_CHECK_MS = 5 * 60 * 1000 // 5 minutes
+
 export class CookieScheduler {
   private refresher: CookieRefresherService
   private intervalMs: number
   private timer: NodeJS.Timeout | null = null
+  private healthTimer: NodeJS.Timeout | null = null
   private isRunning = false
   private isRefreshing = false
 
@@ -22,6 +25,7 @@ export class CookieScheduler {
     this.isRunning = true
     logger.info("cookies", "Cookie scheduler started", {
       intervalHours: this.intervalMs / (1000 * 60 * 60),
+      healthCheckMinutes: BROWSER_HEALTH_CHECK_MS / (1000 * 60),
     })
 
     this.timer = setInterval(() => {
@@ -29,12 +33,22 @@ export class CookieScheduler {
     }, this.intervalMs)
 
     this.timer.unref()
+
+    this.healthTimer = setInterval(() => {
+      this.runHealthCheck()
+    }, BROWSER_HEALTH_CHECK_MS)
+
+    this.healthTimer.unref()
   }
 
   pause() {
     if (this.timer) {
       clearInterval(this.timer)
       this.timer = null
+    }
+    if (this.healthTimer) {
+      clearInterval(this.healthTimer)
+      this.healthTimer = null
     }
     logger.info("cookies", "Cookie scheduler paused")
   }
@@ -47,6 +61,12 @@ export class CookieScheduler {
       this.runRefresh()
     }, this.intervalMs)
     this.timer.unref()
+
+    this.healthTimer = setInterval(() => {
+      this.runHealthCheck()
+    }, BROWSER_HEALTH_CHECK_MS)
+    this.healthTimer.unref()
+
     logger.info("cookies", "Cookie scheduler resumed")
   }
 
@@ -59,6 +79,10 @@ export class CookieScheduler {
     if (this.timer) {
       clearInterval(this.timer)
       this.timer = null
+    }
+    if (this.healthTimer) {
+      clearInterval(this.healthTimer)
+      this.healthTimer = null
     }
     logger.info("cookies", "Cookie scheduler stopped")
   }
@@ -96,6 +120,35 @@ export class CookieScheduler {
       return false
     } finally {
       this.isRefreshing = false
+    }
+  }
+
+  private async runHealthCheck() {
+    const browser = this.refresher.getBrowser()
+    if (!browser) {
+      logger.info("cookies", "Health check: browser not running, re-initializing")
+      try {
+        await this.refresher.initBrowser()
+        logger.info("cookies", "Health check: browser re-initialized successfully")
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        logger.error("cookies", "Health check: failed to re-initialize browser", { error: msg })
+      }
+      return
+    }
+
+    try {
+      const pages = browser.pages()
+      logger.debug("cookies", "Health check: browser alive", { openPages: pages.length })
+    } catch {
+      logger.warn("cookies", "Health check: browser unresponsive, re-initializing")
+      try {
+        await this.refresher.initBrowser()
+        logger.info("cookies", "Health check: browser re-initialized after failure")
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        logger.error("cookies", "Health check: failed to re-initialize browser", { error: msg })
+      }
     }
   }
 

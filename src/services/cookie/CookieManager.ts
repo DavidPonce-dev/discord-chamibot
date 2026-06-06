@@ -138,3 +138,7 @@ export function getRefresherInstance(): CookieRefresherService {
 export function isBrowserActive(): boolean {
   return getRefresher().getBrowser() !== null
 }
+
+export async function forceResetProfile() {
+  return getRefresher().forceResetProfile()
+}

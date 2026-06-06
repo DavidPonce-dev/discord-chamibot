@@ -57,17 +57,15 @@ async function stopCookieScheduler() {
 }
 
 process.on("SIGINT", async () => {
-  logger.info("process", "Shutting down...")
+  logger.info("process", "Shutting down (browser left running for persistence)...")
   await stopCookieScheduler()
-  await closeBrowser()
   await stopAdminServer()
   process.exit(0)
 })
 
 process.on("SIGTERM", async () => {
-  logger.info("process", "Shutting down...")
+  logger.info("process", "Shutting down (browser left running for persistence)...")
   await stopCookieScheduler()
-  await closeBrowser()
   await stopAdminServer()
   process.exit(0)
 })

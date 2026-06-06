@@ -83,8 +83,7 @@ export class CookieRefresherService {
         )
       }
 
-      await this.resetProfile()
-      logger.info("cookies", "Initializing persistent Chromium browser")
+      logger.info("cookies", "Initializing persistent Chromium browser (preserving profile)")
       this.browser = await chromium.launchPersistentContext(this.config.browserProfile, {
         headless: true,
         args: [
@@ -94,10 +93,25 @@ export class CookieRefresherService {
           "--disable-features=ProcessSingleton",
         ],
       })
+
+      this.browser.on("close", () => {
+        logger.warn("cookies", "Browser closed unexpectedly")
+        this.browser = null
+      })
+
       logger.info("cookies", "Chromium browser initialized and ready")
     } finally {
       this.isInitializing = false
     }
+  }
+
+  async forceResetProfile() {
+    if (this.browser) {
+      await this.closeBrowser()
+      await this.waitForProfileFree()
+    }
+    await this.resetProfile()
+    logger.info("cookies", "Profile force reset — browser will need re-initialization")
   }
 
   private async checkChromiumAvailable(): Promise<boolean> {
@@ -128,8 +142,13 @@ export class CookieRefresherService {
     logger.info("cookies", "Refreshing YouTube cookies via Playwright")
 
     if (!this.browser) {
-      logger.warn("cookies", "Browser not initialized, initializing now")
-      await this.initBrowser()
+      logger.warn("cookies", "Browser not available, re-initializing (preserving profile)")
+      try {
+        await this.initBrowser()
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { success: false, error: "Failed to initialize browser: " + msg, timestamp: new Date().toISOString() }
+      }
     }
 
     if (!this.browser) {
@@ -183,6 +202,12 @@ export class CookieRefresherService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       logger.error("cookies", "Failed to refresh cookies", { error: msg })
+
+      if (msg.includes("closed") || msg.includes("crashed") || msg.includes("Target page")) {
+        logger.warn("cookies", "Browser died during refresh, marking as null for auto-recovery")
+        this.browser = null
+      }
+
       return {
         success: false,
         error: msg,
