@@ -1,7 +1,7 @@
 import http from "http"
 import httpProxy from "http-proxy"
 import { logger } from "@/utils/logger"
-import { getRefresherInstance, validateCookies, refreshCookies, setScheduler, initBrowser, closeBrowser, isBrowserActive, forceResetProfile } from "@/services/cookie/CookieManager"
+import { getRefresherInstance, validateCookies, refreshCookies, extractCookies, setScheduler, initBrowser, closeBrowser, isBrowserActive, forceResetProfile } from "@/services/cookie/CookieManager"
 import { CookieScheduler } from "@/services/cookie/CookieScheduler"
 
 let adminServer: http.Server | null = null
@@ -84,6 +84,7 @@ pre{background:#111;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.85
 <h2>VNC Login Session</h2>
 <div id="vnc-status" style="margin-bottom:1rem;color:#888">No active session</div>
 <button class="btn" onclick="startSetup()">Start VNC Login</button>
+<button class="btn success" onclick="extractCookies()">Extract Cookies</button>
 <button class="btn danger" onclick="stopSetup()">Stop VNC</button>
 <iframe id="vnc-frame"></iframe>
 </div>
@@ -174,6 +175,16 @@ async function refreshCookies(){
     checkStatus();
   }
   catch(e){log('Refresh failed: '+e.message)}
+}
+async function extractCookies(){
+  log('Extracting cookies from open browser...');
+  try{
+    const r=await fetch(API+'/cookies/extract',{method:'POST'});
+    const d=await r.json();
+    log('Result: '+JSON.stringify(d));
+    checkStatus();
+  }
+  catch(e){log('Extract failed: '+e.message)}
 }
 async function startSetup(){
   log('Starting VNC login...');
@@ -338,6 +349,13 @@ export function startAdminServer(port: number) {
 
         if (path === "/api/cookies/refresh" && method === "POST") {
           const result = await refreshCookies()
+          res.writeHead(200)
+          res.end(JSON.stringify(result))
+          return
+        }
+
+        if (path === "/api/cookies/extract" && method === "POST") {
+          const result = await extractCookies()
           res.writeHead(200)
           res.end(JSON.stringify(result))
           return

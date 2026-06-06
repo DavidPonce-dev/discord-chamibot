@@ -57,6 +57,15 @@ export async function refreshCookies(): Promise<{ success: boolean; cookieCount?
   }
 }
 
+export async function extractCookies(): Promise<{ success: boolean; cookieCount?: number }> {
+  try {
+    const result = await getRefresher().extractCookies()
+    return { success: result.success, cookieCount: result.cookieCount }
+  } catch {
+    return { success: false }
+  }
+}
+
 export function validateCookies(): CookieValidationResult {
   return getRefresher().validateCookies()
 }

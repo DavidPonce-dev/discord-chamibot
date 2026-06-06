@@ -255,6 +255,52 @@ export class CookieRefresherService {
     }
   }
 
+  async extractCookies(): Promise<CookieRefreshResult> {
+    logger.info("cookies", "Extracting cookies from open browser")
+
+    if (!this.browser) {
+      return { success: false, error: "Browser not running", timestamp: new Date().toISOString() }
+    }
+
+    try {
+      const cookies = await this.browser.cookies()
+      const ytCookies = this.filterYouTubeCookies(cookies).map((c) => ({
+        ...c,
+        path: c.path || "/",
+        secure: c.secure || false,
+        expires: c.expires || 0,
+        httpOnly: c.httpOnly || false,
+      }))
+
+      if (ytCookies.length === 0) {
+        throw new Error("No YouTube cookies found in browser")
+      }
+
+      const netscapeContent = this.cookiesToNetscape(ytCookies)
+      fs.writeFileSync(this.config.cookieFile, netscapeContent, { mode: 0o600 })
+
+      logger.info("cookies", "Cookies extracted successfully", {
+        count: ytCookies.length,
+        names: ytCookies.slice(0, 10).map((c) => c.name),
+      })
+
+      return {
+        success: true,
+        cookieCount: ytCookies.length,
+        cookieNames: ytCookies.map((c) => c.name),
+        timestamp: new Date().toISOString(),
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error("cookies", "Failed to extract cookies", { error: msg })
+      return {
+        success: false,
+        error: msg,
+        timestamp: new Date().toISOString(),
+      }
+    }
+  }
+
   async setupForLogin(): Promise<{ url: string; instructions: string }> {
     logger.info("cookies", "Starting interactive login session via VNC")
 
@@ -295,42 +341,17 @@ export class CookieRefresherService {
         waitUntil: "domcontentloaded",
       })
 
-      this.browser.on("close", async () => {
-        logger.info("cookies", "Browser closed, extracting cookies...")
-        try {
-          const ctx = this.browser
-          if (!ctx) return
-          const cookies = await ctx.cookies()
-          const ytCookies = this.filterYouTubeCookies(cookies).map((c) => ({
-            ...c,
-            path: c.path || "/",
-            secure: c.secure || false,
-            expires: c.expires || 0,
-            httpOnly: c.httpOnly || false,
-          }))
-
-          const netscapeContent = this.cookiesToNetscape(ytCookies)
-          fs.writeFileSync(this.config.cookieFile, netscapeContent, { mode: 0o600 })
-
-          logger.info("cookies", "Cookies extracted successfully", {
-            count: ytCookies.length,
-            names: ytCookies.slice(0, 10).map((c) => c.name),
-          })
-        } catch (err) {
-          logger.error("cookies", "Failed to extract cookies after setup", {
-            error: err instanceof Error ? err.message : String(err),
-          })
-        } finally {
-          this.stopVNC(vncProcesses)
-          this.stopXvfb(xvfb)
-          this.browser = null
-        }
+      this.browser.on("close", () => {
+        logger.info("cookies", "Browser closed unexpectedly during VNC session")
+        this.browser = null
+        this.stopVNC(vncProcesses)
+        this.stopXvfb(xvfb)
       })
 
       const vncUrl = `http://localhost:${vncPort}/vnc.html?autoconnect=true`
       return {
         url: vncUrl,
-        instructions: `Open ${vncUrl} in your browser, login to YouTube, then close the browser to save cookies.`,
+        instructions: `Open ${vncUrl} in your browser, login to YouTube, then use the "Extract Cookies" button in the admin panel to save cookies.`,
       }
     } catch (err) {
       this.stopVNC(vncProcesses)
