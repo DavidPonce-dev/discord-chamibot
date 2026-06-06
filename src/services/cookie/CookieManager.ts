@@ -51,6 +51,9 @@ export function isCookieError(error: string): boolean {
 export async function refreshCookies(): Promise<{ success: boolean; cookieCount?: number }> {
   try {
     const result = await getRefresher().refreshCookies()
+    if (result.success) {
+      cookieFile = COOKIE_PATH
+    }
     return { success: result.success, cookieCount: result.cookieCount }
   } catch {
     return { success: false }
@@ -60,6 +63,9 @@ export async function refreshCookies(): Promise<{ success: boolean; cookieCount?
 export async function extractCookies(): Promise<{ success: boolean; cookieCount?: number }> {
   try {
     const result = await getRefresher().extractCookies()
+    if (result.success) {
+      cookieFile = COOKIE_PATH
+    }
     return { success: result.success, cookieCount: result.cookieCount }
   } catch {
     return { success: false }
@@ -129,7 +135,8 @@ export function setupCookies(): string | null {
     return COOKIE_PATH
   }
 
-  return null
+  // Return path anyway so yt-dlp can use it after cookies are extracted later
+  return COOKIE_PATH
 }
 
 export async function initBrowser() {

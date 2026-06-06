@@ -87,10 +87,13 @@ process.on("uncaughtException", (err) => {
 const cookiePath = setupCookies()
 setCookieFile(cookiePath)
 if (cookiePath) {
-  logger.info("bot", "YouTube cookies configuradas", { path: cookiePath })
+  const validation = validateCookies()
+  if (validation.isValid) {
+    logger.info("bot", "YouTube cookies configuradas", { path: cookiePath, count: validation.cookieCount })
+  } else {
+    logger.info("bot", "Cookie path configured — use admin panel to login and extract cookies", { path: cookiePath })
+  }
   startCookieScheduler(cookiePath)
-} else {
-  logger.warn("bot", "Sin YouTube cookies (YOUTUBE_COOKIES no configurada)")
 }
 
 initBrowser().catch((err) => {
