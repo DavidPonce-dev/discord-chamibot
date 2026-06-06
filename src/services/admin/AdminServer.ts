@@ -277,6 +277,22 @@ export function startAdminServer(port: number) {
         return
       }
 
+      // /vnc/ assets are proxied to noVNC without token
+      // They're gated by vncActive flag (only accessible after starting a login session)
+      if (path.startsWith("/vnc/")) {
+        if (vncProxy && vncActive) {
+          req.url = req.url!.replace(/^\/vnc\//, "/")
+          vncProxy.web(req, res, {
+            target: "http://localhost:6080",
+            ws: true,
+          })
+          return
+        }
+        res.writeHead(503, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "VNC not active. Start a login session first." }))
+        return
+      }
+
       // All other routes require valid token
       if (!isValidToken(req)) {
         res.writeHead(403, { "Content-Type": "text/html" })
@@ -428,20 +444,6 @@ export function startAdminServer(port: number) {
 
         res.writeHead(404)
         res.end(JSON.stringify({ error: "Not found" }))
-        return
-      }
-
-      if (path.startsWith("/vnc/")) {
-        if (vncProxy && vncActive) {
-          req.url = req.url!.replace(/^\/vnc\//, "/")
-          vncProxy.web(req, res, {
-            target: "http://localhost:6080",
-            ws: true,
-          })
-          return
-        }
-        res.writeHead(503, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ error: "VNC not active. Start a login session first." }))
         return
       }
 
