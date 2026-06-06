@@ -48,6 +48,14 @@ pre{background:#111;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.85
 .indicator{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
 .indicator.on{background:#57f287;box-shadow:0 0 6px #57f287}
 .indicator.off{background:#f25757}
+.flag-row{display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid #222}
+.flag-row:last-child{border-bottom:none}
+.flag-label{color:#aaa;font-size:.85rem}
+.flag-value{font-weight:600;font-size:.85rem}
+.flag-badge{display:inline-block;padding:.15rem .5rem;border-radius:4px;font-size:.75rem;font-weight:700;text-transform:uppercase}
+.flag-badge.yes{background:#2d7d46;color:#57f287}
+.flag-badge.no{background:#7d2d2d;color:#f25757}
+.flag-badge.maybe{background:#7d6b2d;color:#f2a557}
 </style>
 </head>
 <body>
@@ -55,9 +63,13 @@ pre{background:#111;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.85
 <p style="color:#888">Cookie management dashboard</p>
 
 <div class="card">
+<h2>Cookie Status</h2>
+<div id="cookie-flags">Loading...</div>
+</div>
+
+<div class="card">
 <h2>System Status</h2>
 <div id="system-status">Loading...</div>
-<button class="btn" onclick="checkStatus()">Refresh Status</button>
 </div>
 
 <div class="card">
@@ -88,6 +100,20 @@ pre{background:#111;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.85
 <script>
 const API = '/api';
 function log(msg){const l=document.getElementById('log');l.textContent+=msg+'\\n';l.scrollTop=l.scrollHeight}
+function badge(val){return '<span class="flag-badge '+(val?'yes':'no')+'">'+(val?'YES':'NO')+'</span>'}
+function updateCookieFlags(d){
+  const el = document.getElementById('cookie-flags');
+  const ageStr = d.ageHours != null ? d.ageHours+'h ago' : 'never';
+  const validClass = d.cookiesValid ? 'ok' : 'err';
+  const validText = d.cookiesValid ? 'VALID' : 'INVALID';
+  el.innerHTML =
+    '<div class="flag-row"><span class="flag-label">Overall</span><span class="status '+validText.toLowerCase()+'">'+validText+'</span></div>'+
+    '<div class="flag-row"><span class="flag-label">Count</span><span class="flag-value">'+d.cookieCount+' cookies</span></div>'+
+    '<div class="flag-row"><span class="flag-label">Has PSID</span>'+badge(d.hasPSID)+'</div>'+
+    '<div class="flag-row"><span class="flag-label">Has SID</span>'+badge(d.hasSID)+'</div>'+
+    '<div class="flag-row"><span class="flag-label">Last Modified</span><span class="flag-value">'+(d.lastModified||'never')+'</span></div>'+
+    '<div class="flag-row"><span class="flag-label">Age</span><span class="flag-value">'+ageStr+'</span></div>';
+}
 function updateIndicator(id, active, label){
   const el = document.getElementById(id);
   el.innerHTML = '<span class="indicator '+(active?'on':'off')+'"></span>' + (active ? label+' — Active' : label+' — Inactive');
@@ -96,10 +122,11 @@ async function checkStatus(){
   try{
     const r=await fetch(API+'/status');
     const d=await r.json();
+    updateCookieFlags(d);
     updateIndicator('system-status', d.cookiesValid, 'Cookies');
     updateIndicator('browser-status', d.browserActive, 'Browser');
     updateIndicator('vnc-status', d.vncActive, 'VNC');
-    log('Status: cookies='+(d.cookiesValid?'valid':'invalid')+' browser='+(d.browserActive?'on':'off')+' vnc='+(d.vncActive?'on':'off'));
+    log('Status: cookies='+(d.cookiesValid?'valid':'invalid')+' count='+d.cookieCount+' browser='+(d.browserActive?'on':'off')+' vnc='+(d.vncActive?'on':'off'));
   }
   catch(e){log('Status check failed: '+e.message)}
 }
@@ -215,6 +242,10 @@ export function startAdminServer(port: number) {
 
       if (path === "/api/status" && method === "GET") {
         const validation = validateCookies()
+        const now = Date.now()
+        const cookieAgeMs = validation.lastModified ? now - validation.lastModified.getTime() : null
+        const cookieAgeHours = cookieAgeMs ? Math.round(cookieAgeMs / (1000 * 60 * 60)) : null
+
         res.writeHead(200)
         res.end(JSON.stringify({
           cookiesValid: validation.isValid,
@@ -222,6 +253,7 @@ export function startAdminServer(port: number) {
           hasPSID: validation.hasPSID,
           hasSID: validation.hasSID,
           lastModified: validation.lastModified?.toISOString() ?? null,
+          ageHours: cookieAgeHours,
           browserActive: isBrowserActive(),
           vncActive,
         }))
