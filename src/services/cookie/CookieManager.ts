@@ -134,3 +134,7 @@ export async function closeBrowser() {
 export function getRefresherInstance(): CookieRefresherService {
   return getRefresher()
 }
+
+export function isBrowserActive(): boolean {
+  return getRefresher().getBrowser() !== null
+}
