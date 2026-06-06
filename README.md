@@ -20,6 +20,7 @@ Un bot de música autocontenido para Discord que no depende de APIs externas de 
 - **Reproductor resiliente** — Si borran el mensaje de la cola, lo recrea automáticamente
 - **Multi-guild** — Cada servidor tiene su propia sesión, cola y preferencias independientes
 - **Cookies de YouTube** — Sistema integrado de refresco automático con Playwright (sin servicio separado)
+- **Admin panel protegido** — Dashboard web con autenticación por token para gestión de cookies y browser
 
 ---
 
@@ -58,7 +59,10 @@ cd "discord bot"
 
 # 2. Configurar variables
 cp .env.example .env
-# Editar .env con tu DISCORD_TOKEN y CLIENT_ID
+# Editar .env con DISCORD_TOKEN, CLIENT_ID y ADMIN_TOKEN
+
+# Generar ADMIN_TOKEN:
+openssl rand -hex 32
 
 # 3. Construir e iniciar
 docker compose up -d --build
@@ -67,8 +71,11 @@ docker compose up -d --build
 docker compose run --rm bot npm run register
 ```
 
-El `docker-compose.yml` incluye:
-- **Bot** — Construido desde Dockerfile multi-stage con yt-dlp, FFmpeg, Deno y Playwright integrado
+El `docker-compose.yml` usa **Docker named volumes** para persistencia:
+- `browser-profile` — Perfil de Chromium (sesiones, cookies del browser)
+- `cookies` — Archivo de cookies de YouTube para yt-dlp
+
+Ambos volúmenes persisten entre redeployments de Coolify.
 
 ### Opción B: Local
 
@@ -88,7 +95,7 @@ npm install
 
 # 3. Configurar variables
 cp .env.example .env
-# Editar .env con tu DISCORD_TOKEN y CLIENT_ID
+# Editar .env con DISCORD_TOKEN, CLIENT_ID y ADMIN_TOKEN
 
 # 4. Registrar comandos slash
 npm run register
@@ -99,74 +106,102 @@ npm run dev
 
 ---
 
+## Panel de administración
+
+El bot incluye un dashboard web protegido por token en el puerto `3002`.
+
+### Acceso
+
+```
+https://<tu-server>:3002/?token=TU_ADMIN_TOKEN
+```
+
+Sin token válido → **403 Access Denied**. Todas las rutas requieren autenticación excepto `/health` (para health checks de Docker/Coolify).
+
+### Login inicial (primera vez)
+
+1. Iniciá el bot con `docker compose up -d --build`
+2. Abrí el dashboard con tu token:
+
+```
+http://<tu-ip>:3002/?token=TU_ADMIN_TOKEN
+```
+
+3. Hacé click en **"Start VNC Login"** — aparece el iframe con VNC
+4. El browser se abre con tu sesión existente (si ya hiciste login antes). Si no, navegá a YouTube e iniciá sesión con tu cuenta de Google
+5. Hacé click en **"Extract Cookies"** — las cookies se guardan mientras el browser sigue abierto
+6. Hacé click en **"Stop VNC"** para cerrar la sesión
+
+> **Nota:** La sesión del browser se preserva entre sesiones VNC. No necesitás loguearte de nuevo cada vez. Usá **"Force Reset Profile"** solo si querés borrar todo y empezar de cero.
+
+### Endpoints del Admin Server
+
+| Ruta | Método | Descripción |
+|------|--------|-------------|
+| `/` | GET | Dashboard web (requiere token) |
+| `/health` | GET | Health check (público) |
+| `/api/status` | GET | Estado completo del sistema |
+| `/api/cookies/status` | GET | Estado de las cookies |
+| `/api/cookies/refresh` | POST | Refrescar cookies (headless) |
+| `/api/cookies/extract` | POST | Extraer cookies del browser abierto |
+| `/api/cookies/setup` | POST | Iniciar login interactivo (VNC) |
+| `/api/cookies/setup/stop` | POST | Detener sesión VNC |
+| `/api/browser/start` | POST | Iniciar browser headless |
+| `/api/browser/close` | POST | Cerrar browser y extraer cookies |
+| `/api/profile/reset` | POST | Borrar perfil del browser (requiere re-login) |
+
+Todos los endpoints requieren `?token=TU_ADMIN_TOKEN` como query parameter.
+
+Ejemplos con curl:
+
+```bash
+# Ver estado de cookies
+curl "http://localhost:3002/api/cookies/status?token=TU_ADMIN_TOKEN"
+
+# Extraer cookies del browser abierto
+curl -X POST "http://localhost:3002/api/cookies/extract?token=TU_ADMIN_TOKEN"
+
+# Iniciar login interactivo
+curl -X POST "http://localhost:3002/api/cookies/setup?token=TU_ADMIN_TOKEN"
+```
+
+---
+
 ## Configuración de cookies de YouTube
 
 El bot usa cookies de YouTube para evitar bloqueos en servidores cloud y acceder a contenido restringido.
 
 ### Sistema integrado con Playwright
 
-A diferencia de versiones anteriores que usaban un servicio separado, ahora Playwright está **integrado directamente en el bot**:
+Playwright está **integrado directamente en el bot**:
 
 - **Auto-refresh programado** — Cada 12 horas (configurable) refresca cookies automáticamente
 - **Refresh on-demand** — Si detecta error de cookies (403, sign-in required), refresca inmediatamente
-- **Perfil persistente** — Chromium guarda la sesión en `data/browser-profile/`
+- **Perfil persistente** — Chromium guarda la sesión en un volumen Docker
+- **Extract manual** — Botón "Extract Cookies" para guardar cookies en cualquier momento
 - **Un solo contenedor** — No más servicio `cookie-refresher` separado
-
-### Login inicial (primera vez)
-
-1. Iniciá el bot con `docker compose up -d --build`
-2. Abrí el dashboard en tu navegador:
-
-```
-http://<tu-ip>:3002/
-```
-
-3. Hacé click en **"Start Login (VNC)"** — aparece el iframe con VNC
-4. Navegá a `youtube.com` e iniciá sesión con tu cuenta de Google
-5. Cerrá el navegador — las cookies se guardan automáticamente
-6. El scheduler se activa automáticamente
-
-### Admin Server
-
-El bot incluye un dashboard web integrado en el puerto `3002`:
-
-| Ruta | Método | Descripción |
-|------|--------|-------------|
-| `/` | GET | Dashboard web con controles de cookies + VNC |
-| `/health` | GET | Health check |
-| `/api/cookies/status` | GET | Estado actual de las cookies |
-| `/api/cookies/refresh` | POST | Refrescar cookies manualmente |
-| `/api/cookies/setup` | POST | Iniciar login interactivo (VNC) |
-| `/api/cookies/setup/stop` | POST | Detener sesión VNC |
-
-Ejemplos con curl:
-
-```bash
-# Ver estado de cookies
-curl http://localhost:3002/api/cookies/status
-
-# Refrescar cookies manualmente
-curl -X POST http://localhost:3002/api/cookies/refresh
-
-# Iniciar login interactivo
-curl -X POST http://localhost:3002/api/cookies/setup
-```
 
 ### Variables de entorno
 
 | Variable | Default | Descripción |
 |----------|---------|-------------|
-| `COOKIE_DIR` | `data/cookies` | Directorio para archivo de cookies |
-| `BROWSER_PROFILE` | `data/browser-profile` | Directorio para perfil de Chromium |
+| `DISCORD_TOKEN` | — | Token del bot (requerido) |
+| `CLIENT_ID` | — | Application ID del bot (requerido) |
+| `ADMIN_TOKEN` | — | Token de acceso al admin panel (requerido) |
+| `COOKIE_DIR` | `/cookies` | Directorio para archivo de cookies |
+| `BROWSER_PROFILE` | `/profile` | Directorio para perfil de Chromium |
 | `COOKIE_REFRESH_INTERVAL_MS` | `43200000` (12h) | Intervalo de auto-refresh |
+| `ADMIN_PORT` | `3002` | Puerto del admin server |
 
 ### Troubleshooting de cookies
 
 | Problema | Causa | Solución |
 |----------|-------|----------|
-| `Sin YouTube cookies` | Primera ejecución | Hacer login inicial via VNC |
-| `Error de cookies` | Sesión expirada | Esperar auto-refresh o refrescar manualmente |
+| `403 Access Denied` | Sin token en URL | Agregá `?token=TU_ADMIN_TOKEN` |
+| `Sin YouTube cookies` | Primera ejecución | Hacer login inicial via VNC + Extract Cookies |
+| `Error de cookies` | Sesión expirada | Esperar auto-refresh o extraer manualmente |
 | `Xvfb not available` | Falta dependencia | `apt-get install xvfb x11vnc novnc websockify` |
+| Cookies no persisten | Bind mount en vez de volume | Usar named volumes en docker-compose.yml |
 
 ---
 
@@ -178,19 +213,6 @@ curl -X POST http://localhost:3002/api/cookies/setup
 4. En **OAuth2 → URL Generator** → marcar `bot` + `applications.commands`
 5. Dar permisos: `Send Messages`, `Connect`, `Speak`, `Use Slash Commands`, `Embed Links`
 6. Invitar el bot al servidor con la URL generada
-
----
-
-## Variables de entorno
-
-| Variable | Requerida | Descripción |
-|----------|-----------|-------------|
-| `DISCORD_TOKEN` | Sí | Token del bot (Discord Developer Portal) |
-| `CLIENT_ID` | Sí | Application ID del bot |
-| `YOUTUBE_COOKIES` | No | Contenido de cookies de YouTube en formato Netscape |
-| `COOKIE_DIR` | No | Directorio para almacenar cookies (default: `data/cookies`) |
-| `BROWSER_PROFILE` | No | Directorio para perfil de Chromium (default: `data/browser-profile`) |
-| `COOKIE_REFRESH_INTERVAL_MS` | No | Intervalo de refresco automático en ms (default: `43200000` = 12h) |
 
 ---
 
@@ -334,6 +356,8 @@ src/
 │   │   └── TrackScheduler.ts # Cola, autoplay, loop, playback
 │   ├── guild/
 │   │   └── GuildManager.ts   # Sesiones por servidor
+│   ├── admin/
+│   │   └── AdminServer.ts    # Dashboard web con token auth
 │   └── cookie/
 │       ├── CookieManager.ts      # Setup y estado de cookies
 │       ├── CookieRefresherService.ts # Playwright refresh
@@ -351,6 +375,11 @@ src/
 │   │   └── HelpEmbed.ts      # Embed de ayuda
 │   └── components/
 │       └── QueueComponents.ts# Botones de la cola
+├── config/
+│   ├── index.ts              # Configuración centralizada
+│   ├── radio.ts              # Config de radio
+│   ├── timeouts.ts           # Timeouts globales
+│   └── ui.ts                 # Config de UI
 ├── utils/
 │   ├── ytdlp.ts              # Spawn yt-dlp con cookies
 │   ├── search.ts             # resolveQuery + autocomplete
@@ -359,8 +388,6 @@ src/
 │   ├── format.ts             # Formato de tiempo y progress bar
 │   ├── error.ts              # Helper de mensajes de error
 │   ├── cookies.ts            # Re-exports de cookie/
-│   ├── cookie-setup.ts       # Re-exports de cookie/
-│   ├── cookieRefresher.ts    # Re-exports de cookie/
 │   └── logger.ts             # Logger estructurado
 ├── constants.ts              # Constantes globales
 ├── index.ts                  # Entry point, client, scheduler
@@ -391,7 +418,8 @@ npm run test:watch # Tests en modo watch
 | `No hay audio` | Bot no tiene permisos de voz | Verificar permisos `Connect` y `Speak` |
 | `Error al reproducir` | URL inválida o video restringido | Probar con otra URL o búsqueda por texto |
 | `yt-dlp falla` | Versión desactualizada | Ejecutar `yt-dlp -U` o reconstruir Docker |
-| `Error de cookies` | Sesión de YouTube expirada | Esperar auto-refresh (12h) o refrescar manualmente |
+| `Error de cookies` | Sesión de YouTube expirada | Esperar auto-refresh (12h) o extraer manualmente |
+| `403 Access Denied` | Sin token en URL del admin | Agregar `?token=TU_ADMIN_TOKEN` |
 | `El reproductor desaparece` | Mensaje borrado | Se recrea automáticamente en el siguiente tick (3s) |
 
 ---

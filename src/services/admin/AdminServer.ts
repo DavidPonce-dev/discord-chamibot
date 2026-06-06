@@ -37,9 +37,10 @@ const ADMIN_PAGE = `<!DOCTYPE html>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;background:#0f0f0f;color:#e0e0e0;min-height:100vh;padding:2rem}
 h1{font-size:1.5rem;margin-bottom:.5rem;color:#fff}
-h2{font-size:1.1rem;margin:1.5rem 0 .5rem;color:#aaa}
+h2{font-size:1.1rem;margin:1.5rem 0 .5rem;color:#aaa;display:flex;align-items:center;gap:.5rem}
+h2 svg{flex-shrink:0}
 .card{background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:1.5rem;margin-bottom:1rem}
-.btn{background:#5865f2;color:#fff;border:none;padding:.6rem 1.2rem;border-radius:6px;cursor:pointer;font-size:.9rem;margin-right:.5rem;margin-bottom:.5rem}
+.btn{background:#5865f2;color:#fff;border:none;padding:.6rem 1.2rem;border-radius:6px;cursor:pointer;font-size:.9rem;margin-right:.5rem;margin-bottom:.5rem;display:inline-flex;align-items:center;gap:.4rem}
 .btn:hover{background:#4752c4}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.danger{background:#ed4245}
@@ -48,6 +49,7 @@ h2{font-size:1.1rem;margin:1.5rem 0 .5rem;color:#aaa}
 .btn.success:hover{background:#236b3a}
 .btn.warning{background:#d4a017}
 .btn.warning:hover{background:#b8890f}
+.btn svg{flex-shrink:0}
 pre{background:#111;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.85rem;margin-top:.5rem}
 .status{display:inline-block;padding:.2rem .6rem;border-radius:4px;font-size:.8rem;font-weight:600}
 .status.ok{background:#2d7d46;color:#57f287}
@@ -72,39 +74,39 @@ pre{background:#111;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.85
 <p style="color:#888">Cookie management dashboard</p>
 
 <div class="card">
-<h2>Cookie Status</h2>
+<h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 0-7 7c0 3 2 5 4 6.5V18a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2.5c2-1.5 4-3.5 4-6.5a7 7 0 0 0-7-7z"/></svg> Cookie Status</h2>
 <div id="cookie-flags">Loading...</div>
 </div>
 
 <div class="card">
-<h2>System Status</h2>
+<h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> System Status</h2>
 <div id="system-status">Loading...</div>
 </div>
 
 <div class="card">
-<h2>Browser Control</h2>
+<h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Browser Control</h2>
 <div id="browser-status" style="margin-bottom:1rem;color:#888">Unknown</div>
-<button class="btn success" onclick="startBrowser()">Start Browser</button>
-<button class="btn warning" onclick="closeBrowserAction()">Close & Extract Cookies</button>
-<button class="btn danger" onclick="forceResetProfile()">Force Reset Profile</button>
+<button class="btn success" onclick="startBrowser()"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Start Browser</button>
+<button class="btn warning" onclick="closeBrowserAction()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Close & Extract</button>
+<button class="btn danger" onclick="forceResetProfile()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Force Reset</button>
 </div>
 
 <div class="card">
-<h2>VNC Login Session</h2>
+<h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> VNC Login Session</h2>
 <div id="vnc-status" style="margin-bottom:1rem;color:#888">No active session</div>
-<button class="btn" onclick="startSetup()">Start VNC Login</button>
-<button class="btn success" onclick="extractCookies()">Extract Cookies</button>
-<button class="btn danger" onclick="stopSetup()">Stop VNC</button>
+<button class="btn" onclick="startSetup()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Start VNC</button>
+<button class="btn success" onclick="extractCookies()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Extract Cookies</button>
+<button class="btn danger" onclick="stopSetup()"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg> Stop VNC</button>
 <iframe id="vnc-frame"></iframe>
 </div>
 
 <div class="card">
-<h2>Cookie Actions</h2>
-<button class="btn" onclick="refreshCookies()">Refresh Cookies (Headless)</button>
+<h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Cookie Actions</h2>
+<button class="btn" onclick="refreshCookies()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Refresh (Headless)</button>
 </div>
 
 <div class="card">
-<h2>Log</h2>
+<h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Log</h2>
 <pre id="log">Ready.</pre>
 </div>
 
