@@ -306,6 +306,7 @@ export function startAdminServer(port: number) {
 
       if (path.startsWith("/vnc/")) {
         if (vncProxy && vncActive) {
+          req.url = req.url!.replace(/^\/vnc\//, "/")
           vncProxy.web(req, res, {
             target: "http://localhost:6080",
             ws: true,
@@ -329,6 +330,7 @@ export function startAdminServer(port: number) {
 
   server.on("upgrade", (req, socket, head) => {
     if (req.url?.startsWith("/vnc/") && vncProxy && vncActive) {
+      req.url = req.url.replace(/^\/vnc\//, "/")
       vncProxy.ws(req, socket, head, {
         target: "http://localhost:6080",
       })
