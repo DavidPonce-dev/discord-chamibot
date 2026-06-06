@@ -36,4 +36,7 @@ export const config = {
   services: {
     cookieRefresherUrl: optional("COOKIE_REFRESHER_URL", ""),
   },
+  admin: {
+    token: process.env.ADMIN_TOKEN ?? "",
+  },
 } as const

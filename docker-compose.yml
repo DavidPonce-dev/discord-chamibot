@@ -9,6 +9,7 @@ services:
       - BROWSER_PROFILE=/profile
       - COOKIE_REFRESH_INTERVAL_MS=43200000
       - ADMIN_PORT=3002
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
     ports:
       - "3002:3002"
     volumes:

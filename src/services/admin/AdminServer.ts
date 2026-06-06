@@ -3,6 +3,7 @@ import httpProxy from "http-proxy"
 import { logger } from "@/utils/logger"
 import { getRefresherInstance, validateCookies, refreshCookies, extractCookies, setScheduler, initBrowser, closeBrowser, isBrowserActive, forceResetProfile } from "@/services/cookie/CookieManager"
 import { CookieScheduler } from "@/services/cookie/CookieScheduler"
+import { config } from "@/config"
 
 let adminServer: http.Server | null = null
 let isSettingUp = false
@@ -17,6 +18,14 @@ export function setSchedulerInstance(s: CookieScheduler | null) {
 export function setVncActive(active: boolean) {
   vncActive = active
 }
+
+function isValidToken(req: http.IncomingMessage): boolean {
+  const url = new URL(req.url!, `http://${req.headers.host}`)
+  const token = url.searchParams.get("token")
+  return config.admin.token !== "" && token === config.admin.token
+}
+
+const ACCESS_DENIED_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Access Denied</title><style>body{font-family:system-ui,sans-serif;background:#0f0f0f;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.container{text-align:center}h1{font-size:2rem;margin-bottom:.5rem;color:#f25757}p{color:#888}</style></head><body><div class="container"><h1>403 \u2014 Access Denied</h1><p>Valid authentication required.</p></div></body></html>`
 
 const ADMIN_PAGE = `<!DOCTYPE html>
 <html lang="en">
@@ -100,7 +109,12 @@ pre{background:#111;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.85
 </div>
 
 <script>
-const API = '/api';
+const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+if (!TOKEN) {
+  document.body.innerHTML = '<div style="text-align:center;padding:4rem"><h1 style="color:#f25757">403 \u2014 Access Denied</h1><p style="color:#888">Valid authentication required.</p></div>';
+  throw new Error('No token');
+}
+const API = '/api?token=' + TOKEN;
 function log(msg){const l=document.getElementById('log');l.textContent+=msg+'\\n';l.scrollTop=l.scrollHeight}
 function badge(val){return '<span class="flag-badge '+(val?'yes':'no')+'">'+(val?'YES':'NO')+'</span>'}
 function updateCookieFlags(d){
@@ -118,7 +132,7 @@ function updateCookieFlags(d){
 }
 function updateIndicator(id, active, label){
   const el = document.getElementById(id);
-  el.innerHTML = '<span class="indicator '+(active?'on':'off')+'"></span>' + (active ? label+' — Active' : label+' — Inactive');
+  el.innerHTML = '<span class="indicator '+(active?'on':'off')+'"></span>' + (active ? label+' \u2014 Active' : label+' \u2014 Inactive');
 }
 async function checkStatus(){
   try{
@@ -161,7 +175,7 @@ async function forceResetProfile(){
     const r=await fetch(API+'/profile/reset',{method:'POST'});
     const d=await r.json();
     if(d.error){log('Error: '+d.error);return}
-    log('Profile reset — use VNC login to re-authenticate');
+    log('Profile reset \u2014 use VNC login to re-authenticate');
     checkStatus();
   }
   catch(e){log('Force reset failed: '+e.message)}
@@ -192,9 +206,9 @@ async function startSetup(){
     const r=await fetch(API+'/cookies/setup',{method:'POST'});
     const d=await r.json();
     if(d.error){log('Error: '+d.error);return}
-    document.getElementById('vnc-frame').src = '/vnc/vnc.html?autoconnect=true&path=/vnc/websockify';
+    document.getElementById('vnc-frame').src = '/vnc/vnc.html?autoconnect=true&path=/vnc/websockify&token='+TOKEN;
     document.getElementById('vnc-frame').style.display='block';
-    log('VNC started — login in the frame below, then close browser to extract cookies');
+    log('VNC started \u2014 login in the frame below, then use Extract Cookies button');
     checkStatus();
   }
   catch(e){log('Setup failed: '+e.message)}
@@ -230,12 +244,7 @@ export function startAdminServer(port: number) {
     const method = req.method
 
     try {
-      if (path === "/" && method === "GET") {
-        res.writeHead(200, { "Content-Type": "text/html" })
-        res.end(ADMIN_PAGE)
-        return
-      }
-
+      // /health is public for Docker/Coolify health checks
       if (path === "/health" && method === "GET") {
         const validation = validateCookies()
         const now = Date.now()
@@ -261,6 +270,19 @@ export function startAdminServer(port: number) {
             active: vncActive,
           },
         }))
+        return
+      }
+
+      // All other routes require valid token
+      if (!isValidToken(req)) {
+        res.writeHead(403, { "Content-Type": "text/html" })
+        res.end(ACCESS_DENIED_HTML)
+        return
+      }
+
+      if (path === "/" && method === "GET") {
+        res.writeHead(200, { "Content-Type": "text/html" })
+        res.end(ADMIN_PAGE)
         return
       }
 
