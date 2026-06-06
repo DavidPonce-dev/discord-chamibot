@@ -186,8 +186,30 @@ export function startAdminServer(port: number) {
       }
 
       if (path === "/health" && method === "GET") {
+        const validation = validateCookies()
+        const now = Date.now()
+        const cookieAgeMs = validation.lastModified ? now - validation.lastModified.getTime() : null
+        const cookieAgeHours = cookieAgeMs ? Math.round(cookieAgeMs / (1000 * 60 * 60)) : null
+
         res.writeHead(200, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ status: "ok", service: "charmin-charmeleon" }))
+        res.end(JSON.stringify({
+          status: "ok",
+          service: "charmin-charmeleon",
+          cookies: {
+            valid: validation.isValid,
+            count: validation.cookieCount,
+            hasPSID: validation.hasPSID,
+            hasSID: validation.hasSID,
+            lastModified: validation.lastModified?.toISOString() ?? null,
+            ageHours: cookieAgeHours,
+          },
+          browser: {
+            active: isBrowserActive(),
+          },
+          vnc: {
+            active: vncActive,
+          },
+        }))
         return
       }
 
@@ -197,6 +219,9 @@ export function startAdminServer(port: number) {
         res.end(JSON.stringify({
           cookiesValid: validation.isValid,
           cookieCount: validation.cookieCount,
+          hasPSID: validation.hasPSID,
+          hasSID: validation.hasSID,
+          lastModified: validation.lastModified?.toISOString() ?? null,
           browserActive: isBrowserActive(),
           vncActive,
         }))
