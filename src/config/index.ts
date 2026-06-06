@@ -31,7 +31,7 @@ export const config = {
     cookieDir: optional("COOKIE_DIR", "data/cookies"),
     browserProfile: optional("BROWSER_PROFILE", "data/browser-profile"),
     cookiesEnv: process.env.YOUTUBE_COOKIES ?? null,
-    cookieRefreshIntervalMs: optionalInt("COOKIE_REFRESH_INTERVAL_MS", 12 * 60 * 60 * 1000),
+    cookieRefreshIntervalMs: optionalInt("COOKIE_REFRESH_INTERVAL_MS", 30 * 60 * 1000),
   },
   services: {
     cookieRefresherUrl: optional("COOKIE_REFRESHER_URL", ""),

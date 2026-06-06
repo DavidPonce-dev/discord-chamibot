@@ -4,7 +4,7 @@ import {
   ButtonStyle,
 } from "discord.js"
 import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
-import { TRACKS_PER_PAGE } from "@/constants"
+import { TRACKS_PER_PAGE } from "@/config/ui"
 import { calcTotalPages, clampPage } from "@/utils/format"
 
 const MAX_TRACK_LABEL = 50

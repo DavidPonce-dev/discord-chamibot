@@ -8,7 +8,7 @@ import {
 import { guildManager } from "@/services/guild/GuildManager"
 import { buildQueueContent, buildEmptyEmbed } from "@/ui/embeds/QueueEmbed"
 import { buildTrackRows, buildNavRow, buildPlaybackRow } from "@/ui/components/QueueComponents"
-import { TRACKS_PER_PAGE } from "@/constants"
+import { TRACKS_PER_PAGE } from "@/config/ui"
 import { calcTotalPages, clampPage } from "@/utils/format"
 import { logger } from "@/utils/logger"
 import { getErrorMessage } from "@/utils/error"

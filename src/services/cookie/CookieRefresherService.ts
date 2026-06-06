@@ -1,5 +1,6 @@
 import fs from "fs"
 import path from "path"
+import { execSync, spawn, ChildProcess } from "child_process"
 import { chromium, BrowserContext } from "playwright"
 import { logger } from "@/utils/logger"
 import { CookieRefreshResult, CookieValidationResult, CookieRefresherConfig } from "./types"
@@ -22,8 +23,6 @@ export class CookieRefresherService {
   }
 
   private async resetProfile() {
-    // Kill any existing Chromium processes that might be holding the profile
-    const { execSync } = require("child_process")
     try {
       execSync("pkill -9 -f chrome || true", { stdio: "ignore" })
       logger.debug("cookies", "Chromium processes killed")
@@ -445,7 +444,6 @@ export class CookieRefresherService {
 
   private isXvfbAvailable(): boolean {
     try {
-      const { execSync } = require("child_process")
       execSync("which Xvfb", { stdio: "ignore" })
       return true
     } catch {
@@ -453,8 +451,7 @@ export class CookieRefresherService {
     }
   }
 
-  private startXvfb(display: string): ReturnType<typeof import("child_process").spawn> {
-    const { spawn } = require("child_process")
+  private startXvfb(display: string): ChildProcess {
     const xvfb = spawn("Xvfb", [display, "-screen", "0", "1280x720x24"], {
       stdio: "ignore",
       env: { ...process.env, DISPLAY: display },
@@ -463,9 +460,7 @@ export class CookieRefresherService {
     return xvfb
   }
 
-  private stopXvfb(
-    xvfb: ReturnType<typeof import("child_process").spawn>
-  ) {
+  private stopXvfb(xvfb: ChildProcess) {
     if (xvfb && !xvfb.killed) {
       xvfb.kill("SIGTERM")
       logger.debug("cookies", "Xvfb stopped")
@@ -475,9 +470,8 @@ export class CookieRefresherService {
   private startVNC(
     display: string,
     port: string
-  ): Array<ReturnType<typeof import("child_process").spawn>> {
-    const { spawn } = require("child_process")
-    const processes: ReturnType<typeof spawn>[] = []
+  ): ChildProcess[] {
+    const processes: ChildProcess[] = []
 
     const x11vnc = spawn(
       "x11vnc",
@@ -497,7 +491,7 @@ export class CookieRefresherService {
     return processes
   }
 
-  private stopVNC(processes: Array<ReturnType<typeof import("child_process").spawn>>) {
+  private stopVNC(processes: ChildProcess[]) {
     for (const proc of processes) {
       if (proc && !proc.killed) {
         proc.kill("SIGTERM")

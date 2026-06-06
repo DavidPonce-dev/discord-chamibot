@@ -9,11 +9,11 @@ const commands = [
   { name: "/st", description: "Detiene y limpia la cola" },
   { name: "/ap", description: "Activa/desactiva el autoplay" },
   { name: "/h", description: "Muestra este mensaje de ayuda" },
-  { name: "/shuffle", description: "Mezcla aleatoriamente la cola" },
-  { name: "/remove", description: "Elimina un tema de la cola por posición" },
+  { name: "/sh", description: "Mezcla aleatoriamente la cola" },
+  { name: "/rm", description: "Elimina un tema de la cola por posición" },
   { name: "/np", description: "Muestra el tema que se está reproduciendo" },
-  { name: "/loop", description: "Cambia el modo de repetición (none / one / all)" },
-  { name: "/seek", description: "Adelanta o atrasa la reproducción" },
+  { name: "/l", description: "Cambia el modo de repetición (none / one / all)" },
+  { name: "/sk", description: "Adelanta o atrasa la reproducción" },
 ]
 
 export function buildHelpEmbed() {

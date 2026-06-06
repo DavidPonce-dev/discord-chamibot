@@ -33,3 +33,5 @@ export const EMBED_COLORS = {
   warning: 0xFEE75C,
   danger: 0xED4245,
 } as const
+
+export const TRACKS_PER_PAGE = 3

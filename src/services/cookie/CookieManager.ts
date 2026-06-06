@@ -95,21 +95,14 @@ export function setupCookies(): string | null {
   }
 
   if (fs.existsSync(COOKIE_PATH)) {
-    const content = fs.readFileSync(COOKIE_PATH, "utf-8")
-    if (content.length > MIN_COOKIE_LENGTH) {
-      const lines = content.split("\n").filter((l) => l.trim() && !l.startsWith("#"))
-      const cookieNames = lines.map((l) => l.split("\t")[5]).filter(Boolean)
-      const uniqueNames = [...new Set(cookieNames)]
-
+    const validation = validateCookies()
+    if (validation.isValid) {
       logger.info("cookie", "YouTube cookies found (mounted file)", {
         path: COOKIE_PATH,
-        totalLines: content.split("\n").length,
-        dataLines: lines.length,
-        uniqueCookies: uniqueNames.length,
-        cookieNames: uniqueNames.join(", "),
-        hasPSID: uniqueNames.some((n) => n.includes("PSID")),
-        hasSID: uniqueNames.some((n) => n === "SID" || n === "HSID" || n === "SSID"),
-        sizeBytes: content.length,
+        uniqueCookies: validation.cookieCount,
+        cookieNames: validation.cookieNames.join(", "),
+        hasPSID: validation.hasPSID,
+        hasSID: validation.hasSID,
       })
       return COOKIE_PATH
     }
@@ -118,19 +111,13 @@ export function setupCookies(): string | null {
   const cookies = config.youtube.cookiesEnv
   if (cookies && cookies.length > MIN_COOKIE_LENGTH) {
     fs.writeFileSync(COOKIE_PATH, cookies, { mode: 0o600 })
-    const lines = cookies.split("\n").filter((l) => l.trim() && !l.startsWith("#"))
-    const cookieNames = lines.map((l) => l.split("\t")[5]).filter(Boolean)
-    const uniqueNames = [...new Set(cookieNames)]
-
+    const validation = validateCookies()
     logger.info("cookie", "YouTube cookies written from env var", {
       path: COOKIE_PATH,
-      totalLines: cookies.split("\n").length,
-      dataLines: lines.length,
-      uniqueCookies: uniqueNames.length,
-      cookieNames: uniqueNames.join(", "),
-      hasPSID: uniqueNames.some((n) => n.includes("PSID")),
-      hasSID: uniqueNames.some((n) => n === "SID" || n === "HSID" || n === "SSID"),
-      sizeBytes: cookies.length,
+      uniqueCookies: validation.cookieCount,
+      cookieNames: validation.cookieNames.join(", "),
+      hasPSID: validation.hasPSID,
+      hasSID: validation.hasSID,
     })
     return COOKIE_PATH
   }

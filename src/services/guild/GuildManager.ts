@@ -86,6 +86,7 @@ export class GuildManager {
     this.queueChannels.delete(guildId)
     this.statusTitles.delete(guildId)
     this.nowPlayingMessages.delete(guildId)
+    this.autoplayPrefs.delete(guildId)
     for (const cb of cleanupCallbacks) {
       cb(guildId)
     }

@@ -7,7 +7,7 @@ import { setupSchedulerCallbacks, initializeQueueDisplay } from "@/services/queu
 import { updateQueueForGuild, setQueuePage } from "@/services/queue/QueueUIManager";
 import { editTemporary } from "@/utils/messages";
 import { logger } from "@/utils/logger";
-import { TRACKS_PER_PAGE } from "@/constants";
+import { TRACKS_PER_PAGE } from "@/config/ui"
 import { calcTotalPages } from "@/utils/format";
 import { getErrorMessage } from "@/utils/error";
 import { requireGuild } from "@/utils/guards";

@@ -1,7 +1,7 @@
 import { EmbedBuilder } from "discord.js"
 import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
 import { parseDuration, buildProgressBar, calcTotalPages, clampPage } from "@/utils/format"
-import { TRACKS_PER_PAGE } from "@/constants"
+import { TRACKS_PER_PAGE } from "@/config/ui"
 
 export function buildQueueContent(queue: TrackScheduler, page: number, statusTitle?: string) {
   const tracks = queue.getQueue()

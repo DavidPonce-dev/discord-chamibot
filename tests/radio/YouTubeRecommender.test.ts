@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { YouTubeRecommender, isMusic, normalizeTitle } from "@/radio/YouTubeRecommender"
+import { findRelated, isMusic, normalizeTitle } from "@/radio/YouTubeRecommender"
 import type { Track } from "@/core/types"
 
 const mockSearchPlayDl = vi.hoisted(() => vi.fn())
@@ -31,23 +31,20 @@ function makePlayResult(id: string, title: string, durationRaw: string) {
   return { id, title, url: `https://youtube.com/watch?v=${id}`, durationRaw }
 }
 
-describe("YouTubeRecommender", () => {
-  let service: YouTubeRecommender
-
+describe("findRelated", () => {
   beforeEach(() => {
-    service = new YouTubeRecommender()
     vi.resetAllMocks()
   })
 
   describe("findRelated — errores esperados (inputs inválidos)", () => {
     it("null, null devuelve null", async () => {
-      const result = await service.findRelated(null, null)
+      const result = await findRelated(null, null)
       expect(result).toBeNull()
     })
 
     it("track sin url y sin title devuelve null", async () => {
       const track = makeTrack({ url: "", title: "" })
-      const result = await service.findRelated(track, null)
+      const result = await findRelated(track, null)
       expect(result).toBeNull()
     })
   })
@@ -62,7 +59,7 @@ describe("YouTubeRecommender", () => {
         makePlayResult("xyz789", "Artist Name - Another Song", "4:00"),
       ])
 
-      const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
+      const result = await findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).not.toBeNull()
       expect(result!.id).toBe("xyz789")
       expect(result!.title).toBe("Artist Name - Another Song")
@@ -71,14 +68,14 @@ describe("YouTubeRecommender", () => {
     it("play-dl devuelve vacío → null", async () => {
       mockSearchPlayDl.mockResolvedValue([])
 
-      const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
+      const result = await findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).toBeNull()
     })
 
     it("play-dl falla → null", async () => {
       mockSearchPlayDl.mockResolvedValue([])
 
-      const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
+      const result = await findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).toBeNull()
     })
   })
@@ -90,7 +87,7 @@ describe("YouTubeRecommender", () => {
         makePlayResult("xyz789", "Different Song", "4:00"),
       ])
 
-      const result = await service.findRelated(
+      const result = await findRelated(
         makeTrack({ id: "abc123" }),
         "Artist Name - Song Title",
       )
@@ -103,7 +100,7 @@ describe("YouTubeRecommender", () => {
         makePlayResult("xyz789", "Artist Name - Song Title", "3:30"),
       ])
 
-      const result = await service.findRelated(
+      const result = await findRelated(
         makeTrack({ title: "Artist Name - Song Title" }),
         "Artist Name - Song Title",
       )
@@ -116,7 +113,7 @@ describe("YouTubeRecommender", () => {
         makePlayResult("short1", "Short Song", "3:00"),
       ])
 
-      const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
+      const result = await findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).not.toBeNull()
       expect(result!.id).toBe("short1")
     })
@@ -126,7 +123,7 @@ describe("YouTubeRecommender", () => {
         makePlayResult("abc123", "Artist Name - Song Title", "3:30"),
       ])
 
-      const result = await service.findRelated(
+      const result = await findRelated(
         makeTrack({ id: "abc123" }),
         "Artist Name - Song Title",
       )
@@ -143,7 +140,7 @@ describe("YouTubeRecommender", () => {
         makePlayResult("genre1", "Rock Song", "3:00"),
       ])
 
-      const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
+      const result = await findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).not.toBeNull()
       expect(mockSearchPlayDl).toHaveBeenCalledWith("rock music")
     })
@@ -158,7 +155,7 @@ describe("YouTubeRecommender", () => {
           makePlayResult("artist1", "Artist Name - Another Song", "3:00"),
         ])
 
-      const result = await service.findRelated(makeTrack(), "Artist Name - Song Title")
+      const result = await findRelated(makeTrack(), "Artist Name - Song Title")
       expect(result).not.toBeNull()
       expect(result!.id).toBe("artist1")
       expect(mockSearchPlayDl).toHaveBeenCalledTimes(2)
@@ -253,7 +250,7 @@ describe("YouTubeRecommender", () => {
       ])
 
       const exclude = new Set(["artist name - song title"])
-      const result = await service.findRelated(
+      const result = await findRelated(
         makeTrack({ id: "prev123" }),
         "Artist Name - Song Title",
         exclude,
@@ -267,7 +264,7 @@ describe("YouTubeRecommender", () => {
       ])
 
       const exclude = new Set(["artist name - song title"])
-      const result = await service.findRelated(
+      const result = await findRelated(
         makeTrack({ id: "prev123" }),
         "Artist Name - Song Title",
         exclude,

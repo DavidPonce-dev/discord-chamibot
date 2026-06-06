@@ -8,8 +8,7 @@ import {
 } from "@discordjs/voice"
 import { Track, LoopMode } from "@/core/types"
 import { AudioService } from "@/services/audio/AudioService"
-import { YouTubeRecommender } from "@/radio/YouTubeRecommender"
-import { normalizeTitle, extractArtist } from "@/radio/YouTubeRecommender"
+import { findRelated, normalizeTitle, extractArtist } from "@/radio/YouTubeRecommender"
 import { logger } from "@/utils/logger"
 import { getErrorMessage } from "@/utils/error"
 
@@ -40,7 +39,6 @@ export class TrackScheduler {
   private destroyed = false
 
   private audio: AudioService
-  private radio: YouTubeRecommender
 
   onTrackChange?: (guildId: string) => void
   onDisconnect?: (guildId: string) => void
@@ -51,7 +49,6 @@ export class TrackScheduler {
     this.player = createAudioPlayer()
     this.connection.subscribe(this.player)
     this.audio = new AudioService()
-    this.radio = new YouTubeRecommender()
     this.registerEvents()
     logger.info("scheduler", "Scheduler creado", {
       guildId: connection.joinConfig.guildId,
@@ -153,7 +150,7 @@ export class TrackScheduler {
       shouldSwitch,
       excludeCount: this.trackHistory.length,
     })
-    const next = await this.radio.findRelated(
+    const next = await findRelated(
       finished,
       this.lastTrackTitle,
       new Set(this.trackHistory),

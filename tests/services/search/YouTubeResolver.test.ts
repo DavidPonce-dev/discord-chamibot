@@ -39,7 +39,7 @@ vi.mock("@/utils/logger", () => ({
   logger: mockLogger,
 }))
 
-const { resolveQuery, autocompleteSearch } = await import("@/utils/search")
+const { resolveQuery, autocompleteSearch } = await import("@/services/search/YouTubeResolver")
 
 function makeVideo(overrides: Record<string, unknown> = {}) {
   return {

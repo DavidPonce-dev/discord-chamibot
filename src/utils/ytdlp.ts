@@ -1,6 +1,6 @@
 import { spawn } from "child_process"
 import fs from "fs"
-import { getCookieFile } from "./cookies"
+import { getCookieFile } from "@/services/cookie/CookieManager"
 import { logger } from "@/utils/logger"
 
 export const USER_AGENT =

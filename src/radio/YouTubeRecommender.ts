@@ -72,66 +72,64 @@ function isSameArtist(a: string, b: string): boolean {
   return na === nb || na.includes(nb) || nb.includes(na)
 }
 
-export class YouTubeRecommender {
-  async findRelated(
-    currentTrack: Track | null,
-    lastTrackTitle: string | null,
-    excludeTitles: Set<string> = new Set(),
-    currentArtist?: string | null,
-    shouldSwitch?: boolean,
-  ): Promise<Omit<Track, "requestedBy"> | null> {
-    const title = lastTrackTitle ?? ""
-    if (!title && !currentTrack?.url) return null
+export async function findRelated(
+  currentTrack: Track | null,
+  lastTrackTitle: string | null,
+  excludeTitles: Set<string> = new Set(),
+  currentArtist?: string | null,
+  shouldSwitch?: boolean,
+): Promise<Omit<Track, "requestedBy"> | null> {
+  const title = lastTrackTitle ?? ""
+  if (!title && !currentTrack?.url) return null
 
-    let genre: string | null = null
-    if (currentTrack?.url) {
-      genre = await detectGenre(currentTrack.url)
-    }
+  let genre: string | null = null
+  if (currentTrack?.url) {
+    genre = await detectGenre(currentTrack.url)
+  }
 
-    const currentId = currentTrack?.id
-    const currentTitle = currentTrack?.title?.toLowerCase()
+  const currentId = currentTrack?.id
+  const currentTitle = currentTrack?.title?.toLowerCase()
 
-    let queries: string[]
-    if (shouldSwitch && currentArtist) {
-      queries = genre ? [`${genre} music`] : ["popular music"]
+  let queries: string[]
+  if (shouldSwitch && currentArtist) {
+    queries = genre ? [`${genre} music`] : ["popular music"]
+  } else {
+    const artistQuery = extractArtist(title)
+    if (genre) {
+      queries = [`${genre} music`, `${genre} ${artistQuery}`]
     } else {
-      const artistQuery = extractArtist(title)
-      if (genre) {
-        queries = [`${genre} music`, `${genre} ${artistQuery}`]
-      } else {
-        queries = [`${artistQuery} music`]
-      }
+      queries = [`${artistQuery} music`]
     }
+  }
 
-    for (const q of queries) {
-      let videos = await searchPlayDl(q)
-      if (!videos.length) continue
+  for (const q of queries) {
+    let videos = await searchPlayDl(q)
+    if (!videos.length) continue
 
-      const filtered = filterResults(videos, currentId, currentTitle, excludeTitles)
-      if (!filtered.length) continue
+    const filtered = filterResults(videos, currentId, currentTitle, excludeTitles)
+    if (!filtered.length) continue
 
-      const shuffled = [...filtered].sort(() => Math.random() - 0.5)
-      const candidates = shuffled.slice(0, MAX_RETRIES)
+    const shuffled = [...filtered].sort(() => Math.random() - 0.5)
+    const candidates = shuffled.slice(0, MAX_RETRIES)
 
-      for (const picked of candidates) {
-        if (await isMusic(picked)) {
-          if (shouldSwitch && currentArtist) {
-            const pickedArtist = extractArtist(picked.title ?? "")
-            if (isSameArtist(pickedArtist, currentArtist)) continue
-          }
-          return {
-            title: picked.title ?? "Unknown",
-            url: picked.url ?? `https://youtube.com/watch?v=${picked.id}`,
-            duration: picked.durationRaw,
-            id: picked.id,
-            thumbnail: picked.id
-              ? `https://img.youtube.com/vi/${picked.id}/hqdefault.jpg`
-              : undefined,
-          }
+    for (const picked of candidates) {
+      if (await isMusic(picked)) {
+        if (shouldSwitch && currentArtist) {
+          const pickedArtist = extractArtist(picked.title ?? "")
+          if (isSameArtist(pickedArtist, currentArtist)) continue
+        }
+        return {
+          title: picked.title ?? "Unknown",
+          url: picked.url ?? `https://youtube.com/watch?v=${picked.id}`,
+          duration: picked.durationRaw,
+          id: picked.id,
+          thumbnail: picked.id
+            ? `https://img.youtube.com/vi/${picked.id}/hqdefault.jpg`
+            : undefined,
         }
       }
     }
-
-    return null
   }
+
+  return null
 }
