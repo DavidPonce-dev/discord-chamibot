@@ -114,7 +114,11 @@ if (!TOKEN) {
   document.body.innerHTML = '<div style="text-align:center;padding:4rem"><h1 style="color:#f25757">403 \u2014 Access Denied</h1><p style="color:#888">Valid authentication required.</p></div>';
   throw new Error('No token');
 }
-const API = '/api?token=' + TOKEN;
+const API = '/api';
+function apiFetch(path, opts) {
+  const sep = path.includes('?') ? '&' : '?';
+  return fetch(API + path + sep + 'token=' + TOKEN, opts);
+}
 function log(msg){const l=document.getElementById('log');l.textContent+=msg+'\\n';l.scrollTop=l.scrollHeight}
 function badge(val){return '<span class="flag-badge '+(val?'yes':'no')+'">'+(val?'YES':'NO')+'</span>'}
 function updateCookieFlags(d){
@@ -136,7 +140,7 @@ function updateIndicator(id, active, label){
 }
 async function checkStatus(){
   try{
-    const r=await fetch(API+'/status');
+    const r=await apiFetch('/status');
     const d=await r.json();
     updateCookieFlags(d);
     updateIndicator('system-status', d.cookiesValid, 'Cookies');
@@ -149,7 +153,7 @@ async function checkStatus(){
 async function startBrowser(){
   log('Starting headless browser...');
   try{
-    const r=await fetch(API+'/browser/start',{method:'POST'});
+    const r=await apiFetch('/browser/start',{method:'POST'});
     const d=await r.json();
     if(d.error){log('Error: '+d.error);return}
     log('Browser started');
@@ -160,7 +164,7 @@ async function startBrowser(){
 async function closeBrowserAction(){
   log('Closing browser and extracting cookies...');
   try{
-    const r=await fetch(API+'/browser/close',{method:'POST'});
+    const r=await apiFetch('/browser/close',{method:'POST'});
     const d=await r.json();
     if(d.error){log('Error: '+d.error);return}
     log('Browser closed. Result: '+JSON.stringify(d));
@@ -172,7 +176,7 @@ async function forceResetProfile(){
   if(!confirm('This will delete all browser data and require re-login. Continue?'))return;
   log('Force resetting browser profile...');
   try{
-    const r=await fetch(API+'/profile/reset',{method:'POST'});
+    const r=await apiFetch('/profile/reset',{method:'POST'});
     const d=await r.json();
     if(d.error){log('Error: '+d.error);return}
     log('Profile reset \u2014 use VNC login to re-authenticate');
@@ -183,7 +187,7 @@ async function forceResetProfile(){
 async function refreshCookies(){
   log('Refreshing cookies...');
   try{
-    const r=await fetch(API+'/cookies/refresh',{method:'POST'});
+    const r=await apiFetch('/cookies/refresh',{method:'POST'});
     const d=await r.json();
     log('Result: '+JSON.stringify(d));
     checkStatus();
@@ -193,7 +197,7 @@ async function refreshCookies(){
 async function extractCookies(){
   log('Extracting cookies from open browser...');
   try{
-    const r=await fetch(API+'/cookies/extract',{method:'POST'});
+    const r=await apiFetch('/cookies/extract',{method:'POST'});
     const d=await r.json();
     log('Result: '+JSON.stringify(d));
     checkStatus();
@@ -203,7 +207,7 @@ async function extractCookies(){
 async function startSetup(){
   log('Starting VNC login...');
   try{
-    const r=await fetch(API+'/cookies/setup',{method:'POST'});
+    const r=await apiFetch('/cookies/setup',{method:'POST'});
     const d=await r.json();
     if(d.error){log('Error: '+d.error);return}
     document.getElementById('vnc-frame').src = '/vnc/vnc.html?autoconnect=true&path=/vnc/websockify&token='+TOKEN;
@@ -216,7 +220,7 @@ async function startSetup(){
 async function stopSetup(){
   log('Stopping VNC...');
   try{
-    await fetch(API+'/cookies/setup/stop',{method:'POST'});
+    await apiFetch('/cookies/setup/stop',{method:'POST'});
     document.getElementById('vnc-frame').style.display='none';
     document.getElementById('vnc-frame').src = '';
     log('VNC stopped');
