@@ -55,6 +55,14 @@ export class CookieRefresherService {
 
     this.isInitializing = true
     try {
+      const chromiumAvailable = await this.checkChromiumAvailable()
+      if (!chromiumAvailable) {
+        throw new Error(
+          "Chromium binary not found. Make sure Playwright and Chromium are installed. " +
+          "Run: npx playwright install chromium"
+        )
+      }
+
       this.resetProfile()
       logger.info("cookies", "Initializing persistent Chromium browser")
       this.browser = await chromium.launchPersistentContext(this.config.browserProfile, {
@@ -69,6 +77,18 @@ export class CookieRefresherService {
       logger.info("cookies", "Chromium browser initialized and ready")
     } finally {
       this.isInitializing = false
+    }
+  }
+
+  private async checkChromiumAvailable(): Promise<boolean> {
+    try {
+      const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] })
+      await browser.close()
+      return true
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      logger.error("cookies", "Chromium not available", { error: msg })
+      return false
     }
   }
 

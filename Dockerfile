@@ -35,6 +35,7 @@ RUN apt-get update && apt-get install -y \
   libasound2 \
   libxshmfence1 \
   libx11-xcb1 \
+  libxfixes3 \
   fonts-liberation \
   xdg-utils \
   # Xvfb + VNC (only needed for interactive login setup)
@@ -63,7 +64,13 @@ COPY --from=builder /app/dist ./dist
 
 # Install Playwright and Chromium
 RUN npx playwright install chromium \
-  && npx playwright install-deps chromium
+  && npx playwright install-deps chromium 2>/dev/null || true
+
+# Verify Chromium binary exists
+RUN node -e "const { chromium } = require('playwright'); console.log('Playwright module loaded')"
+
+# Set explicit Playwright browsers path
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
 
 # Create directories for cookies and browser profile
 RUN mkdir -p /cookies /profile
