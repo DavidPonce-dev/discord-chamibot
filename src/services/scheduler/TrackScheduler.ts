@@ -502,4 +502,13 @@ export class TrackScheduler {
   isDestroyed(): boolean {
     return this.destroyed
   }
+
+  isConnected(): boolean {
+    const status = this.connection.state.status
+    return (
+      status === VoiceConnectionStatus.Ready ||
+      status === VoiceConnectionStatus.Connecting ||
+      status === VoiceConnectionStatus.Signalling
+    )
+  }
 }

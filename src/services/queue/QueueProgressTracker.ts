@@ -15,6 +15,18 @@ function updateProgress(guildId: string) {
     }
     return
   }
+  if (!scheduler.isConnected()) {
+    stopProgressUpdates(guildId)
+    cancelPendingUpdates(guildId)
+    const msg = guildManager.getQueueMessage(guildId)
+    if (msg) msg.delete().catch(() => {})
+    guildManager.clearQueueMessage(guildId)
+    guildManager.clearQueueChannel(guildId)
+    guildManager.clearStatusTitle(guildId)
+    clearQueuePage(guildId)
+    guildManager.delete(guildId)
+    return
+  }
   const statusTitle = guildManager.getStatusTitle(guildId)
   updateQueueForGuild(guildId, statusTitle)
 }
