@@ -1,4 +1,4 @@
-import { setupCookies, setCookieFile, validateCookies, getRefresherInstance, setScheduler, initBrowser } from "@/services/cookie/CookieManager"
+import { setupCookies, setCookieFile, validateCookies, getRefresherInstance, setScheduler, initBrowser, refreshCookies } from "@/services/cookie/CookieManager"
 import { CookieScheduler } from "@/services/cookie/CookieScheduler"
 import { startAdminServer, stopAdminServer, setSchedulerInstance } from "@/services/admin/AdminServer"
 import { createBot } from "@/bot"
@@ -76,10 +76,17 @@ export async function bootstrap() {
     const validation = validateCookies()
     if (validation.isValid) {
       logger.info("bot", "YouTube cookies configuradas", { path: cookiePath, count: validation.cookieCount })
+      startCookieScheduler(cookiePath)
     } else {
-      logger.info("bot", "Cookie path configured — use admin panel to login and extract cookies", { path: cookiePath })
+      logger.warn("bot", "Cookies inválidas o expiradas, intentando refrescar automáticamente...", { path: cookiePath })
+      const refreshResult = await refreshCookies()
+      if (refreshResult.success) {
+        logger.info("bot", "Cookies refrescadas exitosamente al inicio", { count: refreshResult.cookieCount })
+        startCookieScheduler(cookiePath)
+      } else {
+        logger.warn("bot", "No se pudieron refrescar las cookies automáticamente. Usá el admin panel para hacer login.", { path: cookiePath })
+      }
     }
-    startCookieScheduler(cookiePath)
   }
 
   initBrowser().catch((err) => {

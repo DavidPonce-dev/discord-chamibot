@@ -383,7 +383,9 @@ export class CookieRefresherService {
     const cookieNames = lines.map((l) => l.split("\t")[5]).filter(Boolean)
     const uniqueNames = [...new Set(cookieNames)]
 
-    result.isValid = true
+    const hasAuthCookies = uniqueNames.some((n) => n === "SID" || n === "HSID" || n === "SSID" || n.includes("PSID"))
+
+    result.isValid = hasAuthCookies
     result.cookieCount = uniqueNames.length
     result.cookieNames = uniqueNames
     result.hasPSID = uniqueNames.some((n) => n.includes("PSID"))

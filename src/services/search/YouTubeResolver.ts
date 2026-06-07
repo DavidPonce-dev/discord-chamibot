@@ -1,8 +1,9 @@
 import play, { YouTubePlayList } from "play-dl"
 import { logger } from "@/utils/logger"
-import { buildYtDlpArgs, spawnYtDlp } from "@/utils/ytdlp"
+import { buildYtDlpArgs, spawnYtDlp, YtDlpResult } from "@/utils/ytdlp"
 import { formatTime } from "@/utils/format"
 import { YTDL_RESOLVE_TIMEOUT_MS } from "@/config/timeouts"
+import { isCookieError, refreshCookies } from "@/services/cookie/CookieManager"
 
 export interface ResolveResult {
   tracks: {
@@ -37,16 +38,31 @@ function extractVideoId(url: string): string | undefined {
 }
 
 async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string } | null> {
+  return resolveWithYtDlpInternal(url, false)
+}
+
+async function resolveWithYtDlpInternal(url: string, retried: boolean): Promise<{ title: string; duration: string; id: string } | null> {
   const args = buildYtDlpArgs(["--dump-json"])
   args.push(url)
 
   try {
     const result = await spawnYtDlp(args, YTDL_RESOLVE_TIMEOUT_MS)
     if (result.code !== 0 || !result.stdout.trim()) {
+      const stderr = result.stderr.slice(0, 150)
       logger.debug("search", "yt-dlp resolve failed", {
         code: result.code,
-        error: result.stderr.slice(0, 150),
+        error: stderr,
       })
+
+      if (!retried && isCookieError(stderr)) {
+        logger.warn("search", "Cookie error detected in resolver, refreshing and retrying")
+        const refreshResult = await refreshCookies()
+        if (refreshResult.success) {
+          logger.info("search", "Cookies refreshed, retrying yt-dlp resolve")
+          return resolveWithYtDlpInternal(url, true)
+        }
+      }
+
       return null
     }
 
