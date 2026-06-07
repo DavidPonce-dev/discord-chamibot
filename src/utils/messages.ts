@@ -40,3 +40,20 @@ export async function replyAndDelete(
   await interaction.reply(content)
   await interaction.deleteReply().catch(() => {})
 }
+
+export async function silentExecute(
+  interaction: ChatInputCommandInteraction,
+  fn: () => Promise<void>,
+) {
+  await interaction.deferReply()
+  try {
+    await fn()
+  } finally {
+    await interaction.deleteReply().catch(() => {})
+  }
+}
+
+export async function silentReply(interaction: ChatInputCommandInteraction) {
+  await interaction.deferReply()
+  await interaction.deleteReply().catch(() => {})
+}

@@ -1,18 +1,18 @@
 import { ChatInputCommandInteraction } from "discord.js"
-import { guildManager } from "@/services/guild/GuildManager"
 import { updateQueueForGuild } from "@/services/queue/QueueUIManager"
-import { requireScheduler, requireGuild } from "@/utils/guards"
+import { requirePlaying } from "@/utils/guards"
+import { silentReply } from "@/utils/messages"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-  const scheduler = requireScheduler(interaction)
-  if (!scheduler) return
-  if (scheduler.isPaused()) {
+  const result = requirePlaying(interaction)
+  if (!result) return
+
+  if (result.scheduler.isPaused()) {
     await interaction.reply({ content: "Ya está pausado", ephemeral: true })
     return
   }
-  scheduler.pause()
-  await interaction.deferReply()
-  await interaction.deleteReply().catch(() => {})
-  const guildId = requireGuild(interaction)
-  if (guildId) await updateQueueForGuild(guildId)
+
+  result.scheduler.pause()
+  await silentReply(interaction)
+  await updateQueueForGuild(result.guildId)
 }

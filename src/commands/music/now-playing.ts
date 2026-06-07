@@ -3,19 +3,18 @@ import type { GuildTextBasedChannel } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
 import { buildNowPlayingEmbed } from "@/ui/embeds/NowPlayingEmbed"
 import { buildNowPlayingButtons } from "@/ui/components/QueueComponents"
-import { requireScheduler, requireGuild } from "@/utils/guards"
+import { requirePlaying } from "@/utils/guards"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-  const scheduler = requireScheduler(interaction)
-  if (!scheduler) return
+  const result = requirePlaying(interaction)
+  if (!result) return
 
-  const embed = buildNowPlayingEmbed(scheduler)
-  const row = buildNowPlayingButtons(scheduler)
+  const embed = buildNowPlayingEmbed(result.scheduler)
+  const row = buildNowPlayingButtons(result.scheduler)
 
   await interaction.deferReply()
   const channel = interaction.channel as GuildTextBasedChannel | null
   const msg = await channel?.send({ embeds: [embed], components: [row] })
   await interaction.deleteReply().catch(() => {})
-  const guildId = requireGuild(interaction)
-  if (guildId && msg) guildManager.setNowPlayingMessage(guildId, msg)
+  if (msg) guildManager.setNowPlayingMessage(result.guildId, msg)
 }

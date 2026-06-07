@@ -30,7 +30,7 @@ function isMessageDeletedError(err: unknown): boolean {
   return DELETED_MESSAGE_CODES.some(code => msg.includes(String(code))) || msg.includes("Unknown Message")
 }
 
-function buildQueuePayload(scheduler: ReturnType<typeof guildManager.get>, page: number, statusTitle?: string): QueueMessagePayload {
+export function buildQueuePayload(scheduler: ReturnType<typeof guildManager.get>, page: number, statusTitle?: string): QueueMessagePayload {
   if (!scheduler) return { embeds: [buildEmptyEmbed()], components: [] }
 
   const embed = buildQueueContent(scheduler, page, statusTitle)
@@ -225,6 +225,4 @@ export async function refreshQueueMessage(interaction: MessageComponentInteracti
   }
 }
 
-export function buildQueuePayloadForCommand(scheduler: ReturnType<typeof guildManager.get>, page: number): QueueMessagePayload {
-  return buildQueuePayload(scheduler, page)
-}
+

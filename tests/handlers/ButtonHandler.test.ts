@@ -24,7 +24,7 @@ const mockLoopLabels = vi.hoisted(() => ({
 vi.mock("@/utils/guards", () => ({
   requireGuild: mockRequireGuild,
   requireSession: mockRequireSession,
-  requireScheduler: vi.fn(),
+  requirePlaying: vi.fn(),
 }))
 
 vi.mock("@/services/queue/QueueUIManager", () => ({
@@ -124,7 +124,7 @@ describe("ButtonHandler", () => {
       }
       return "guild-1"
     })
-    mockRequireSession.mockReturnValue(makeScheduler())
+    mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler: makeScheduler() })
     mockRefreshQueueMessage.mockResolvedValue(undefined)
     mockGetQueuePage.mockReturnValue(1)
 
@@ -166,9 +166,11 @@ describe("ButtonHandler", () => {
   })
 
   describe("sin guild", () => {
-    it("requireGuild retorna null → responde error y no continúa", async () => {
-      mockRequireGuild.mockImplementation((interaction: any) => {
-        interaction.reply({ content: "Este comando solo funciona en servidores", ephemeral: true }).catch(() => {})
+    it("requireSession retorna null sin guild → responde error y no continúa", async () => {
+      mockRequireSession.mockImplementation((interaction: any) => {
+        if (!interaction.guildId) {
+          interaction.reply({ content: "Este comando solo funciona en servidores", ephemeral: true }).catch(() => {})
+        }
         return null
       })
       const interaction = makeInteraction({ guildId: null })
@@ -178,7 +180,6 @@ describe("ButtonHandler", () => {
         content: "Este comando solo funciona en servidores",
         ephemeral: true,
       })
-      expect(mockRequireSession).not.toHaveBeenCalled()
     })
   })
 
@@ -195,7 +196,7 @@ describe("ButtonHandler", () => {
   describe("queue index actions", () => {
     it("q_up_N llama moveUp con el índice correcto", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_up_2" })
       await handleButton(interaction)
 
@@ -205,7 +206,7 @@ describe("ButtonHandler", () => {
 
     it("q_down_N llama moveDown con el índice correcto", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_down_5" })
       await handleButton(interaction)
 
@@ -215,7 +216,7 @@ describe("ButtonHandler", () => {
 
     it("q_del_N llama remove con el índice correcto", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_del_0" })
       await handleButton(interaction)
 
@@ -227,7 +228,7 @@ describe("ButtonHandler", () => {
   describe("queue playback buttons", () => {
     it("q_playback_pause llama togglePause", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_playback_pause" })
       await handleButton(interaction)
 
@@ -237,7 +238,7 @@ describe("ButtonHandler", () => {
 
     it("q_playback_skip llama skip con page 1", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_playback_skip" })
       await handleButton(interaction)
 
@@ -247,7 +248,7 @@ describe("ButtonHandler", () => {
 
     it("q_playback_shuffle llama shuffle", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_playback_shuffle" })
       await handleButton(interaction)
 
@@ -257,7 +258,7 @@ describe("ButtonHandler", () => {
 
     it("q_playback_clear llama clear", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_playback_clear" })
       await handleButton(interaction)
 
@@ -267,7 +268,7 @@ describe("ButtonHandler", () => {
 
     it("q_playback_autoplay llama toggleAutoplay y toggleAutoplayPref", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_playback_autoplay" })
       await handleButton(interaction)
 
@@ -281,7 +282,7 @@ describe("ButtonHandler", () => {
     it("q_page_prev llama con página anterior", async () => {
       mockGetQueuePage.mockReturnValue(3)
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_page_prev" })
       await handleButton(interaction)
 
@@ -291,7 +292,7 @@ describe("ButtonHandler", () => {
     it("q_page_prev en página 1 se queda en 1", async () => {
       mockGetQueuePage.mockReturnValue(1)
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_page_prev" })
       await handleButton(interaction)
 
@@ -301,7 +302,7 @@ describe("ButtonHandler", () => {
     it("q_page_next llama con página siguiente", async () => {
       mockGetQueuePage.mockReturnValue(2)
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_page_next" })
       await handleButton(interaction)
 
@@ -312,7 +313,7 @@ describe("ButtonHandler", () => {
   describe("now playing buttons", () => {
     it("np_pause llama pause y responde con followUp", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "np_pause" })
       await handleButton(interaction)
 
@@ -323,7 +324,7 @@ describe("ButtonHandler", () => {
 
     it("np_resume llama resume y responde con followUp", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "np_resume" })
       await handleButton(interaction)
 
@@ -333,7 +334,7 @@ describe("ButtonHandler", () => {
 
     it("np_skip llama skip y responde con followUp", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "np_skip" })
       await handleButton(interaction)
 
@@ -343,7 +344,7 @@ describe("ButtonHandler", () => {
 
     it("np_loop llama toggleLoop y responde con label del modo", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "np_loop" })
       await handleButton(interaction)
 
@@ -353,7 +354,7 @@ describe("ButtonHandler", () => {
 
     it("np_shuffle llama shuffle y responde con followUp", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "np_shuffle" })
       await handleButton(interaction)
 
@@ -363,7 +364,7 @@ describe("ButtonHandler", () => {
 
     it("np_seek_back llama seek con posición -15s", async () => {
       const scheduler = makeScheduler({ getPosition: vi.fn().mockReturnValue(30) })
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "np_seek_back" })
       await handleButton(interaction)
 
@@ -373,7 +374,7 @@ describe("ButtonHandler", () => {
 
     it("np_seek_back no baja de 0", async () => {
       const scheduler = makeScheduler({ getPosition: vi.fn().mockReturnValue(10) })
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "np_seek_back" })
       await handleButton(interaction)
 
@@ -384,7 +385,7 @@ describe("ButtonHandler", () => {
   describe("botón desconocido", () => {
     it("responde con acción no reconocida", async () => {
       const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "unknown_action" })
       await handleButton(interaction)
 
@@ -400,7 +401,7 @@ describe("ButtonHandler", () => {
       const scheduler = makeScheduler({
         togglePause: vi.fn().mockImplementation(() => { throw new Error("boom") }),
       })
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({ customId: "q_playback_pause" })
       await handleButton(interaction)
 
@@ -414,7 +415,7 @@ describe("ButtonHandler", () => {
       const scheduler = makeScheduler({
         togglePause: vi.fn().mockImplementation(() => { throw new Error("boom") }),
       })
-      mockRequireSession.mockReturnValue(scheduler)
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
       const interaction = makeInteraction({
         customId: "q_playback_pause",
         replied: true,

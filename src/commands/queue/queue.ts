@@ -1,28 +1,25 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import type { GuildTextBasedChannel } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
-import { buildQueuePayloadForCommand } from "@/services/queue/QueueUIManager"
-import { setQueuePage } from "@/services/queue/QueueUIManager"
-import { requireGuild } from "@/utils/guards"
+import { buildQueuePayload, setQueuePage } from "@/services/queue/QueueUIManager"
+import { requireSession } from "@/utils/guards"
+import { silentReply } from "@/utils/messages"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
-  const guildId = requireGuild(interaction)
-  if (!guildId) return
-  const scheduler = guildManager.get(guildId)
+  const result = requireSession(interaction)
+  if (!result) return
 
-  if (!scheduler || (scheduler.getSize() === 0 && !scheduler.getCurrentTrack())) {
-    await interaction.deferReply()
-    await interaction.deleteReply().catch(() => {})
+  if (result.scheduler.getSize() === 0 && !result.scheduler.getCurrentTrack()) {
+    await silentReply(interaction)
     return
   }
 
-  setQueuePage(guildId, 1)
-  await interaction.deferReply()
-  await interaction.deleteReply().catch(() => {})
+  setQueuePage(result.guildId, 1)
+  await silentReply(interaction)
   const channel = interaction.channel as GuildTextBasedChannel | null
   if (channel?.send) {
-    const sent = await channel.send(buildQueuePayloadForCommand(scheduler, 1))
-    guildManager.setQueueMessage(guildId, sent)
-    guildManager.setQueueChannel(guildId, channel)
+    const sent = await channel.send(buildQueuePayload(result.scheduler, 1))
+    guildManager.setQueueMessage(result.guildId, sent)
+    guildManager.setQueueChannel(result.guildId, channel)
   }
 }

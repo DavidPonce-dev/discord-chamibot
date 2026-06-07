@@ -245,13 +245,21 @@ export class TrackScheduler {
   }
 
   private processingQueue = false
+  private queuePending = false
 
   private async processQueue() {
-    if (this.isPlaying || this.processingQueue) return
+    if (this.processingQueue) {
+      this.queuePending = true
+      return
+    }
 
     this.processingQueue = true
     try {
       await this._processQueueLoop()
+      while (this.queuePending) {
+        this.queuePending = false
+        await this._processQueueLoop()
+      }
     } finally {
       this.processingQueue = false
     }

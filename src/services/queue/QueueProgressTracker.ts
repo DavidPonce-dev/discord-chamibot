@@ -5,6 +5,7 @@ import { isQueueEmpty } from "@/utils/guards"
 import { PROGRESS_UPDATE_INTERVAL_MS } from "@/config/timeouts"
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
+const callbacksSetup = new Set<string>()
 
 function updateProgress(guildId: string) {
   const scheduler = guildManager.get(guildId)
@@ -42,23 +43,24 @@ registerCleanup(stopProgressUpdates)
 registerPreDestroyCleanup(stopProgressUpdates)
 
 export function setupSchedulerCallbacks(scheduler: import("../scheduler/TrackScheduler").TrackScheduler, guildId: string) {
-  if (!scheduler.onTrackChange) {
-    scheduler.onTrackChange = (gId) => {
-      setQueuePage(gId, 1)
-      const statusTitle = guildManager.getStatusTitle(gId)
-      updateQueueForGuild(gId, statusTitle)
-      const s = guildManager.get(gId)
-      if (s?.getCurrentTrack()) {
-        startProgressUpdates(gId)
-      }
+  if (callbacksSetup.has(guildId)) return
+
+  callbacksSetup.add(guildId)
+
+  scheduler.onTrackChange = (gId) => {
+    setQueuePage(gId, 1)
+    const statusTitle = guildManager.getStatusTitle(gId)
+    updateQueueForGuild(gId, statusTitle)
+    const s = guildManager.get(gId)
+    if (s?.getCurrentTrack()) {
+      startProgressUpdates(gId)
     }
   }
 
-  if (!scheduler.onDisconnect) {
-    scheduler.onDisconnect = (gId) => {
-      stopProgressUpdates(gId)
-      cleanupQueueUI(gId)
-    }
+  scheduler.onDisconnect = (gId) => {
+    callbacksSetup.delete(gId)
+    stopProgressUpdates(gId)
+    cleanupQueueUI(gId)
   }
 }
 

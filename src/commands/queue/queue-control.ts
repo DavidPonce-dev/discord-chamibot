@@ -1,45 +1,43 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
 import { updateQueueForGuild } from "@/services/queue/QueueUIManager"
-import { requireSession, requireGuild } from "@/utils/guards"
+import { requireSession } from "@/utils/guards"
+import { silentReply } from "@/utils/messages"
 
 export async function remove(interaction: ChatInputCommandInteraction) {
   const position = interaction.options.getInteger("position", true)
-  const scheduler = requireSession(interaction)
-  if (!scheduler) return
+  const result = requireSession(interaction)
+  if (!result) return
 
-  const removed = scheduler.remove(position - 1)
+  const removed = result.scheduler.remove(position - 1)
   if (!removed) {
     await interaction.reply({ content: "Posición inválida", ephemeral: true })
     return
   }
 
-  await interaction.deferReply()
-  await interaction.deleteReply().catch(() => {})
-  const guildId = requireGuild(interaction)
-  if (guildId) await updateQueueForGuild(guildId)
+  await silentReply(interaction)
+  await updateQueueForGuild(result.guildId)
 }
 
 export async function shuffle(interaction: ChatInputCommandInteraction) {
-  const guildId = requireGuild(interaction)
-  if (!guildId) return
-  const scheduler = guildManager.get(guildId)
-  if (!scheduler || scheduler.getSize() === 0) {
+  const result = requireSession(interaction)
+  if (!result) return
+
+  if (result.scheduler.getSize() === 0) {
     await interaction.reply({ content: "La cola está vacía", ephemeral: true })
     return
   }
-  scheduler.shuffle()
-  await interaction.deferReply()
-  await interaction.deleteReply().catch(() => {})
-  await updateQueueForGuild(guildId)
+
+  result.scheduler.shuffle()
+  await silentReply(interaction)
+  await updateQueueForGuild(result.guildId)
 }
 
 export async function loop(interaction: ChatInputCommandInteraction) {
-  const scheduler = requireSession(interaction)
-  if (!scheduler) return
-  scheduler.toggleLoop()
-  await interaction.deferReply()
-  await interaction.deleteReply().catch(() => {})
-  const guildId = requireGuild(interaction)
-  if (guildId) await updateQueueForGuild(guildId)
+  const result = requireSession(interaction)
+  if (!result) return
+
+  result.scheduler.toggleLoop()
+  await silentReply(interaction)
+  await updateQueueForGuild(result.guildId)
 }

@@ -2,7 +2,7 @@ import { ButtonInteraction } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
 import { refreshQueueMessage, getQueuePage } from "@/services/queue/QueueUIManager"
 import { logger } from "@/utils/logger"
-import { requireSession, requireGuild } from "@/utils/guards"
+import { requireSession } from "@/utils/guards"
 import { BUTTON_PREFIXES, LOOP_LABELS } from "@/config/ui"
 import { BUTTON_COOLDOWN_MS, SEEK_BACK_SECONDS } from "@/config/timeouts"
 import { getErrorMessage } from "@/utils/error"
@@ -31,8 +31,10 @@ const queueIndexActions: Record<string, QueueButtonAction> = {
 }
 
 export async function handleButton(interaction: ButtonInteraction) {
-  const guildId = requireGuild(interaction)
-  if (!guildId) return
+  const result = requireSession(interaction)
+  if (!result) return
+
+  const { guildId, scheduler } = result
   const user = interaction.user.username
   const userId = interaction.user.id
 
@@ -42,12 +44,6 @@ export async function handleButton(interaction: ButtonInteraction) {
   }
 
   setCooldown(userId)
-  const scheduler = requireSession(interaction)
-
-  if (!scheduler) {
-    logger.warn("button", "Bot\u00f3n sin sesi\u00f3n activa", { user, guildId, customId: interaction.customId })
-    return
-  }
 
   try {
     for (const [prefix, { action, logEvent }] of Object.entries(queueIndexActions)) {

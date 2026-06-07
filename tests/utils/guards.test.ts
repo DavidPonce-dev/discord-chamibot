@@ -10,7 +10,7 @@ vi.mock("@/services/guild/GuildManager", () => ({
   },
 }))
 
-const { requireGuild, requireScheduler, requireSession } = await import("../../src/utils/guards")
+const { requireGuild, requirePlaying, requireSession } = await import("../../src/utils/guards")
 
 function makeInteraction(overrides: Record<string, unknown> = {}): ChatInputCommandInteraction {
   return {
@@ -59,21 +59,23 @@ describe("guards", () => {
     })
   })
 
-  describe("requireScheduler", () => {
-    it("retorna scheduler si existe y tiene track actual", () => {
+  describe("requirePlaying", () => {
+    it("retorna session result si existe scheduler y tiene track actual", () => {
       const scheduler = makeScheduler()
       mockGuildManagerGet.mockReturnValue(scheduler)
       const interaction = makeInteraction()
 
-      const result = requireScheduler(interaction)
+      const result = requirePlaying(interaction)
 
-      expect(result).toBe(scheduler)
+      expect(result).not.toBeNull()
+      expect(result!.scheduler).toBe(scheduler)
+      expect(result!.guildId).toBe("guild-1")
     })
 
     it("retorna null si no hay guild", () => {
       const interaction = makeInteraction({ guildId: null })
 
-      const result = requireScheduler(interaction)
+      const result = requirePlaying(interaction)
 
       expect(result).toBeNull()
       expect(interaction.reply).toHaveBeenCalledWith({
@@ -86,7 +88,7 @@ describe("guards", () => {
       mockGuildManagerGet.mockReturnValue(null)
       const interaction = makeInteraction()
 
-      const result = requireScheduler(interaction)
+      const result = requirePlaying(interaction)
 
       expect(result).toBeNull()
       expect(interaction.reply).toHaveBeenCalledWith({
@@ -100,7 +102,7 @@ describe("guards", () => {
       mockGuildManagerGet.mockReturnValue(scheduler)
       const interaction = makeInteraction()
 
-      const result = requireScheduler(interaction)
+      const result = requirePlaying(interaction)
 
       expect(result).toBeNull()
       expect(interaction.reply).toHaveBeenCalledWith({
@@ -111,14 +113,16 @@ describe("guards", () => {
   })
 
   describe("requireSession", () => {
-    it("retorna scheduler si existe la sesión", () => {
+    it("retorna session result si existe la sesión", () => {
       const scheduler = makeScheduler()
       mockGuildManagerGet.mockReturnValue(scheduler)
       const interaction = makeInteraction()
 
       const result = requireSession(interaction)
 
-      expect(result).toBe(scheduler)
+      expect(result).not.toBeNull()
+      expect(result!.scheduler).toBe(scheduler)
+      expect(result!.guildId).toBe("guild-1")
     })
 
     it("retorna null si no hay guild", () => {
