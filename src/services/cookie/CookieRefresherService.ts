@@ -317,8 +317,10 @@ export class CookieRefresherService {
     // Close existing browser before launching with VNC
     if (this.browser) {
       await this.closeBrowser()
-      await this.waitForProfileFree()
     }
+
+    // Always clean stale locks (needed after redeploy when this.browser is null)
+    await this.waitForProfileFree()
 
     const xvfb = this.startXvfb(display)
     const vncProcesses = this.startVNC(display, vncPort)
