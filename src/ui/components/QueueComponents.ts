@@ -4,8 +4,8 @@ import {
   ButtonStyle,
 } from "discord.js"
 import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
-import { TRACKS_PER_PAGE } from "@/config/ui"
-import { calcTotalPages, clampPage } from "@/utils/format"
+import { BUTTON_PREFIXES, TRACKS_PER_PAGE } from "@/config/ui"
+import { paginate } from "@/utils/format"
 
 const MAX_TRACK_LABEL = 50
 
@@ -16,14 +16,11 @@ function truncateLabel(text: string, max: number): string {
 
 export function buildTrackRows(queue: TrackScheduler, page: number) {
   const tracks = queue.getQueue()
-  const totalPages = calcTotalPages(tracks.length, TRACKS_PER_PAGE)
-  const clampedPage = clampPage(page, totalPages)
-  const startIdx = (clampedPage - 1) * TRACKS_PER_PAGE
-  const pageTracks = tracks.slice(startIdx, startIdx + TRACKS_PER_PAGE)
+  const { pageItems, startIdx } = paginate(tracks, page, TRACKS_PER_PAGE)
 
   const rows: ActionRowBuilder<ButtonBuilder>[] = []
 
-  pageTracks.forEach((t, i) => {
+  pageItems.forEach((t, i) => {
     const idx = startIdx + i
     const canMoveUp = idx > 0
     const canMoveDown = idx < tracks.length - 1
@@ -35,21 +32,21 @@ export function buildTrackRows(queue: TrackScheduler, page: number) {
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`q_del_${idx}`)
-        .setEmoji("🗑")
+        .setCustomId(`${BUTTON_PREFIXES.queueDelete}${idx}`)
+        .setEmoji("\ud83d\uddd1")
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
-        .setCustomId(`q_up_${idx}`)
-        .setEmoji("⬆")
+        .setCustomId(`${BUTTON_PREFIXES.queueUp}${idx}`)
+        .setEmoji("\u2b06")
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(!canMoveUp),
       new ButtonBuilder()
-        .setCustomId(`q_down_${idx}`)
-        .setEmoji("⬇")
+        .setCustomId(`${BUTTON_PREFIXES.queueDown}${idx}`)
+        .setEmoji("\u2b07")
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(!canMoveDown),
       new ButtonBuilder()
-        .setCustomId(`q_track_${idx}`)
+        .setCustomId(`${BUTTON_PREFIXES.queueTrack}${idx}`)
         .setLabel(label)
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(true),
@@ -65,18 +62,18 @@ export function buildNavRow(page: number, totalPages: number) {
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId("q_page_prev")
-      .setEmoji("◀")
+      .setCustomId(BUTTON_PREFIXES.queuePagePrev)
+      .setEmoji("\u25c0")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page <= 1),
     new ButtonBuilder()
-      .setCustomId("q_page_indicator")
+      .setCustomId(BUTTON_PREFIXES.queuePageIndicator)
       .setLabel(`${page} / ${totalPages}`)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(true),
     new ButtonBuilder()
-      .setCustomId("q_page_next")
-      .setEmoji("▶")
+      .setCustomId(BUTTON_PREFIXES.queuePageNext)
+      .setEmoji("\u25b6")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page >= totalPages),
   )
@@ -87,42 +84,42 @@ export function buildPlaybackRow(queue: TrackScheduler) {
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId("q_playback_pause")
-      .setEmoji(isPaused ? "▶" : "⏸")
+      .setCustomId(BUTTON_PREFIXES.queuePlaybackPause)
+      .setEmoji(isPaused ? "\u25b6" : "\u23f8")
       .setLabel(isPaused ? "Reanudar" : "Pausar")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId("q_playback_skip")
-      .setEmoji("⏭")
+      .setCustomId(BUTTON_PREFIXES.queuePlaybackSkip)
+      .setEmoji("\u23ed")
       .setLabel("Siguiente")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId("q_playback_shuffle")
-      .setEmoji("🔀")
+      .setCustomId(BUTTON_PREFIXES.queuePlaybackShuffle)
+      .setEmoji("\ud83d\udd00")
       .setLabel("Mezclar")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId("q_playback_clear")
-      .setEmoji("🗑")
+      .setCustomId(BUTTON_PREFIXES.queuePlaybackClear)
+      .setEmoji("\ud83d\uddd1")
       .setLabel("Limpiar")
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId("q_playback_autoplay")
-      .setEmoji("💿")
+      .setCustomId(BUTTON_PREFIXES.queuePlaybackAutoplay)
+      .setEmoji("\ud83d\udcbf")
       .setLabel(queue.isAutoplayEnabled() ? "Radio: ON" : "Radio: OFF")
       .setStyle(queue.isAutoplayEnabled() ? ButtonStyle.Success : ButtonStyle.Secondary),
   )
 }
 
 export function buildNowPlayingButtons(queue: TrackScheduler) {
-  const pauseLabel = queue.isPaused() ? "▶ Reanudar" : "⏸ Pausar"
-  const pauseId = queue.isPaused() ? "np_resume" : "np_pause"
+  const pauseLabel = queue.isPaused() ? "\u25b6 Reanudar" : "\u23f8 Pausar"
+  const pauseId = queue.isPaused() ? BUTTON_PREFIXES.nowPlayingResume : BUTTON_PREFIXES.nowPlayingPause
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("np_seek_back").setEmoji("⏪").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(BUTTON_PREFIXES.nowPlayingSeekBack).setEmoji("\u23ea").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(pauseId).setLabel(pauseLabel).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("np_skip").setEmoji("⏭").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("np_loop").setEmoji("🔁").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("np_shuffle").setEmoji("🔀").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(BUTTON_PREFIXES.nowPlayingSkip).setEmoji("\u23ed").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(BUTTON_PREFIXES.nowPlayingLoop).setEmoji("\ud83d\udd01").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(BUTTON_PREFIXES.nowPlayingShuffle).setEmoji("\ud83d\udd00").setStyle(ButtonStyle.Secondary),
   )
 }

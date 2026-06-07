@@ -49,7 +49,26 @@ vi.mock("@/utils/error", () => ({
 
 vi.mock("@/config/ui", () => ({
   LOOP_LABELS: mockLoopLabels,
-  BUTTON_PREFIXES: {},
+  BUTTON_PREFIXES: {
+    queueUp: "q_up_",
+    queueDown: "q_down_",
+    queueDelete: "q_del_",
+    queueTrack: "q_track_",
+    queuePagePrev: "q_page_prev",
+    queuePageNext: "q_page_next",
+    queuePageIndicator: "q_page_indicator",
+    queuePlaybackPause: "q_playback_pause",
+    queuePlaybackSkip: "q_playback_skip",
+    queuePlaybackShuffle: "q_playback_shuffle",
+    queuePlaybackClear: "q_playback_clear",
+    queuePlaybackAutoplay: "q_playback_autoplay",
+    nowPlayingPause: "np_pause",
+    nowPlayingResume: "np_resume",
+    nowPlayingSkip: "np_skip",
+    nowPlayingLoop: "np_loop",
+    nowPlayingShuffle: "np_shuffle",
+    nowPlayingSeekBack: "np_seek_back",
+  },
   EMBED_COLORS: {},
 }))
 

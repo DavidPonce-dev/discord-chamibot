@@ -28,6 +28,18 @@ export function clampPage(page: number, totalPages: number): number {
   return Math.min(Math.max(1, page), totalPages)
 }
 
+export function paginate<T>(items: T[], page: number, perPage: number) {
+  const totalPages = calcTotalPages(items.length, perPage)
+  const clampedPage = clampPage(page, totalPages)
+  const startIdx = (clampedPage - 1) * perPage
+  return {
+    pageItems: items.slice(startIdx, startIdx + perPage),
+    page: clampedPage,
+    totalPages,
+    startIdx,
+  }
+}
+
 const EMPTY = "\u2591"
 
 export function buildProgressBar(pos: number, total: number, width = 36): string {

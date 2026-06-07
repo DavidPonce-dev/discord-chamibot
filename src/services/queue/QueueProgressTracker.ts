@@ -1,13 +1,14 @@
 import { GuildTextBasedChannel } from "discord.js"
 import { guildManager, registerCleanup, registerPreDestroyCleanup } from "@/services/guild/GuildManager"
-import { ensureQueueMessage, updateQueueForGuild, setQueuePage, clearQueuePage, cancelPendingUpdates } from "@/services/queue/QueueUIManager"
+import { ensureQueueMessage, updateQueueForGuild, setQueuePage, cleanupQueueUI } from "@/services/queue/QueueUIManager"
+import { isQueueEmpty } from "@/utils/guards"
 import { PROGRESS_UPDATE_INTERVAL_MS } from "@/config/timeouts"
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
 
 function updateProgress(guildId: string) {
   const scheduler = guildManager.get(guildId)
-  if (!scheduler || (!scheduler.getCurrentTrack() && scheduler.getSize() === 0)) {
+  if (isQueueEmpty(scheduler)) {
     const iv = progressIntervals.get(guildId)
     if (iv) {
       clearInterval(iv)
@@ -15,16 +16,9 @@ function updateProgress(guildId: string) {
     }
     return
   }
-  if (!scheduler.isConnected()) {
+  if (!scheduler!.isConnected()) {
     stopProgressUpdates(guildId)
-    cancelPendingUpdates(guildId)
-    const msg = guildManager.getQueueMessage(guildId)
-    if (msg) msg.delete().catch(() => {})
-    guildManager.clearQueueMessage(guildId)
-    guildManager.clearQueueChannel(guildId)
-    guildManager.clearStatusTitle(guildId)
-    clearQueuePage(guildId)
-    guildManager.delete(guildId)
+    cleanupQueueUI(guildId)
     return
   }
   const statusTitle = guildManager.getStatusTitle(guildId)
@@ -63,14 +57,7 @@ export function setupSchedulerCallbacks(scheduler: import("../scheduler/TrackSch
   if (!scheduler.onDisconnect) {
     scheduler.onDisconnect = (gId) => {
       stopProgressUpdates(gId)
-      cancelPendingUpdates(gId)
-      const msg = guildManager.getQueueMessage(gId)
-      if (msg) msg.delete().catch(() => {})
-      guildManager.clearQueueMessage(gId)
-      guildManager.clearQueueChannel(gId)
-      guildManager.clearStatusTitle(gId)
-      clearQueuePage(gId)
-      guildManager.delete(gId)
+      cleanupQueueUI(gId)
     }
   }
 }

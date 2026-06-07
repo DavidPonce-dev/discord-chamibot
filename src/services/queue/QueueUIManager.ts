@@ -9,11 +9,11 @@ import { guildManager } from "@/services/guild/GuildManager"
 import { buildQueueContent, buildEmptyEmbed } from "@/ui/embeds/QueueEmbed"
 import { buildTrackRows, buildNavRow, buildPlaybackRow } from "@/ui/components/QueueComponents"
 import { TRACKS_PER_PAGE } from "@/config/ui"
-import { calcTotalPages, clampPage } from "@/utils/format"
+import { paginate } from "@/utils/format"
+import { isQueueEmpty, requireGuild } from "@/utils/guards"
 import { logger } from "@/utils/logger"
 import { getErrorMessage } from "@/utils/error"
 import { EMPTY_MESSAGE_TIMEOUT_MS } from "@/config/timeouts"
-import { requireGuild } from "@/utils/guards"
 
 type QueueMessagePayload = {
   embeds: EmbedBuilder[]
@@ -34,8 +34,7 @@ function buildQueuePayload(scheduler: ReturnType<typeof guildManager.get>, page:
   if (!scheduler) return { embeds: [buildEmptyEmbed()], components: [] }
 
   const embed = buildQueueContent(scheduler, page, statusTitle)
-  const tracks = scheduler.getQueue()
-  const totalPages = calcTotalPages(tracks.length, TRACKS_PER_PAGE)
+  const { totalPages } = paginate(scheduler.getQueue(), page, TRACKS_PER_PAGE)
 
   const rows = buildTrackRows(scheduler, page)
   const navRow = buildNavRow(page, totalPages)
@@ -47,6 +46,16 @@ function buildQueuePayload(scheduler: ReturnType<typeof guildManager.get>, page:
 
 function buildEmptyPayload(): QueueMessagePayload {
   return { embeds: [buildEmptyEmbed()], components: [] }
+}
+
+export async function cleanupQueueUI(guildId: string) {
+  const msg = guildManager.getQueueMessage(guildId)
+  if (msg) msg.delete().catch(() => {})
+  guildManager.clearQueueMessage(guildId)
+  guildManager.clearQueueChannel(guildId)
+  guildManager.clearStatusTitle(guildId)
+  clearQueuePage(guildId)
+  guildManager.delete(guildId)
 }
 
 async function recreateQueueMessage(guildId: string, statusTitle?: string, page?: number) {
@@ -103,7 +112,7 @@ async function doEdit(guildId: string, statusTitle?: string, page?: number) {
     const msg = guildManager.getQueueMessage(guildId)
     if (!scheduler || scheduler.isDestroyed()) return
 
-    if (scheduler.getSize() === 0 && !scheduler.getCurrentTrack()) {
+    if (isQueueEmpty(scheduler)) {
       if (msg) {
         try {
           await msg.delete()
@@ -191,7 +200,7 @@ export async function refreshQueueMessage(interaction: MessageComponentInteracti
   const scheduler = guildManager.get(guildId)
   const msg = guildManager.getQueueMessage(guildId)
 
-  const isEmpty = !scheduler || (scheduler.getSize() === 0 && !scheduler.getCurrentTrack())
+  const isEmpty = isQueueEmpty(scheduler)
   const payload = isEmpty ? buildEmptyPayload() : (() => {
     const currentPage = page ?? queuePages.get(guildId) ?? 1
     queuePages.set(guildId, currentPage)

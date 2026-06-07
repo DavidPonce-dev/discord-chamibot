@@ -3,7 +3,7 @@ import { guildManager } from "@/services/guild/GuildManager"
 import { refreshQueueMessage, getQueuePage } from "@/services/queue/QueueUIManager"
 import { logger } from "@/utils/logger"
 import { requireSession, requireGuild } from "@/utils/guards"
-import { LOOP_LABELS } from "@/config/ui"
+import { BUTTON_PREFIXES, LOOP_LABELS } from "@/config/ui"
 import { BUTTON_COOLDOWN_MS, SEEK_BACK_SECONDS } from "@/config/timeouts"
 import { getErrorMessage } from "@/utils/error"
 
@@ -25,9 +25,9 @@ interface QueueButtonAction {
 }
 
 const queueIndexActions: Record<string, QueueButtonAction> = {
-  q_up_: { action: (s, idx) => s.moveUp(idx), logEvent: "Subir track" },
-  q_down_: { action: (s, idx) => s.moveDown(idx), logEvent: "Bajar track" },
-  q_del_: { action: (s, idx) => s.remove(idx), logEvent: "Eliminar de cola" },
+  [BUTTON_PREFIXES.queueUp]: { action: (s, idx) => s.moveUp(idx), logEvent: "Subir track" },
+  [BUTTON_PREFIXES.queueDown]: { action: (s, idx) => s.moveDown(idx), logEvent: "Bajar track" },
+  [BUTTON_PREFIXES.queueDelete]: { action: (s, idx) => s.remove(idx), logEvent: "Eliminar de cola" },
 }
 
 export async function handleButton(interaction: ButtonInteraction) {
@@ -37,7 +37,7 @@ export async function handleButton(interaction: ButtonInteraction) {
   const userId = interaction.user.id
 
   if (isOnCooldown(userId)) {
-    await interaction.reply({ content: "Esperá un momento antes de usar otro botón", ephemeral: true }).catch(() => {})
+    await interaction.reply({ content: "Esper\u00e1 un momento antes de usar otro bot\u00f3n", ephemeral: true }).catch(() => {})
     return
   }
 
@@ -45,12 +45,11 @@ export async function handleButton(interaction: ButtonInteraction) {
   const scheduler = requireSession(interaction)
 
   if (!scheduler) {
-    logger.warn("button", "Botón sin sesión activa", { user, guildId, customId: interaction.customId })
+    logger.warn("button", "Bot\u00f3n sin sesi\u00f3n activa", { user, guildId, customId: interaction.customId })
     return
   }
 
   try {
-    // Handle queue index buttons (q_up_N, q_down_N, q_del_N)
     for (const [prefix, { action, logEvent }] of Object.entries(queueIndexActions)) {
       if (interaction.customId.startsWith(prefix)) {
         const idx = parseInt(interaction.customId.slice(prefix.length), 10)
@@ -61,17 +60,16 @@ export async function handleButton(interaction: ButtonInteraction) {
       }
     }
 
-    // Handle exact-match buttons
     const handler = buttonHandlers[interaction.customId]
     if (handler) {
       await handler(scheduler, interaction, guildId, user)
       return
     }
 
-    logger.warn("button", "Acción no reconocida", { user, guildId, customId: interaction.customId })
-    await interaction.reply({ content: "Acción no reconocida", ephemeral: true })
+    logger.warn("button", "Acci\u00f3n no reconocida", { user, guildId, customId: interaction.customId })
+    await interaction.reply({ content: "Acci\u00f3n no reconocida", ephemeral: true })
   } catch (error) {
-    logger.error("button", "Error en botón", {
+    logger.error("button", "Error en bot\u00f3n", {
       user,
       guildId,
       customId: interaction.customId,
@@ -79,9 +77,9 @@ export async function handleButton(interaction: ButtonInteraction) {
     })
     try {
       if (interaction.replied || interaction.deferred) {
-        await interaction.editReply("Error al ejecutar la acción")
+        await interaction.editReply("Error al ejecutar la acci\u00f3n")
       } else {
-        await interaction.reply({ content: "Error al ejecutar la acción", ephemeral: true })
+        await interaction.reply({ content: "Error al ejecutar la acci\u00f3n", ephemeral: true })
       }
     } catch { /* interaction might be expired */ }
   }
@@ -95,75 +93,70 @@ type ButtonHandler = (
 ) => Promise<void>
 
 const buttonHandlers: Record<string, ButtonHandler> = {
-  // Queue navigation
-  q_page_prev: async (s, interaction, guildId, user) => {
-    logger.event("button", "Página anterior", { user, guildId })
+  [BUTTON_PREFIXES.queuePagePrev]: async (s, interaction, guildId, user) => {
+    logger.event("button", "P\u00e1gina anterior", { user, guildId })
     await refreshQueueMessage(interaction, Math.max(1, (getQueuePage(guildId) || 1) - 1))
   },
-  q_page_next: async (s, interaction, guildId, user) => {
-    logger.event("button", "Página siguiente", { user, guildId })
+  [BUTTON_PREFIXES.queuePageNext]: async (s, interaction, guildId, user) => {
+    logger.event("button", "P\u00e1gina siguiente", { user, guildId })
     await refreshQueueMessage(interaction, getQueuePage(guildId) + 1)
   },
-
-  // Queue playback
-  q_playback_pause: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.queuePlaybackPause]: async (s, interaction, guildId, user) => {
     s.togglePause()
     logger.event("button", "Pause/Resume toggle", { user, guildId })
     await refreshQueueMessage(interaction)
   },
-  q_playback_skip: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.queuePlaybackSkip]: async (s, interaction, guildId, user) => {
     s.skip()
     logger.event("button", "Saltando", { user, guildId })
     await refreshQueueMessage(interaction, 1)
   },
-  q_playback_shuffle: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.queuePlaybackShuffle]: async (s, interaction, guildId, user) => {
     s.shuffle()
     logger.event("button", "Mezclando cola", { user, guildId })
     await refreshQueueMessage(interaction)
   },
-  q_playback_clear: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.queuePlaybackClear]: async (s, interaction, guildId, user) => {
     s.clear()
     logger.event("button", "Limpiando cola", { user, guildId })
     await refreshQueueMessage(interaction)
   },
-  q_playback_autoplay: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.queuePlaybackAutoplay]: async (s, interaction, guildId, user) => {
     s.toggleAutoplay()
     guildManager.toggleAutoplayPref(guildId)
     logger.event("button", "Autoplay toggle", { user, guildId })
     await refreshQueueMessage(interaction)
   },
-
-  // Now Playing controls
-  np_pause: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.nowPlayingPause]: async (s, interaction, guildId, user) => {
     s.pause()
     logger.event("button", "Now Playing pause", { user, guildId })
-    await clearButtonsAndFollowUp(interaction, "⏸ Pausado")
+    await clearButtonsAndFollowUp(interaction, "\u23f8 Pausado")
   },
-  np_resume: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.nowPlayingResume]: async (s, interaction, guildId, user) => {
     s.resume()
     logger.event("button", "Now Playing resume", { user, guildId })
-    await clearButtonsAndFollowUp(interaction, "▶ Reanudado")
+    await clearButtonsAndFollowUp(interaction, "\u25b6 Reanudado")
   },
-  np_skip: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.nowPlayingSkip]: async (s, interaction, guildId, user) => {
     s.skip()
     logger.event("button", "Now Playing skip", { user, guildId })
-    await clearButtonsAndFollowUp(interaction, "⏭ Saltado")
+    await clearButtonsAndFollowUp(interaction, "\u23ed Saltado")
   },
-  np_loop: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.nowPlayingLoop]: async (s, interaction, guildId, user) => {
     const mode = s.toggleLoop()
     logger.event("button", "Now Playing loop", { user, guildId, mode })
     await clearButtonsAndFollowUp(interaction, LOOP_LABELS[mode])
   },
-  np_shuffle: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.nowPlayingShuffle]: async (s, interaction, guildId, user) => {
     s.shuffle()
     logger.event("button", "Now Playing shuffle", { user, guildId })
-    await clearButtonsAndFollowUp(interaction, "🔀 Cola mezclada")
+    await clearButtonsAndFollowUp(interaction, "\ud83d\udd00 Cola mezclada")
   },
-  np_seek_back: async (s, interaction, guildId, user) => {
+  [BUTTON_PREFIXES.nowPlayingSeekBack]: async (s, interaction, guildId, user) => {
     const pos = Math.max(0, s.getPosition() - SEEK_BACK_SECONDS)
     await s.seek(pos)
     logger.event("button", "Now Playing seek back", { user, guildId, position: pos })
-    await clearButtonsAndFollowUp(interaction, "⏪ -15s")
+    await clearButtonsAndFollowUp(interaction, "\u23ea -15s")
   },
 }
 

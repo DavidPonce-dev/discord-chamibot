@@ -1,16 +1,12 @@
-import { EmbedBuilder } from "discord.js"
 import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
-import { parseDuration, buildProgressBar, calcTotalPages, clampPage } from "@/utils/format"
+import { parseDuration, buildProgressBar, paginate } from "@/utils/format"
+import { createBaseEmbed } from "@/ui/embeds/BaseEmbed"
 import { TRACKS_PER_PAGE } from "@/config/ui"
 
 export function buildQueueContent(queue: TrackScheduler, page: number, statusTitle?: string) {
   const tracks = queue.getQueue()
   const current = queue.getCurrentTrack()
-  const isPaused = queue.isPaused()
-  const totalPages = calcTotalPages(tracks.length, TRACKS_PER_PAGE)
-  const clampedPage = clampPage(page, totalPages)
-  const startIdx = (clampedPage - 1) * TRACKS_PER_PAGE
-  const pageTracks = tracks.slice(startIdx, startIdx + TRACKS_PER_PAGE)
+  const { pageItems: pageTracks } = paginate(tracks, page, TRACKS_PER_PAGE)
 
   const embedLines: string[] = []
   if (statusTitle) {
@@ -24,9 +20,7 @@ export function buildQueueContent(queue: TrackScheduler, page: number, statusTit
   }
   const embedDescription = embedLines.join("\n")
 
-  const embed = new EmbedBuilder()
-    .setColor(0x5865F2)
-    .setTitle("🎵 Charmin Charmeleon 🎵")
+  const embed = createBaseEmbed()
   if (embedDescription) {
     embed.setDescription(embedDescription)
   }
@@ -35,8 +29,6 @@ export function buildQueueContent(queue: TrackScheduler, page: number, statusTit
 }
 
 export function buildEmptyEmbed() {
-  return new EmbedBuilder()
-    .setColor(0x5865F2)
-    .setTitle("🎵 Charmin Charmeleon 🎵")
-    .setDescription("La cola está vacía")
+  return createBaseEmbed()
+    .setDescription("La cola est\u00e1 vac\u00eda")
 }

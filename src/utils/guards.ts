@@ -48,3 +48,7 @@ export function requireSession(
   }
   return scheduler
 }
+
+export function isQueueEmpty(scheduler: TrackScheduler | null | undefined): boolean {
+  return !scheduler || (scheduler.getSize() === 0 && !scheduler.getCurrentTrack())
+}
