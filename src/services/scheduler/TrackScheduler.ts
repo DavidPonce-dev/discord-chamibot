@@ -77,6 +77,17 @@ export class TrackScheduler {
 
         this.resetPlaybackState()
         await this.processQueue()
+
+        if (!this.autoplay && this.queue.length === 0 && !this.current) {
+          logger.event("scheduler", "Cola vacía sin autoplay, desconectando", {
+            guildId: this.connection.joinConfig.guildId,
+          })
+          const guildId = this.connection.joinConfig.guildId
+          this.destroy()
+          await this.onDisconnect?.(guildId)
+          return
+        }
+
         await this.onTrackChange?.(this.connection.joinConfig.guildId)
       } catch (error) {
         logger.error("scheduler", "Error en Idle handler", {
