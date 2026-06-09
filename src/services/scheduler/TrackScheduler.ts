@@ -40,6 +40,7 @@ export class TrackScheduler {
   private destroyed = false
   private handlingIdle = false
   private isProcessing = false
+  private disconnectCalled = false
 
   private audio: AudioService
 
@@ -86,9 +87,7 @@ export class TrackScheduler {
           logger.event("scheduler", "Cola vacía sin autoplay, desconectando", {
             guildId: this.connection.joinConfig.guildId,
           })
-          const guildId = this.connection.joinConfig.guildId
           this.destroy()
-          await this.onDisconnect?.(guildId)
           return
         }
 
@@ -203,10 +202,10 @@ export class TrackScheduler {
         guildId: this.connection.joinConfig.guildId,
       })
     } catch {
-      const guildId = this.connection.joinConfig.guildId
-      logger.warn("scheduler", "Conexión de voz perdida, destruyendo scheduler", { guildId })
+      logger.warn("scheduler", "Conexión de voz perdida, destruyendo scheduler", {
+        guildId: this.connection.joinConfig.guildId,
+      })
       this.destroy()
-      await this.onDisconnect?.(guildId)
     }
   }
 
@@ -217,7 +216,6 @@ export class TrackScheduler {
     this.audio.killProcess()
     this.player.stop()
     this.destroy()
-    await this.onDisconnect?.(guildId)
   }
 
   private resetPlaybackState() {
@@ -498,11 +496,16 @@ export class TrackScheduler {
   destroy() {
     if (this.destroyed || this.isProcessing) return
     this.destroyed = true
+    const guildId = this.connection.joinConfig.guildId
     logger.info("scheduler", "Scheduler destruido", {
-      guildId: this.connection.joinConfig.guildId,
+      guildId,
     })
     this.stop()
     this.connection.destroy()
+    if (!this.disconnectCalled) {
+      this.disconnectCalled = true
+      this.onDisconnect?.(guildId)
+    }
   }
 
   toggleAutoplay(): boolean {
