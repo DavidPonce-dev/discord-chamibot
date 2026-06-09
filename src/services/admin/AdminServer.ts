@@ -13,6 +13,21 @@ import { cleanupQueueUI } from "@/services/queue/QueueUIManager"
 
 const ADMIN_PAGE = fs.readFileSync(path.join(__dirname, "admin-page.html"), "utf-8")
 
+const NOVNC_DIR = "/usr/share/novnc"
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html",
+  ".css": "text/css",
+  ".js": "application/javascript",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".mp3": "audio/mpeg",
+  ".oga": "audio/ogg",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+}
+
 const ACCESS_DENIED_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Access Denied</title><style>body{font-family:system-ui,sans-serif;background:#0f0f0f;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.container{text-align:center}h1{font-size:2rem;margin-bottom:.5rem;color:#f25757}p{color:#888}</style></head><body><div class="container"><h1>403 \u2014 Access Denied</h1><p>Valid authentication required.</p></div></body></html>`
 
 let adminServer: http.Server | null = null
@@ -43,6 +58,36 @@ function isAllowedOrigin(req: http.IncomingMessage): boolean {
   const allowed = origins.includes(origin)
   logger.info("admin", "Origin check", { origin, allowed, allowedOrigins: origins })
   return allowed
+}
+
+function serveNovncStatic(req: http.IncomingMessage, res: http.ServerResponse): boolean {
+  const url = new URL(req.url!, `http://${req.headers.host}`)
+  let filePath = url.pathname.replace(/^\/vnc/, "")
+  if (filePath === "/" || filePath === "") filePath = "/vnc.html"
+  filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, "")
+  const fullPath = path.join(NOVNC_DIR, filePath)
+
+  if (!fullPath.startsWith(NOVNC_DIR)) {
+    res.writeHead(403)
+    res.end("Forbidden")
+    return true
+  }
+
+  try {
+    if (!fs.existsSync(fullPath)) {
+      res.writeHead(404)
+      res.end("Not found")
+      return true
+    }
+    const ext = path.extname(fullPath)
+    const contentType = MIME_TYPES[ext] || "application/octet-stream"
+    const content = fs.readFileSync(fullPath)
+    res.writeHead(200, { "Content-Type": contentType })
+    res.end(content)
+    return true
+  } catch {
+    return false
+  }
 }
 
 function buildHealthResponse(validation: ReturnType<typeof validateCookies>) {
@@ -119,16 +164,12 @@ export function startAdminServer(port: number) {
           res.end(ACCESS_DENIED_HTML)
           return
         }
-        if (vncProxy && vncActive) {
-          req.url = req.url!.replace(/^\/vnc\//, "/")
-          vncProxy.web(req, res, {
-            target: "http://localhost:6080",
-            ws: true,
-          })
+        if (!vncActive) {
+          res.writeHead(503, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ error: "VNC not active. Start a login session first." }))
           return
         }
-        res.writeHead(503, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ error: "VNC not active. Start a login session first." }))
+        serveNovncStatic(req, res)
         return
       }
 
