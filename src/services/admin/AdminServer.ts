@@ -67,7 +67,16 @@ function serveNovncStatic(req: http.IncomingMessage, res: http.ServerResponse): 
   filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, "")
   const fullPath = path.join(NOVNC_DIR, filePath)
 
+  logger.debug("vnc", "Serving noVNC file", {
+    originalUrl: req.url,
+    strippedPath: filePath,
+    fullPath,
+    exists: fs.existsSync(fullPath),
+    novncDir: NOVNC_DIR,
+  })
+
   if (!fullPath.startsWith(NOVNC_DIR)) {
+    logger.warn("vnc", "Path traversal attempt blocked", { fullPath })
     res.writeHead(403)
     res.end("Forbidden")
     return true
@@ -75,6 +84,7 @@ function serveNovncStatic(req: http.IncomingMessage, res: http.ServerResponse): 
 
   try {
     if (!fs.existsSync(fullPath)) {
+      logger.warn("vnc", "noVNC file not found", { fullPath })
       res.writeHead(404)
       res.end("Not found")
       return true
@@ -82,10 +92,12 @@ function serveNovncStatic(req: http.IncomingMessage, res: http.ServerResponse): 
     const ext = path.extname(fullPath)
     const contentType = MIME_TYPES[ext] || "application/octet-stream"
     const content = fs.readFileSync(fullPath)
+    logger.debug("vnc", "noVNC file served", { fullPath, contentType, size: content.length })
     res.writeHead(200, { "Content-Type": contentType })
     res.end(content)
     return true
-  } catch {
+  } catch (err) {
+    logger.error("vnc", "Error serving noVNC file", { fullPath, error: err instanceof Error ? err.message : String(err) })
     return false
   }
 }
@@ -139,6 +151,13 @@ export function startAdminServer(port: number) {
   }
 
   vncProxy = httpProxy.createProxyServer()
+  vncProxy.on("error", (err, req, res) => {
+    logger.error("vnc", "Proxy error", { error: err.message, url: req.url })
+    if (res instanceof http.ServerResponse) {
+      res.writeHead(502, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "VNC proxy error: " + err.message }))
+    }
+  })
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url!, `http://${req.headers.host}`)
@@ -160,15 +179,18 @@ export function startAdminServer(port: number) {
 
       if (path.startsWith("/vnc/")) {
         if (!isValidToken(req)) {
+          logger.warn("vnc", "Token validation failed for VNC request", { path, query: url.search })
           res.writeHead(403, { "Content-Type": "text/html" })
           res.end(ACCESS_DENIED_HTML)
           return
         }
         if (!vncActive) {
+          logger.warn("vnc", "VNC not active", { path })
           res.writeHead(503, { "Content-Type": "application/json" })
           res.end(JSON.stringify({ error: "VNC not active. Start a login session first." }))
           return
         }
+        logger.debug("vnc", "Handling VNC request", { path, query: url.search })
         serveNovncStatic(req, res)
         return
       }
@@ -282,13 +304,16 @@ export function startAdminServer(port: number) {
           isSettingUp = true
           scheduler?.pause()
           try {
+            logger.info("vnc", "Starting VNC login session")
             const refresher = getRefresherInstance()
             const result = await refresher.setupForLogin()
             vncActive = true
+            logger.info("vnc", "VNC session started", { result })
             res.writeHead(200)
             res.end(JSON.stringify(result))
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err)
+            logger.error("vnc", "Failed to start VNC session", { error: msg })
             scheduler?.resume()
             res.writeHead(500)
             res.end(JSON.stringify({ error: msg }))
@@ -302,9 +327,11 @@ export function startAdminServer(port: number) {
           if (vncActive) {
             vncActive = false
             scheduler?.resume()
+            logger.info("vnc", "VNC session stopped")
             res.writeHead(200)
             res.end(JSON.stringify({ message: "VNC stopped" }))
           } else {
+            logger.warn("vnc", "Attempted to stop VNC but no active session")
             res.writeHead(400)
             res.end(JSON.stringify({ error: "No active VNC session" }))
           }
@@ -404,22 +431,25 @@ export function startAdminServer(port: number) {
   })
 
   server.on("upgrade", (req, socket, head) => {
+    logger.debug("vnc", "WebSocket upgrade attempt", { url: req.url, origin: req.headers.origin })
     if (!isAllowedOrigin(req)) {
-      logger.warn("admin", "WebSocket upgrade rejected — origin not allowed", { origin: req.headers.origin })
+      logger.warn("vnc", "WebSocket upgrade rejected — origin not allowed", { origin: req.headers.origin, url: req.url })
       socket.destroy()
       return
     }
     if (!isValidToken(req)) {
-      logger.warn("admin", "WebSocket upgrade rejected — invalid token", { origin: req.headers.origin })
+      logger.warn("vnc", "WebSocket upgrade rejected — invalid token", { origin: req.headers.origin, url: req.url })
       socket.destroy()
       return
     }
     if (req.url?.startsWith("/vnc/") && vncProxy && vncActive) {
+      logger.info("vnc", "Proxying WebSocket connection", { url: req.url })
       req.url = req.url.replace(/^\/vnc\//, "/")
       vncProxy.ws(req, socket, head, {
         target: "http://localhost:6080",
       })
     } else {
+      logger.warn("vnc", "WebSocket upgrade rejected", { url: req.url, vncActive, hasProxy: !!vncProxy })
       socket.destroy()
     }
   })
