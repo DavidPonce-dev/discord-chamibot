@@ -340,6 +340,28 @@
           stroke-linecap="round"
           stroke-linejoin="round"
         >
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        Security
+      </h2>
+      <div id="security-info" style="margin-bottom: 0.5rem; font-size: 0.85rem; color: #888;">
+        Loading...
+      </div>
+      <div id="security-origins" style="font-size: 0.8rem; color: #aaa;"></div>
+    </div>
+
+    <div class="card">
+      <h2>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <circle cx="12" cy="12" r="10" />
           <line x1="2" y1="12" x2="22" y2="12" />
           <path
@@ -527,6 +549,7 @@
           '<div style="text-align:center;padding:4rem"><h1 style="color:#f25757">403 \u2014 Access Denied</h1><p style="color:#888">Valid authentication required.</p></div>';
         throw new Error("No token");
       }
+      const ALLOWED_ORIGINS_DISPLAY = "{{ALLOWED_ORIGINS}}";
       const API = "/api";
       function apiFetch(path, opts) {
         const sep = path.includes("?") ? "&" : "?";
@@ -830,8 +853,20 @@
         document.getElementById("guilds-timer").textContent = "Refreshing in " + guildsRefreshSec + "s";
       }
 
+      function renderSecurity() {
+        const info = document.getElementById("security-info");
+        const origins = document.getElementById("security-origins");
+        const currentOrigin = window.location.origin;
+        info.innerHTML =
+          '<span class="indicator on"></span> Origin-restricted access — Token + Origin check';
+        origins.innerHTML =
+          '<strong>Current origin:</strong> ' + escapeHtml(currentOrigin) +
+          '<br><strong>Allowed origins:</strong> ' + escapeHtml(ALLOWED_ORIGINS_DISPLAY);
+      }
+
       checkStatus();
       updateGuilds();
+      renderSecurity();
       setInterval(checkStatus, 30000);
       setInterval(updateTimer, 1000);
     </script>

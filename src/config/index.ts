@@ -38,5 +38,8 @@ export const config = {
   },
   admin: {
     token: process.env.ADMIN_TOKEN ?? "",
+    allowedOrigins: process.env.ADMIN_ALLOWED_ORIGINS
+      ? process.env.ADMIN_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+      : [],
   },
 } as const

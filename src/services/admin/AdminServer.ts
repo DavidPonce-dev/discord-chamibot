@@ -35,6 +35,15 @@ function isValidToken(req: http.IncomingMessage): boolean {
   return config.admin.token !== "" && token === config.admin.token
 }
 
+function isAllowedOrigin(req: http.IncomingMessage): boolean {
+  const origins = config.admin.allowedOrigins
+  if (origins.length === 0) return true
+  const origin = req.headers.origin ?? ""
+  const allowed = origins.includes(origin)
+  logger.info("admin", "Origin check", { origin, allowed, allowedOrigins: origins })
+  return allowed
+}
+
 function buildHealthResponse(validation: ReturnType<typeof validateCookies>) {
   const now = Date.now()
   const cookieAgeMs = validation.lastModified ? now - validation.lastModified.getTime() : null
@@ -90,6 +99,12 @@ export function startAdminServer(port: number) {
     const path = url.pathname
     const method = req.method
 
+    if (!isAllowedOrigin(req)) {
+      res.writeHead(403, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "Origin not allowed" }))
+      return
+    }
+
     try {
       if (path === "/health" && method === "GET") {
         res.writeHead(200, { "Content-Type": "application/json" })
@@ -98,6 +113,11 @@ export function startAdminServer(port: number) {
       }
 
       if (path.startsWith("/vnc/")) {
+        if (!isValidToken(req)) {
+          res.writeHead(403, { "Content-Type": "text/html" })
+          res.end(ACCESS_DENIED_HTML)
+          return
+        }
         if (vncProxy && vncActive) {
           req.url = req.url!.replace(/^\/vnc\//, "/")
           vncProxy.web(req, res, {
@@ -118,8 +138,12 @@ export function startAdminServer(port: number) {
       }
 
       if (path === "/" && method === "GET") {
+        const originsStr = config.admin.allowedOrigins.length > 0
+          ? config.admin.allowedOrigins.join(", ")
+          : "Any (no restriction)"
+        const html = ADMIN_PAGE.replace("{{ALLOWED_ORIGINS}}", originsStr)
         res.writeHead(200, { "Content-Type": "text/html" })
-        res.end(ADMIN_PAGE)
+        res.end(html)
         return
       }
 
@@ -338,6 +362,16 @@ export function startAdminServer(port: number) {
   })
 
   server.on("upgrade", (req, socket, head) => {
+    if (!isAllowedOrigin(req)) {
+      logger.warn("admin", "WebSocket upgrade rejected — origin not allowed", { origin: req.headers.origin })
+      socket.destroy()
+      return
+    }
+    if (!isValidToken(req)) {
+      logger.warn("admin", "WebSocket upgrade rejected — invalid token", { origin: req.headers.origin })
+      socket.destroy()
+      return
+    }
     if (req.url?.startsWith("/vnc/") && vncProxy && vncActive) {
       req.url = req.url.replace(/^\/vnc\//, "/")
       vncProxy.ws(req, socket, head, {
@@ -349,7 +383,10 @@ export function startAdminServer(port: number) {
   })
 
   server.listen(port, () => {
-    logger.info("admin", `Admin server started on port ${port}`)
+    const origins = config.admin.allowedOrigins
+    logger.info("admin", `Admin server started on port ${port}`, {
+      allowedOrigins: origins.length > 0 ? origins : "any",
+    })
   })
 
   server.on("error", (err) => {
