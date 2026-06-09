@@ -38,7 +38,8 @@ function isValidToken(req: http.IncomingMessage): boolean {
 function isAllowedOrigin(req: http.IncomingMessage): boolean {
   const origins = config.admin.allowedOrigins
   if (origins.length === 0) return true
-  const origin = req.headers.origin ?? ""
+  const origin = req.headers.origin
+  if (!origin) return true
   const allowed = origins.includes(origin)
   logger.info("admin", "Origin check", { origin, allowed, allowedOrigins: origins })
   return allowed
