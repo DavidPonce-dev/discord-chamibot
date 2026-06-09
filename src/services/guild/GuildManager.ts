@@ -119,6 +119,10 @@ export class GuildManager {
   clearNowPlayingMessage(guildId: string) {
     this.nowPlayingMessages.delete(guildId)
   }
+
+  getSessions() {
+    return this.sessions
+  }
 }
 
 export const guildManager = new GuildManager()

@@ -6,6 +6,9 @@ import { logger } from "@/utils/logger"
 import { getRefresherInstance, validateCookies, refreshCookies, extractCookies, setScheduler, initBrowser, closeBrowser, isBrowserActive, forceResetProfile } from "@/services/cookie/CookieManager"
 import { CookieScheduler } from "@/services/cookie/CookieScheduler"
 import { config } from "@/config"
+import { getBotClient } from "@/bot"
+import { guildManager } from "@/services/guild/GuildManager"
+import { isDeployMode, enableDeployMode, disableDeployMode } from "@/services/deploy/DeployGuard"
 
 const ADMIN_PAGE = fs.readFileSync(path.join(__dirname, "admin-page.html"), "utf-8")
 
@@ -238,6 +241,83 @@ export function startAdminServer(port: number) {
             res.writeHead(400)
             res.end(JSON.stringify({ error: "No active VNC session" }))
           }
+          return
+        }
+
+        if (path === "/api/guilds" && method === "GET") {
+          const client = getBotClient()
+          const guilds: unknown[] = []
+
+          if (client) {
+            for (const guild of client.guilds.cache.values()) {
+              const scheduler = guildManager.get(guild.id)
+              const musicInfo: Record<string, unknown> = {
+                connected: !!scheduler,
+              }
+
+              if (scheduler) {
+                const currentTrack = scheduler.getCurrentTrack()
+                musicInfo.voiceChannel = scheduler.getVoiceChannelName() ?? null
+                musicInfo.currentTrack = currentTrack ? {
+                  title: currentTrack.title,
+                  url: currentTrack.url,
+                  requestedBy: currentTrack.requestedBy,
+                  duration: currentTrack.duration ?? null,
+                  position: scheduler.getPosition(),
+                } : null
+                musicInfo.queueSize = scheduler.getSize()
+                musicInfo.isPaused = scheduler.isPaused()
+                musicInfo.autoplay = scheduler.isAutoplayEnabled()
+                musicInfo.loopMode = scheduler.getLoopMode()
+              }
+
+              guilds.push({
+                id: guild.id,
+                name: guild.name,
+                memberCount: guild.memberCount,
+                music: musicInfo,
+              })
+            }
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({
+            deployMode: isDeployMode(),
+            guilds,
+          }))
+          return
+        }
+
+        if (path === "/api/bot/toggle" && method === "POST") {
+          if (isDeployMode()) {
+            disableDeployMode()
+            res.writeHead(200, { "Content-Type": "application/json" })
+            res.end(JSON.stringify({
+              deployMode: false,
+              message: "Service restored — playback enabled",
+            }))
+            return
+          }
+
+          enableDeployMode()
+
+          let disconnectedCount = 0
+          const sessionIds = Array.from(guildManager.getSessions().keys())
+          for (const guildId of sessionIds) {
+            const scheduler = guildManager.get(guildId)
+            if (scheduler) {
+              scheduler.destroy()
+              guildManager.delete(guildId)
+              disconnectedCount++
+            }
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({
+            deployMode: true,
+            disconnectedGuilds: disconnectedCount,
+            message: `Deploy mode enabled — ${disconnectedCount} voice channel(s) disconnected`,
+          }))
           return
         }
 

@@ -6,6 +6,12 @@ import { editTemporary } from "@/utils/messages"
 import { logger } from "@/utils/logger"
 import { getErrorMessage } from "@/utils/error"
 
+let botClient: Client | null = null
+
+export function getBotClient(): Client | null {
+  return botClient
+}
+
 export function createBot(): Client {
   const client = new Client({
     intents: [
@@ -13,6 +19,8 @@ export function createBot(): Client {
       GatewayIntentBits.GuildVoiceStates,
     ],
   })
+
+  botClient = client
 
   const commands = getCommandMap()
 

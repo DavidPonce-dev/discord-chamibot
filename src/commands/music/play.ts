@@ -11,6 +11,7 @@ import { TRACKS_PER_PAGE } from "@/config/ui"
 import { calcTotalPages } from "@/utils/format";
 import { getErrorMessage } from "@/utils/error";
 import { requireGuild } from "@/utils/guards";
+import { isDeployMode } from "@/services/deploy/DeployGuard";
 import type { Track } from "@/core/types";
 import type { ResolveResult } from "@/services/search/YouTubeResolver";
 
@@ -30,6 +31,14 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const guildId = requireGuild(interaction)
   if (!guildId) return
   const user = interaction.user.username
+
+  if (isDeployMode()) {
+    await interaction.reply({
+      content: "Actualizando servicio",
+      ephemeral: true,
+    });
+    return
+  }
 
   logger.info("command", "/play ejecutado", { query, user, guildId })
 

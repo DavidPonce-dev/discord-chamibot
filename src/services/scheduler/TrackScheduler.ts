@@ -11,6 +11,7 @@ import { AudioService } from "@/services/audio/AudioService"
 import { findRelated, normalizeTitle, extractArtist } from "@/radio/YouTubeRecommender"
 import { logger } from "@/utils/logger"
 import { getErrorMessage } from "@/utils/error"
+import { getBotClient } from "@/bot"
 
 import { VOICE_RECONNECT_TIMEOUT_MS, SEEK_SETTLE_DELAY_MS } from "@/config/timeouts"
 const MS_PER_SECOND = 1_000
@@ -37,6 +38,8 @@ export class TrackScheduler {
   private readonly MAX_HISTORY = 20
   private readonly MAX_ARTIST_HISTORY = 10
   private destroyed = false
+  private handlingIdle = false
+  private isProcessing = false
 
   private audio: AudioService
 
@@ -58,7 +61,8 @@ export class TrackScheduler {
 
   private registerEvents() {
     this.player.on(AudioPlayerStatus.Idle, async () => {
-      if (this.seeking || this.destroyed) return
+      if (this.seeking || this.destroyed || this.handlingIdle) return
+      this.handlingIdle = true
       try {
         const finished = this.current
         const willAutoplay = this.autoplay && !!finished && this.queue.length === 0
@@ -93,6 +97,8 @@ export class TrackScheduler {
         logger.error("scheduler", "Error en Idle handler", {
           error: getErrorMessage(error),
         })
+      } finally {
+        this.handlingIdle = false
       }
     })
 
@@ -103,9 +109,9 @@ export class TrackScheduler {
           error: getErrorMessage(err),
           guildId: this.connection.joinConfig.guildId,
         })
+        this.resetPlaybackState()
         await this.processQueue()
         await this.onTrackChange?.(this.connection.joinConfig.guildId)
-        this.resetPlaybackState()
       } catch (error) {
         logger.error("scheduler", "Error en Player handler", {
           error: getErrorMessage(error),
@@ -277,43 +283,49 @@ export class TrackScheduler {
   }
 
   private async _processQueueLoop() {
-    while (!this.isPlaying) {
-      const nextTrack = this.queue.shift()
-      if (!nextTrack) return
+    this.isProcessing = true
+    try {
+      while (!this.isPlaying) {
+        const nextTrack = this.queue.shift()
+        if (!nextTrack) return
 
-      this.isPlaying = true
-      this.current = nextTrack
-      this.lastTrackTitle = nextTrack.title
+        this.isPlaying = true
+        this.current = nextTrack
+        this.lastTrackTitle = nextTrack.title
 
-      logger.event("scheduler", "Reproduciendo track", {
-        title: nextTrack.title,
-        id: nextTrack.id,
-        guildId: this.connection.joinConfig.guildId,
-        queueRemaining: this.queue.length,
-      })
-
-      try {
-        if (!nextTrack.url) {
-          logger.warn("scheduler", "Track sin URL, saltando", { title: nextTrack.title })
-          this.resetPlaybackState()
-          continue
-        }
-
-        this.audio.killProcess()
-        const resource = await this.audio.createResource(nextTrack.url)
-
-        this.playbackStart = Date.now()
-        this.pauseOffset = 0
-        this.pauseTime = null
-        this.player.play(resource)
-      } catch (error) {
-        logger.error("scheduler", "Error al reproducir track", {
+        logger.event("scheduler", "Reproduciendo track", {
           title: nextTrack.title,
-          url: nextTrack.url?.slice(0, 60),
-          error: getErrorMessage(error),
+          id: nextTrack.id,
+          guildId: this.connection.joinConfig.guildId,
+          queueRemaining: this.queue.length,
         })
-        this.resetPlaybackState()
+
+        try {
+          if (!nextTrack.url) {
+            logger.warn("scheduler", "Track sin URL, saltando", { title: nextTrack.title })
+            this.resetPlaybackState()
+            continue
+          }
+
+          this.player.stop()
+          this.audio.killProcess()
+          const resource = await this.audio.createResource(nextTrack.url)
+
+          this.playbackStart = Date.now()
+          this.pauseOffset = 0
+          this.pauseTime = null
+          this.player.play(resource)
+        } catch (error) {
+          logger.error("scheduler", "Error al reproducir track", {
+            title: nextTrack.title,
+            url: nextTrack.url?.slice(0, 60),
+            error: getErrorMessage(error),
+          })
+          this.resetPlaybackState()
+        }
       }
+    } finally {
+      this.isProcessing = false
     }
   }
 
@@ -484,7 +496,7 @@ export class TrackScheduler {
   }
 
   destroy() {
-    if (this.destroyed) return
+    if (this.destroyed || this.isProcessing) return
     this.destroyed = true
     logger.info("scheduler", "Scheduler destruido", {
       guildId: this.connection.joinConfig.guildId,
@@ -529,5 +541,17 @@ export class TrackScheduler {
       status === VoiceConnectionStatus.Connecting ||
       status === VoiceConnectionStatus.Signalling
     )
+  }
+
+  getVoiceChannelName(): string | null {
+    const channel = this.connection.joinConfig.channelId
+    if (!channel) return null
+    const guild = this.connection.joinConfig.guildId
+    const client = getBotClient()
+    if (!client) return null
+    const guildObj = client.guilds.cache.get(guild)
+    if (!guildObj) return null
+    const voiceChannel = guildObj.channels.cache.get(channel)
+    return voiceChannel?.name ?? null
   }
 }

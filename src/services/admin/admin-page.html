@@ -168,6 +168,85 @@
         background: #7d6b2d;
         color: #f2a557;
       }
+      .guild-card {
+        background: #111;
+        border: 1px solid #333;
+        border-radius: 6px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+      }
+      .guild-card.active {
+        border-color: #57f287;
+      }
+      .guild-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+      }
+      .guild-name {
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #fff;
+      }
+      .guild-id {
+        font-size: 0.75rem;
+        color: #666;
+      }
+      .guild-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 0.5rem;
+        font-size: 0.8rem;
+      }
+      .guild-info-item {
+        display: flex;
+        flex-direction: column;
+      }
+      .guild-info-label {
+        color: #888;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+      }
+      .guild-info-value {
+        color: #e0e0e0;
+        font-weight: 500;
+      }
+      .track-title {
+        color: #57f287;
+        font-weight: 600;
+      }
+      .deploy-bar {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      .deploy-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+      }
+      .deploy-indicator .indicator {
+        width: 14px;
+        height: 14px;
+      }
+      .refresh-timer {
+        font-size: 0.75rem;
+        color: #666;
+      }
+      .no-guilds {
+        color: #888;
+        font-style: italic;
+        padding: 1rem;
+        text-align: center;
+      }
+      .last-updated {
+        font-size: 0.75rem;
+        color: #666;
+        margin-left: auto;
+      }
     </style>
   </head>
   <body>
@@ -215,6 +294,38 @@
         System Status
       </h2>
       <div id="system-status">Loading...</div>
+    </div>
+
+    <div class="card">
+      <h2>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        Bot Control
+        <span class="last-updated" id="guilds-timer"></span>
+      </h2>
+      <div class="deploy-bar" style="margin-bottom: 1rem;">
+        <div class="deploy-indicator" id="deploy-indicator">
+          <span class="indicator on"></span>
+          <span>Service Active</span>
+        </div>
+        <button class="btn danger" id="deploy-btn" onclick="toggleDeploy()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="6" width="12" height="12" rx="1" />
+          </svg>
+          Disable Service (Deploy)
+        </button>
+      </div>
+      <div id="guilds-list">Loading...</div>
     </div>
 
     <div class="card">
@@ -598,8 +709,131 @@
           log("Stop failed: " + e.message);
         }
       }
+
+      let guildsRefreshSec = 5;
+
+      async function updateGuilds() {
+        try {
+          const r = await apiFetch("/guilds");
+          const d = await r.json();
+          renderGuilds(d);
+          renderDeployIndicator(d.deployMode);
+        } catch (e) {
+          document.getElementById("guilds-list").innerHTML =
+            '<div class="no-guilds">Error loading guilds: ' + e.message + "</div>";
+        }
+      }
+
+      function renderDeployIndicator(deployMode) {
+        const el = document.getElementById("deploy-indicator");
+        const btn = document.getElementById("deploy-btn");
+        if (deployMode) {
+          el.innerHTML =
+            '<span class="indicator off"></span><span>Service Disabled (Deploy Mode)</span>';
+          btn.innerHTML =
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg> Enable Service';
+          btn.className = "btn success";
+        } else {
+          el.innerHTML =
+            '<span class="indicator on"></span><span>Service Active</span>';
+          btn.innerHTML =
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1" /></svg> Disable Service (Deploy)';
+          btn.className = "btn danger";
+        }
+      }
+
+      function renderGuilds(data) {
+        const el = document.getElementById("guilds-list");
+        if (!data.guilds || data.guilds.length === 0) {
+          el.innerHTML = '<div class="no-guilds">No servers found</div>';
+          return;
+        }
+
+        let html = "";
+        for (const g of data.guilds) {
+          const m = g.music || {};
+          const activeClass = m.connected ? "active" : "";
+          html += '<div class="guild-card ' + activeClass + '">';
+          html += '<div class="guild-header">';
+          html += '<div><div class="guild-name">' + escapeHtml(g.name) + "</div>";
+          html += '<div class="guild-id">' + g.id + " · " + g.memberCount + " members</div></div>";
+          if (m.connected) {
+            html += '<span class="status ok">CONNECTED</span>';
+          } else {
+            html += '<span class="status err">IDLE</span>';
+          }
+          html += "</div>";
+
+          if (m.connected) {
+            html += '<div class="guild-info">';
+            html += '<div class="guild-info-item"><span class="guild-info-label">Voice Channel</span><span class="guild-info-value">' + escapeHtml(m.voiceChannel || "—") + "</span></div>";
+            html += '<div class="guild-info-item"><span class="guild-info-label">Queue Size</span><span class="guild-info-value">' + m.queueSize + "</span></div>";
+            html += '<div class="guild-info-item"><span class="guild-info-label">Autoplay</span><span class="guild-info-value">' + (m.autoplay ? "ON" : "OFF") + "</span></div>";
+            html += '<div class="guild-info-item"><span class="guild-info-label">Loop</span><span class="guild-info-value">' + escapeHtml(m.loopMode || "none") + "</span></div>";
+            html += '<div class="guild-info-item"><span class="guild-info-label">Paused</span><span class="guild-info-value">' + (m.isPaused ? "YES" : "NO") + "</span></div>";
+
+            if (m.currentTrack) {
+              const t = m.currentTrack;
+              html += '<div class="guild-info-item" style="grid-column: span 2"><span class="guild-info-label">Now Playing</span><span class="guild-info-value track-title">' + escapeHtml(t.title) + "</span></div>";
+              html += '<div class="guild-info-item"><span class="guild-info-label">Requested By</span><span class="guild-info-value">' + escapeHtml(t.requestedBy) + "</span></div>";
+              html += '<div class="guild-info-item"><span class="guild-info-label">Position</span><span class="guild-info-value">' + formatTime(t.position) + " / " + escapeHtml(t.duration || "??:??") + "</span></div>";
+            } else {
+              html += '<div class="guild-info-item" style="grid-column: span 2"><span class="guild-info-label">Now Playing</span><span class="guild-info-value" style="color:#888">None</span></div>';
+            }
+
+            html += "</div>";
+          }
+
+          html += "</div>";
+        }
+        el.innerHTML = html;
+      }
+
+      async function toggleDeploy() {
+        const btn = document.getElementById("deploy-btn");
+        btn.disabled = true;
+        try {
+          const r = await apiFetch("/bot/toggle", { method: "POST" });
+          const d = await r.json();
+          log("Deploy toggle: " + d.message);
+          renderDeployIndicator(d.deployMode);
+          updateGuilds();
+        } catch (e) {
+          log("Toggle failed: " + e.message);
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      function escapeHtml(str) {
+        if (!str) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function formatTime(seconds) {
+        if (seconds == null) return "0:00";
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return m + ":" + (s < 10 ? "0" : "") + s;
+      }
+
+      function updateTimer() {
+        guildsRefreshSec--;
+        if (guildsRefreshSec <= 0) {
+          guildsRefreshSec = 5;
+          updateGuilds();
+        }
+        document.getElementById("guilds-timer").textContent = "Refreshing in " + guildsRefreshSec + "s";
+      }
+
       checkStatus();
+      updateGuilds();
       setInterval(checkStatus, 30000);
+      setInterval(updateTimer, 1000);
     </script>
   </body>
 </html>
