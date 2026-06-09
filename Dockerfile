@@ -17,6 +17,7 @@ FROM node:22-bookworm-slim
 RUN apt-get update && apt-get install -y \
   ffmpeg \
   ca-certificates \
+  unzip \
   # Playwright dependencies (for headless refresh)
   libnss3 \
   libatk1.0-0 \
@@ -45,9 +46,14 @@ RUN apt-get update && apt-get install -y \
   && rm -rf /var/lib/apt/lists/*
 
 # Install deno (required by yt-dlp for YouTube JS extraction)
-RUN wget -qO- https://deno.land/install.sh | sh
-ENV DENO_INSTALL="/root/.deno"
-ENV PATH="$DENO_INSTALL/bin:$PATH"
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then DENO_ARCH="aarch64-unknown-linux-gnu"; \
+    else DENO_ARCH="x86_64-unknown-linux-gnu"; fi && \
+    wget -q "https://github.com/denoland/deno/releases/latest/download/deno-${DENO_ARCH}.zip" -O /tmp/deno.zip && \
+    unzip -o /tmp/deno.zip -d /usr/local/bin && \
+    chmod +x /usr/local/bin/deno && \
+    rm /tmp/deno.zip
+ENV PATH="/usr/local/bin:$PATH"
 
 # Install yt-dlp for YouTube URL extraction
 RUN wget -O /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
