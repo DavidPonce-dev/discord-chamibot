@@ -709,8 +709,8 @@
             return;
           }
           document.getElementById("vnc-frame").src =
-            "/vnc/vnc.html?autoconnect=true&path=/vnc/websockify&token=" +
-            TOKEN;
+            "/vnc/vnc.html?autoconnect=true&path=/vnc/websockify%3Ftoken=" +
+            TOKEN + "&token=" + TOKEN;
           document.getElementById("vnc-frame").style.display = "block";
           log(
             "VNC started \u2014 login in the frame below, then use Extract Cookies button",
