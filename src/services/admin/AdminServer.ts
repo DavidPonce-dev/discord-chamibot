@@ -178,19 +178,22 @@ export function startAdminServer(port: number) {
       }
 
       if (path.startsWith("/vnc/")) {
-        if (!isValidToken(req)) {
-          logger.warn("vnc", "Token validation failed for VNC request", { path, query: url.search })
-          res.writeHead(403, { "Content-Type": "text/html" })
-          res.end(ACCESS_DENIED_HTML)
-          return
-        }
         if (!vncActive) {
           logger.warn("vnc", "VNC not active", { path })
           res.writeHead(503, { "Content-Type": "application/json" })
           res.end(JSON.stringify({ error: "VNC not active. Start a login session first." }))
           return
         }
-        logger.debug("vnc", "Handling VNC request", { path, query: url.search })
+        // Only require token for the initial HTML page, not for static assets
+        // Sub-resources (JS, CSS, images) are requested without query params
+        const isHtmlRequest = path.endsWith(".html") || path === "/vnc/" || path === "/vnc"
+        if (isHtmlRequest && !isValidToken(req)) {
+          logger.warn("vnc", "Token validation failed for VNC HTML request", { path, query: url.search })
+          res.writeHead(403, { "Content-Type": "text/html" })
+          res.end(ACCESS_DENIED_HTML)
+          return
+        }
+        logger.debug("vnc", "Handling VNC request", { path, tokenRequired: isHtmlRequest })
         serveNovncStatic(req, res)
         return
       }
