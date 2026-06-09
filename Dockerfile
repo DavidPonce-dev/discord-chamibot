@@ -66,18 +66,19 @@ RUN npm ci --omit=dev --ignore-scripts
 
 COPY --from=builder /app/dist ./dist
 
-# Install Playwright and Chromium
+# Set Playwright browsers path to a non-root accessible location BEFORE installing
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
+
+# Install Playwright and Chromium (will use PLAYWRIGHT_BROWSERS_PATH)
 RUN npx playwright install chromium \
   && npx playwright install-deps chromium 2>/dev/null || true
 
 # Verify Chromium binary exists
 RUN node -e "const { chromium } = require('playwright'); console.log('Playwright module loaded')"
 
-# Set explicit Playwright browsers path
-ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
-
-# Create directories for cookies and browser profile
-RUN mkdir -p /cookies /profile
+# Create directories with proper ownership for non-root user
+RUN mkdir -p /cookies /profile /home/node/.cache && chown -R node:node /cookies /profile /home/node/.cache
 
 ENV NODE_OPTIONS=--no-deprecation
+USER node
 CMD ["npm", "run", "start"]

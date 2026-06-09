@@ -12,7 +12,6 @@ services:
       - ADMIN_TOKEN=${ADMIN_TOKEN}
     ports:
       - "3002:3002"
-      - "6080:6080"
     volumes:
       - browser-profile:/profile
       - cookies:/cookies
