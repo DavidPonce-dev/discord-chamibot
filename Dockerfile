@@ -80,5 +80,17 @@ RUN node -e "const { chromium } = require('playwright'); console.log('Playwright
 RUN mkdir -p /cookies /profile /home/node/.cache && chown -R node:node /cookies /profile /home/node/.cache
 
 ENV NODE_OPTIONS=--no-deprecation
+
+# Environment variables (set via docker-compose, Coolify, or docker run -e)
+ENV DISCORD_TOKEN=
+ENV CLIENT_ID=
+ENV ADMIN_TOKEN=
+ENV ADMIN_ALLOWED_ORIGINS=
+ENV COOKIE_DIR=/cookies
+ENV BROWSER_PROFILE=/profile
+ENV COOKIE_REFRESH_INTERVAL_MS=43200000
+ENV YOUTUBE_COOKIES=
+ENV COOKIE_REFRESHER_URL=
+
 USER node
 CMD ["npm", "run", "start"]
