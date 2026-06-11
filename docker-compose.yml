@@ -5,11 +5,18 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
+      # Required
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - CLIENT_ID=${CLIENT_ID}
+      # Admin Panel
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - ADMIN_ALLOWED_ORIGINS=${ADMIN_ALLOWED_ORIGINS}
+      # Cookie Refresher
       - COOKIE_DIR=/cookies
       - BROWSER_PROFILE=/profile
       - COOKIE_REFRESH_INTERVAL_MS=43200000
-      - ADMIN_PORT=3002
-      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - YOUTUBE_COOKIES=${YOUTUBE_COOKIES:-}
+      - COOKIE_REFRESHER_URL=${COOKIE_REFRESHER_URL:-}
     ports:
       - "3002:3002"
     volumes:
