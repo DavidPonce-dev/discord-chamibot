@@ -10,6 +10,7 @@ import { execute as skip } from "@/commands/playback/skip"
 import { execute as stop } from "@/commands/playback/stop"
 import { remove, shuffle, loop } from "@/commands/queue/queue-control"
 import { execute as seek } from "@/commands/music/seek"
+import { execute as lastfm } from "@/commands/general/lastfm"
 
 export interface CommandDef {
   name: string
@@ -115,6 +116,25 @@ export const commands: CommandDef[] = [
         type: ApplicationCommandOptionType.Number,
         required: true,
         min_value: 0,
+      },
+    ],
+  },
+  {
+    name: "lastfm",
+    description: "Configura el usuario de Last.fm para recomendaciones",
+    handler: lastfm,
+    options: [
+      {
+        name: "action",
+        description: "Acción a realizar (set, clear, show)",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+      {
+        name: "username",
+        description: "Nombre de usuario de Last.fm",
+        type: ApplicationCommandOptionType.String,
+        required: false,
       },
     ],
   },

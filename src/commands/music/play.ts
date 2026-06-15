@@ -97,7 +97,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         guildId,
       })
       await interaction.deleteReply().catch(() => {})
-      await initializeQueueDisplay(guildId, interaction.channel as GuildTextBasedChannel | undefined, `🎵 ${user} agregó una playlist — ${result.playlistTitle ?? "Lista"}`, lastPage())
+      await initializeQueueDisplay(guildId, interaction.channel as GuildTextBasedChannel | undefined, lastPage())
     } else {
       const track = toTrack(result.tracks[0], user)
       await scheduler.add(track)
@@ -107,7 +107,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         guildId,
       })
       await interaction.deleteReply().catch(() => {})
-      await initializeQueueDisplay(guildId, interaction.channel as GuildTextBasedChannel | undefined, `🎵 ${user} agregó una canción — ${track.title}`, lastPage())
+      await initializeQueueDisplay(guildId, interaction.channel as GuildTextBasedChannel | undefined, lastPage())
     }
   } catch (error) {
     logger.error("command", "Error al procesar el tema", {

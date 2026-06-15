@@ -159,6 +159,7 @@ export class AudioService {
 
       ffmpegArgs.push(
         "-i", audioUrl,
+        "-af", "volume=0.65",
         "-f", "opus",
         "-c:a", "libopus",
         "-b:a", "128k",

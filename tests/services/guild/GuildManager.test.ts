@@ -32,7 +32,7 @@ const createMockQueueMethods = vi.hoisted(() => {
   })
 })
 
-vi.mock("@/services/TrackScheduler", () => ({
+vi.mock("@/services/scheduler/TrackScheduler", () => ({
   TrackScheduler: class {
     constructor() {
       return createMockQueueMethods() as any

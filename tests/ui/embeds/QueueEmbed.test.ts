@@ -60,17 +60,18 @@ describe("QueueEmbed", () => {
         getPosition: vi.fn().mockReturnValue(65),
       })
       const embed = buildQueueContent(q, 1)
-      expect(embed.data.description).toContain("Now Playing")
+      expect(embed.data.description).toContain("***Now Playing***")
       expect(embed.data.description).toContain("1:05") // 65s en la barra
     })
 
-    it("con statusTitle lo incluye al inicio", () => {
+    it("con artista muestra formato destacado", () => {
       const q = mockQueue({
-        getCurrentTrack: vi.fn().mockReturnValue(makeTrack()),
+        getCurrentTrack: vi.fn().mockReturnValue(makeTrack({ canonicalTitle: "Artist - Song" })),
         getPosition: vi.fn().mockReturnValue(0),
       })
-      const embed = buildQueueContent(q, 1, "🎵 usuario agregó un tema")
-      expect(embed.data.description).toContain("usuario agregó un tema")
+      const embed = buildQueueContent(q, 1)
+      expect(embed.data.description).toContain("***Song***")
+      expect(embed.data.description).toContain("**🎤 Artist**")
     })
 
     it("tracks sin duration no explotan", () => {
@@ -149,28 +150,16 @@ describe("QueueComponents", () => {
       expect(row.components).toHaveLength(5)
     })
 
-    it("cuando no está pausado muestra 'Pausar'", () => {
+    it("botón pause no tiene label", () => {
       const q = mockQueue({ isPaused: vi.fn().mockReturnValue(false) })
       const row = buildPlaybackRow(q)
-      expect(btnData(row.components[0]).label).toBe("Pausar")
+      expect(btnData(row.components[0]).label).toBeUndefined()
     })
 
-    it("cuando está pausado muestra 'Reanudar'", () => {
-      const q = mockQueue({ isPaused: vi.fn().mockReturnValue(true) })
-      const row = buildPlaybackRow(q)
-      expect(btnData(row.components[0]).label).toBe("Reanudar")
-    })
-
-    it("autoplay ON muestra 'Radio: ON'", () => {
+    it("autoplay button no tiene label", () => {
       const q = mockQueue({ isAutoplayEnabled: vi.fn().mockReturnValue(true) })
       const row = buildPlaybackRow(q)
-      expect(btnData(row.components[4]).label).toBe("Radio: ON")
-    })
-
-    it("autoplay OFF muestra 'Radio: OFF'", () => {
-      const q = mockQueue({ isAutoplayEnabled: vi.fn().mockReturnValue(false) })
-      const row = buildPlaybackRow(q)
-      expect(btnData(row.components[4]).label).toBe("Radio: OFF")
+      expect(btnData(row.components[4]).label).toBeUndefined()
     })
   })
 
@@ -182,17 +171,17 @@ describe("QueueComponents", () => {
       expect(row.components).toHaveLength(5)
     })
 
-    it("pausado muestra '▶ Reanudar' con id np_resume", () => {
+    it("pausado muestra botón sin label con id np_resume", () => {
       const q = mockQueue({ isPaused: vi.fn().mockReturnValue(true) })
       const row = buildNowPlayingButtons(q)
-      expect(btnData(row.components[1]).label).toBe("▶ Reanudar")
+      expect(btnData(row.components[1]).label).toBeUndefined()
       expect(btnData(row.components[1]).custom_id).toBe("np_resume")
     })
 
-    it("no pausado muestra '⏸ Pausar' con id np_pause", () => {
+    it("no pausado muestra botón sin label con id np_pause", () => {
       const q = mockQueue({ isPaused: vi.fn().mockReturnValue(false) })
       const row = buildNowPlayingButtons(q)
-      expect(btnData(row.components[1]).label).toBe("⏸ Pausar")
+      expect(btnData(row.components[1]).label).toBeUndefined()
       expect(btnData(row.components[1]).custom_id).toBe("np_pause")
     })
   })

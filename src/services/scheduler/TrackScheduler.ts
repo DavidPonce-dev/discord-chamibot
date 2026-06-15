@@ -8,16 +8,27 @@ import {
 } from "@discordjs/voice"
 import { Track, LoopMode } from "@/core/types"
 import { AudioService } from "@/services/audio/AudioService"
-import { findRelated, normalizeTitle, extractArtist } from "@/radio/YouTubeRecommender"
+import { findRelated, extractArtist, extractSongOnly } from "@/radio/LastFmRecommender"
 import { logger } from "@/utils/logger"
 import { getErrorMessage } from "@/utils/error"
 import { getBotClient } from "@/bot"
 
 import { VOICE_RECONNECT_TIMEOUT_MS, SEEK_SETTLE_DELAY_MS } from "@/config/timeouts"
+import { ARTIST_ROTATION_LIMIT } from "@/config/radio"
 const MS_PER_SECOND = 1_000
 
+function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\[[^\]]*\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
 export class TrackScheduler {
-  private queue: Track[] = []
+  private userQueue: Track[] = []
+  private radioQueue: Track[] = []
   private current: Track | null = null
   private lastTrackTitle: string | null = null
   private player: AudioPlayer
@@ -29,13 +40,14 @@ export class TrackScheduler {
   private pauseOffset = 0
   private pauseTime: number | null = null
   private seeking = false
-  private trackHistory: string[] = []
-  private sameArtistStreak = 0
+  private last5Tracks: string[] = []
   private currentArtist: string | null = null
-  private readonly ARTIST_ROTATION_LIMIT = 3
+  private sameArtistStreak = 0
   private artistHistory: string[] = []
+  private radioNext: Track | null = null
+  private radioBaseTitle: string | null = null
 
-  private readonly MAX_HISTORY = 20
+  private readonly MAX_LAST5 = 5
   private readonly MAX_ARTIST_HISTORY = 10
   private destroyed = false
   private handlingIdle = false
@@ -66,7 +78,7 @@ export class TrackScheduler {
       this.handlingIdle = true
       try {
         const finished = this.current
-        const willAutoplay = this.autoplay && !!finished && this.queue.length === 0
+        const willAutoplay = this.autoplay && !!finished && this.userQueue.length === 0 && this.radioQueue.length === 0
 
         if (finished?.title) {
           this.handleTrackFinished(finished, willAutoplay)
@@ -80,10 +92,14 @@ export class TrackScheduler {
           await this.handleAutoplay(finished)
         }
 
+        if (this.autoplay && this.current) {
+          await this.preloadRadioNext()
+        }
+
         this.resetPlaybackState()
         await this.processQueue()
 
-        if (!this.autoplay && this.queue.length === 0 && !this.current) {
+        if (!this.autoplay && this.userQueue.length === 0 && this.radioQueue.length === 0 && !this.current) {
           logger.event("scheduler", "Cola vacía sin autoplay, desconectando", {
             guildId: this.connection.joinConfig.guildId,
           })
@@ -129,59 +145,69 @@ export class TrackScheduler {
 
   private handleTrackFinished(finished: Track, willAutoplay: boolean) {
     const norm = normalizeTitle(finished.title)
-    this.trackHistory.unshift(norm)
-    if (this.trackHistory.length > this.MAX_HISTORY) this.trackHistory.pop()
+    this.last5Tracks.unshift(norm)
+    if (this.last5Tracks.length > this.MAX_LAST5) this.last5Tracks.pop()
 
     const artist = extractArtist(finished.title)
-    if (artist && artist === this.currentArtist) {
-      this.sameArtistStreak++
-    } else if (artist) {
-      this.sameArtistStreak = 1
-      this.currentArtist = artist
-      this.artistHistory.unshift(artist)
-      if (this.artistHistory.length > this.MAX_ARTIST_HISTORY) this.artistHistory.pop()
+    if (artist) {
+      if (artist === this.currentArtist) {
+        this.sameArtistStreak++
+      } else {
+        this.sameArtistStreak = 1
+        this.currentArtist = artist
+        this.artistHistory.unshift(artist)
+        if (this.artistHistory.length > this.MAX_ARTIST_HISTORY) this.artistHistory.pop()
+      }
     }
 
     logger.event("scheduler", "Track finalizado", {
       title: finished.title,
       guildId: this.connection.joinConfig.guildId,
       willAutoplay,
-      queueSize: this.queue.length,
+      queueSize: this.userQueue.length + this.radioQueue.length,
     })
   }
 
   private applyLoopMode(finished: Track | null) {
     if (!finished) return
+    const targetQueue = finished.requestedBy === "radio" ? this.radioQueue : this.userQueue
     if (this.loopMode === "one") {
-      this.queue.unshift({ ...finished })
+      targetQueue.unshift({ ...finished })
       logger.debug("scheduler", "Loop one: reencolando track", { title: finished.title })
     } else if (this.loopMode === "all") {
-      this.queue.push({ ...finished })
+      targetQueue.push({ ...finished })
       logger.debug("scheduler", "Loop all: reencolando track al final", { title: finished.title })
     }
   }
 
   private async handleAutoplay(finished: Track | null) {
     if (!finished) return
-    const shouldSwitch = this.sameArtistStreak >= this.ARTIST_ROTATION_LIMIT
-    logger.debug("radio", "Buscando track relacionado", {
-      currentTrack: finished.title,
-      lastTitle: this.lastTrackTitle,
+
+    if (this.radioNext) {
+      this.radioQueue.push(this.radioNext)
+      logger.info("radio", "Radio next encolado (pre-calculado)", {
+        title: this.radioNext.title,
+        id: this.radioNext.id,
+      })
+      this.radioNext = null
+      return
+    }
+
+    const searchTitle = this.radioBaseTitle ?? finished.title
+    const shouldSwitch = this.sameArtistStreak >= ARTIST_ROTATION_LIMIT
+    logger.debug("radio", "Buscando track relacionado (fallback)", {
+      baseTitle: searchTitle,
+      historyCount: this.last5Tracks.length,
       shouldSwitch,
-      excludeCount: this.trackHistory.length,
     })
-    const next = await findRelated(
-      finished,
-      this.lastTrackTitle,
-      new Set(this.trackHistory),
-      this.currentArtist,
-      shouldSwitch,
-    )
-    if (next) {
-      this.queue.unshift(next as Track)
+    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist)
+    if (result) {
+      const track = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle } as Track
+      this.radioQueue.push(track)
       logger.info("radio", "Track relacionado encontrado", {
-        title: next.title,
-        id: next.id,
+        title: result.track.title,
+        id: result.track.id,
+        canonicalTitle: result.canonicalTitle,
       })
     } else {
       logger.warn("radio", "No se encontró track relacionado")
@@ -227,11 +253,15 @@ export class TrackScheduler {
   }
 
   async add(track: Track) {
-    this.queue.push(track)
+    this.radioQueue = []
+    this.radioNext = null
+
+    this.userQueue.push(track)
+    const totalSize = this.userQueue.length + this.radioQueue.length
     logger.event("scheduler", "Track añadido a cola", {
       title: track.title,
       guildId: this.connection.joinConfig.guildId,
-      queueSize: this.queue.length,
+      queueSize: totalSize,
       wasPlaying: this.isPlaying,
     })
     if (!this.isPlaying) {
@@ -240,11 +270,14 @@ export class TrackScheduler {
   }
 
   async addMultiple(tracks: Track[]) {
-    this.queue.push(...tracks)
+    this.radioQueue = []
+    this.radioNext = null
+    this.userQueue.push(...tracks)
+    const totalSize = this.userQueue.length + this.radioQueue.length
     logger.event("scheduler", "Múltiples tracks añadidos", {
       count: tracks.length,
       guildId: this.connection.joinConfig.guildId,
-      queueSize: this.queue.length,
+      queueSize: totalSize,
     })
     if (!this.isPlaying) {
       await this.processQueue()
@@ -252,7 +285,7 @@ export class TrackScheduler {
   }
 
   addNext(track: Track) {
-    this.queue.unshift(track)
+    this.userQueue.unshift(track)
     logger.event("scheduler", "Track añadido al frente", {
       title: track.title,
       guildId: this.connection.joinConfig.guildId,
@@ -284,18 +317,34 @@ export class TrackScheduler {
     this.isProcessing = true
     try {
       while (!this.isPlaying) {
-        const nextTrack = this.queue.shift()
+        const nextTrack = this.userQueue.shift() ?? this.radioQueue.shift()
         if (!nextTrack) return
 
         this.isPlaying = true
         this.current = nextTrack
-        this.lastTrackTitle = nextTrack.title
+        this.lastTrackTitle = nextTrack.canonicalTitle ?? nextTrack.title
+        if (nextTrack.requestedBy !== "radio") {
+          this.radioBaseTitle = null
+        }
+
+        if (this.userQueue.length === 0 && this.radioQueue.length === 0 && this.autoplay) {
+          this.populateRadioQueue().catch((error: unknown) => {
+            logger.error("scheduler", "Error poblando cola de radio", { error: getErrorMessage(error) })
+          })
+        }
+
+        const logArtist = nextTrack.canonicalTitle ? extractArtist(nextTrack.canonicalTitle) : extractArtist(nextTrack.title)
+        const logSong = nextTrack.canonicalTitle ? extractSongOnly(nextTrack.canonicalTitle) : extractSongOnly(nextTrack.title)
 
         logger.event("scheduler", "Reproduciendo track", {
-          title: nextTrack.title,
+          artist: logArtist || "(desconocido)",
+          song: logSong || nextTrack.title,
+          album: "(no disponible)",
+          image: nextTrack.thumbnail ?? "(no disponible)",
+          youtubeTitle: nextTrack.title,
           id: nextTrack.id,
           guildId: this.connection.joinConfig.guildId,
-          queueRemaining: this.queue.length,
+          queueRemaining: this.userQueue.length + this.radioQueue.length,
         })
 
         try {
@@ -340,19 +389,30 @@ export class TrackScheduler {
   }
 
   shuffle() {
-    for (let i = this.queue.length - 1; i > 0; i--) {
+    const combined = [...this.userQueue, ...this.radioQueue]
+    for (let i = combined.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [this.queue[i], this.queue[j]] = [this.queue[j], this.queue[i]]
+      [combined[i], combined[j]] = [combined[j], combined[i]]
     }
+    this.userQueue = combined.filter(t => t.requestedBy !== "radio")
+    this.radioQueue = combined.filter(t => t.requestedBy === "radio")
+    const totalSize = this.userQueue.length + this.radioQueue.length
     logger.event("scheduler", "Cola mezclada", {
       guildId: this.connection.joinConfig.guildId,
-      size: this.queue.length,
+      size: totalSize,
     })
   }
 
   remove(index: number): Track | null {
-    if (index < 0 || index >= this.queue.length) return null
-    const removed = this.queue.splice(index, 1)[0] ?? null
+    const totalSize = this.userQueue.length + this.radioQueue.length
+    if (index < 0 || index >= totalSize) return null
+    let removed: Track | null = null
+    if (index < this.userQueue.length) {
+      removed = this.userQueue.splice(index, 1)[0] ?? null
+    } else {
+      const radioIndex = index - this.userQueue.length
+      removed = this.radioQueue.splice(radioIndex, 1)[0] ?? null
+    }
     if (removed) {
       logger.event("scheduler", "Track removido de cola", {
         title: removed.title,
@@ -364,18 +424,41 @@ export class TrackScheduler {
   }
 
   moveUp(index: number): boolean {
-    if (index <= 0 || index >= this.queue.length) return false
-    const temp = this.queue[index]
-    this.queue[index] = this.queue[index - 1]
-    this.queue[index - 1] = temp
+    const totalSize = this.userQueue.length + this.radioQueue.length
+    if (index <= 0 || index >= totalSize) return false
+
+    if (index < this.userQueue.length) {
+      const temp = this.userQueue[index]
+      this.userQueue[index] = this.userQueue[index - 1]
+      this.userQueue[index - 1] = temp
+      return true
+    }
+
+    const radioIndex = index - this.userQueue.length
+    if (radioIndex === 0) return false
+    const temp = this.radioQueue[radioIndex]
+    this.radioQueue[radioIndex] = this.radioQueue[radioIndex - 1]
+    this.radioQueue[radioIndex - 1] = temp
     return true
   }
 
   moveDown(index: number): boolean {
-    if (index < 0 || index >= this.queue.length - 1) return false
-    const temp = this.queue[index]
-    this.queue[index] = this.queue[index + 1]
-    this.queue[index + 1] = temp
+    const totalSize = this.userQueue.length + this.radioQueue.length
+    if (index < 0 || index >= totalSize - 1) return false
+
+    if (index < this.userQueue.length) {
+      if (index === this.userQueue.length - 1) return false
+      const temp = this.userQueue[index]
+      this.userQueue[index] = this.userQueue[index + 1]
+      this.userQueue[index + 1] = temp
+      return true
+    }
+
+    const radioIndex = index - this.userQueue.length
+    if (radioIndex >= this.radioQueue.length - 1) return false
+    const temp = this.radioQueue[radioIndex]
+    this.radioQueue[radioIndex] = this.radioQueue[radioIndex + 1]
+    this.radioQueue[radioIndex + 1] = temp
     return true
   }
 
@@ -430,8 +513,9 @@ export class TrackScheduler {
   }
 
   clear() {
-    const count = this.queue.length
-    this.queue = []
+    const count = this.userQueue.length + this.radioQueue.length
+    this.userQueue = []
+    this.radioQueue = []
     logger.event("scheduler", "Cola limpiada", {
       removedCount: count,
       guildId: this.connection.joinConfig.guildId,
@@ -483,12 +567,14 @@ export class TrackScheduler {
   }
 
   stop() {
+    const totalSize = this.userQueue.length + this.radioQueue.length
     logger.event("scheduler", "Stop", {
       title: this.current?.title ?? "none",
-      queueSize: this.queue.length,
+      queueSize: totalSize,
       guildId: this.connection.joinConfig.guildId,
     })
-    this.queue = []
+    this.userQueue = []
+    this.radioQueue = []
     this.audio.killProcess()
     this.player.stop()
   }
@@ -508,17 +594,107 @@ export class TrackScheduler {
     }
   }
 
-  toggleAutoplay(): boolean {
+  async toggleAutoplay(): Promise<boolean> {
     this.autoplay = !this.autoplay
     logger.event("scheduler", "Autoplay cambiado", {
       enabled: this.autoplay,
       guildId: this.connection.joinConfig.guildId,
     })
+
+    if (this.autoplay && this.current && this.userQueue.length === 0 && this.radioQueue.length === 0) {
+      await this.populateRadioQueue()
+    }
+
     return this.autoplay
   }
 
+  async reshuffleRadioTrack(flatIndex: number): Promise<Track | null> {
+    const radioIndex = flatIndex - this.userQueue.length
+    if (radioIndex < 0 || radioIndex >= this.radioQueue.length) return null
+
+    const searchTitle = this.radioBaseTitle ?? this.lastTrackTitle
+    if (!searchTitle) return null
+
+    const shouldSwitch = this.sameArtistStreak >= ARTIST_ROTATION_LIMIT
+    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist)
+    if (!result) return null
+
+    const track = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle } as Track
+    this.radioQueue[radioIndex] = track
+    logger.info("radio", "Track de radio resugerido", {
+      title: track.title,
+      id: track.id,
+      index: radioIndex,
+    })
+
+    if (result.canonicalTitle) {
+      this.radioBaseTitle = result.canonicalTitle
+    }
+    return track
+  }
+
+  getRadioNext(): Track | null {
+    return this.radioNext
+  }
+
+  private async populateRadioQueue(): Promise<void> {
+    const searchTitle = this.radioBaseTitle ?? this.lastTrackTitle
+    if (!searchTitle || !this.autoplay || this.radioQueue.length > 0) return
+
+    const shouldSwitch = this.sameArtistStreak >= ARTIST_ROTATION_LIMIT
+    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist)
+    if (!result || this.radioQueue.length > 0) return
+
+    const track = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle } as Track
+    this.radioQueue.push(track)
+    logger.info("radio", "Cola de radio poblada (último track de usuario)", {
+      title: track.title,
+      id: track.id,
+      canonicalTitle: result.canonicalTitle,
+    })
+    this.onTrackChange?.(this.connection.joinConfig.guildId)
+  }
+
+  async reshuffleRadio(): Promise<Track | null> {
+    const searchTitle = this.radioBaseTitle ?? this.lastTrackTitle
+    if (!searchTitle) return null
+    this.radioNext = null
+    const shouldSwitch = this.sameArtistStreak >= ARTIST_ROTATION_LIMIT
+    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist)
+    if (result) {
+      this.radioNext = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle } as Track
+      if (result.canonicalTitle) {
+        this.radioBaseTitle = result.canonicalTitle
+      }
+      logger.info("radio", "Radio next rehecho", {
+        title: this.radioNext.title,
+        id: this.radioNext.id,
+        canonicalTitle: result.canonicalTitle,
+      })
+    }
+    return this.radioNext
+  }
+
+  private async preloadRadioNext(): Promise<void> {
+    const searchTitle = this.radioBaseTitle ?? this.lastTrackTitle
+    if (!searchTitle) return
+    const shouldSwitch = this.sameArtistStreak >= ARTIST_ROTATION_LIMIT
+    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist)
+    if (result) {
+      this.radioNext = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle } as Track
+      if (result.canonicalTitle) {
+        this.radioBaseTitle = result.canonicalTitle
+      }
+      logger.debug("radio", "Radio next pre-calculado", {
+        title: this.radioNext.title,
+        id: this.radioNext.id,
+        canonicalTitle: result.canonicalTitle,
+      })
+    }
+  }
+
   getQueue(): Track[] {
-    return [...this.queue]
+    return [...this.userQueue, ...this.radioQueue]
   }
 
   getCurrentTrack(): Track | null {
@@ -530,7 +706,7 @@ export class TrackScheduler {
   }
 
   getSize(): number {
-    return this.queue.length
+    return this.userQueue.length + this.radioQueue.length
   }
 
   isDestroyed(): boolean {

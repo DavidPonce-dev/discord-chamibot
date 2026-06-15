@@ -1,19 +1,10 @@
 import { VoiceConnection } from "@discordjs/voice"
 import { Message, GuildTextBasedChannel } from "discord.js"
 import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import { registerCleanup, registerPreDestroyCleanup, runPreDestroyCleanup, runCleanup } from "@/services/guild/cleanupRegistry"
 import { logger } from "@/utils/logger"
 
-type CleanupFn = (guildId: string) => void
-const cleanupCallbacks: CleanupFn[] = []
-const preDestroyCallbacks: CleanupFn[] = []
-
-export function registerCleanup(cb: CleanupFn) {
-  cleanupCallbacks.push(cb)
-}
-
-export function registerPreDestroyCleanup(cb: CleanupFn) {
-  preDestroyCallbacks.push(cb)
-}
+export { registerCleanup, registerPreDestroyCleanup }
 
 export class GuildManager {
   private sessions = new Map<string, TrackScheduler>()
@@ -22,6 +13,7 @@ export class GuildManager {
   private queueChannels = new Map<string, GuildTextBasedChannel>()
   private statusTitles = new Map<string, string>()
   private nowPlayingMessages = new Map<string, Message>()
+  private lastfmUsernames = new Map<string, string>()
 
   getQueueChannel(guildId: string): GuildTextBasedChannel | undefined {
     return this.queueChannels.get(guildId)
@@ -74,22 +66,23 @@ export class GuildManager {
 
   delete(guildId: string) {
     logger.event("guild", "Sesión de música eliminada", { guildId })
-    for (const cb of preDestroyCallbacks) {
-      cb(guildId)
-    }
+    runPreDestroyCleanup(guildId)
     const session = this.sessions.get(guildId)
     if (session) {
       session.destroy()
     }
-    this.sessions.delete(guildId)
+
+    this.queueMessages.get(guildId)?.delete().catch(() => {})
     this.queueMessages.delete(guildId)
+    this.nowPlayingMessages.get(guildId)?.delete().catch(() => {})
+    this.nowPlayingMessages.delete(guildId)
+
+    this.sessions.delete(guildId)
     this.queueChannels.delete(guildId)
     this.statusTitles.delete(guildId)
-    this.nowPlayingMessages.delete(guildId)
     this.autoplayPrefs.delete(guildId)
-    for (const cb of cleanupCallbacks) {
-      cb(guildId)
-    }
+    this.lastfmUsernames.delete(guildId)
+    runCleanup(guildId)
   }
 
   has(guildId: string) {
@@ -118,6 +111,23 @@ export class GuildManager {
 
   clearNowPlayingMessage(guildId: string) {
     this.nowPlayingMessages.delete(guildId)
+  }
+
+  getLastfmUsername(guildId: string): string | undefined {
+    return this.lastfmUsernames.get(guildId)
+  }
+
+  setLastfmUsername(guildId: string, username: string) {
+    this.lastfmUsernames.set(guildId, username)
+    logger.event("guild", "Last.fm username configurado", {
+      guildId,
+      username,
+    })
+  }
+
+  clearLastfmUsername(guildId: string) {
+    this.lastfmUsernames.delete(guildId)
+    logger.event("guild", "Last.fm username removido", { guildId })
   }
 
   getSessions() {

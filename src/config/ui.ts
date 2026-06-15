@@ -17,14 +17,16 @@ export const BUTTON_PREFIXES = {
   queuePlaybackPause: "q_playback_pause",
   queuePlaybackSkip: "q_playback_skip",
   queuePlaybackShuffle: "q_playback_shuffle",
-  queuePlaybackClear: "q_playback_clear",
   queuePlaybackAutoplay: "q_playback_autoplay",
+  queuePlaybackStop: "q_playback_stop",
   nowPlayingPause: "np_pause",
   nowPlayingResume: "np_resume",
   nowPlayingSkip: "np_skip",
   nowPlayingLoop: "np_loop",
   nowPlayingShuffle: "np_shuffle",
   nowPlayingSeekBack: "np_seek_back",
+  nowPlayingReshuffle: "np_reshuffle",
+  queueRadioShuffle: "q_radio_shuffle_",
 } as const
 
 export const EMBED_COLORS = {

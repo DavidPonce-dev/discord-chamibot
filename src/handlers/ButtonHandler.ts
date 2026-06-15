@@ -1,6 +1,6 @@
 import { ButtonInteraction } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
-import { refreshQueueMessage, getQueuePage } from "@/services/queue/QueueUIManager"
+import { refreshQueueMessage, getQueuePage, updateQueueForGuild } from "@/services/queue/QueueUIManager"
 import { logger } from "@/utils/logger"
 import { requireSession } from "@/utils/guards"
 import { BUTTON_PREFIXES, LOOP_LABELS } from "@/config/ui"
@@ -54,6 +54,14 @@ export async function handleButton(interaction: ButtonInteraction) {
         await refreshQueueMessage(interaction)
         return
       }
+    }
+
+    if (interaction.customId.startsWith(BUTTON_PREFIXES.queueRadioShuffle)) {
+      const idx = parseInt(interaction.customId.slice(BUTTON_PREFIXES.queueRadioShuffle.length), 10)
+      const track = await scheduler.reshuffleRadioTrack(idx)
+      logger.event("button", "Resugerir track de radio", { user, guildId, index: idx, next: track?.title })
+      await refreshQueueMessage(interaction)
+      return
     }
 
     const handler = buttonHandlers[interaction.customId]
@@ -112,13 +120,13 @@ const buttonHandlers: Record<string, ButtonHandler> = {
     logger.event("button", "Mezclando cola", { user, guildId })
     await refreshQueueMessage(interaction)
   },
-  [BUTTON_PREFIXES.queuePlaybackClear]: async (s, interaction, guildId, user) => {
-    s.clear()
-    logger.event("button", "Limpiando cola", { user, guildId })
+  [BUTTON_PREFIXES.queuePlaybackStop]: async (s, interaction, guildId, user) => {
+    s.destroy()
+    logger.event("button", "Deteniendo reproducci\u00f3n", { user, guildId })
     await refreshQueueMessage(interaction)
   },
   [BUTTON_PREFIXES.queuePlaybackAutoplay]: async (s, interaction, guildId, user) => {
-    s.toggleAutoplay()
+    await s.toggleAutoplay()
     guildManager.toggleAutoplayPref(guildId)
     logger.event("button", "Autoplay toggle", { user, guildId })
     await refreshQueueMessage(interaction)
@@ -154,9 +162,18 @@ const buttonHandlers: Record<string, ButtonHandler> = {
     logger.event("button", "Now Playing seek back", { user, guildId, position: pos })
     await clearButtonsAndFollowUp(interaction, "\u23ea -15s")
   },
+  [BUTTON_PREFIXES.nowPlayingReshuffle]: async (s, interaction, guildId, user) => {
+    const next = await s.reshuffleRadio()
+    logger.event("button", "Now Playing reshuffle", { user, guildId, next: next?.title })
+    await clearButtonsAndFollowUp(interaction, next ? `\ud83d\udd04 ${next.title}` : "\ud83d\udd04 Sin resultados")
+    await updateQueueForGuild(guildId)
+  },
 }
 
 async function clearButtonsAndFollowUp(interaction: ButtonInteraction, content: string) {
-  await interaction.update({ components: [] })
+  await interaction.deferUpdate()
+  await interaction.message.delete().catch(() => {})
+  const guildId = interaction.guildId
+  if (guildId) guildManager.clearNowPlayingMessage(guildId)
   await interaction.followUp({ content, ephemeral: true })
 }

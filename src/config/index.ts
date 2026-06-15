@@ -33,6 +33,9 @@ export const config = {
     cookiesEnv: process.env.YOUTUBE_COOKIES ?? null,
     cookieRefreshIntervalMs: optionalInt("COOKIE_REFRESH_INTERVAL_MS", 30 * 60 * 1000),
   },
+  lastfm: {
+    apiKey: process.env.LASTFM_API_KEY ?? "",
+  },
   services: {
     cookieRefresherUrl: optional("COOKIE_REFRESHER_URL", ""),
   },

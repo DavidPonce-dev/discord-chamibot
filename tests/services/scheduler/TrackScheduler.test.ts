@@ -211,11 +211,11 @@ describe("TrackScheduler", () => {
   })
 
   describe("autoplay toggle", () => {
-    it("toggleAutoplay cambia el estado", () => {
+    it("toggleAutoplay cambia el estado", async () => {
       const { scheduler } = createScheduler()
-      expect(scheduler.toggleAutoplay()).toBe(true)
+      expect(await scheduler.toggleAutoplay()).toBe(true)
       expect(scheduler.isAutoplayEnabled()).toBe(true)
-      expect(scheduler.toggleAutoplay()).toBe(false)
+      expect(await scheduler.toggleAutoplay()).toBe(false)
     })
   })
 

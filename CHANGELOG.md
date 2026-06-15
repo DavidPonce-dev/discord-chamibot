@@ -1,0 +1,171 @@
+# Changelog
+
+Todas las versiones notables de este proyecto.
+
+---
+
+## v1.4.0 (2026-06-15)
+
+### Mejoras
+- **Last.fm**: se agrega `LASTFM_API_KEY` como variable de entorno explícita en `docker-compose.yml` para facilitar la configuración en entornos como Coolify.
+- **Interfaz de cola**: se eliminan los mensajes de notificación ("agregó una canción") y la línea de "Radio activa" del embed. El nombre de la canción ahora se muestra en **bold italic** (`***`) y el artista en **bold** (`**`) para mayor legibilidad.
+- **Botón de stop**: se reemplaza el botón 🗑 (limpiar cola) por ⏹ (detener reproducción), que llama a `scheduler.destroy()` para detener, limpiar la cola y desconectarse del canal de voz.
+
+---
+
+## v1.3.8 (2026-06-11)
+
+### Correcciones
+- **Validación de CORS en Coolify**: se corrige el manejo de `ADMIN_ALLOWED_ORIGINS` vacío, previniendo errores de CORS cuando la variable de entorno no está configurada.
+- **Despliegue en Coolify**: ajustes menores para compatibilidad con el entorno de Coolify.
+
+---
+
+## v1.3.7 (2026-06-09)
+
+### Seguridad
+- **Eliminación de puerto 6080**: se elimina la exposición directa del puerto 6080 (noVNC). Todo el tráfico VNC fluye exclusivamente a través del admin server autenticado en el puerto 3002.
+- **Contenedor no-root**: el contenedor Docker ahora se ejecuta como usuario no-root, mejorando la seguridad.
+- **Validación de origen**: se refuerza la verificación de `Origin` en las rutas del admin server.
+
+---
+
+## v1.3.6 (2026-06-09)
+
+### Correcciones
+- **Assets estáticos de noVNC**: se elimina la validación de token para archivos estáticos (JS, CSS, imágenes) de noVNC, permitiendo que se carguen correctamente. El token solo se requiere para el HTML principal.
+
+---
+
+## v1.3.5 (2026-06-09)
+
+### Mejoras
+- **Logging de VNC**: se agrega logging detallado para depurar problemas de conexión y autenticación en el proxy VNC, facilitando el diagnóstico de fallos.
+
+---
+
+## v1.3.4 (2026-06-09)
+
+### Correcciones
+- **Proxy noVNC directo**: se cambia la estrategia de servir noVNC: en lugar de usar proxy inverso con reescritura de rutas, se sirven los archivos estáticos directamente desde el admin server. Esto elimina problemas de rutas relativas rotas y mejora la confiabilidad.
+
+---
+
+## v1.3.3 (2026-06-09)
+
+### Correcciones
+- **Instalación de Deno**: se instala Deno directamente desde los releases de GitHub en lugar de usar `curl+install.sh`, eliminando la dependencia de `curl` y mejorando la reproducibilidad del build.
+
+---
+
+## v1.3.2 (2026-06-09)
+
+### Correcciones
+- **Dependencias Docker**: se reemplaza `curl` por `wget` y se elimina `unzip` (dependencia no utilizada), reduciendo el tamaño de la imagen.
+- **Token en WebSocket VNC**: se incluye el token de autenticación en la ruta del WebSocket de VNC para validar las conexiones de actualización.
+- **Navegación directa**: se permite la navegación directa a la página de administración sin encabezado `Origin`, facilitando el acceso desde marcadores o URLs directas.
+
+---
+
+## v1.3.1 (2026-06-09)
+
+### Seguridad
+- **Restricción de origen + token**: se agrega verificación del encabezado `Origin` y validación de token en todas las rutas del servidor VNC y admin server.
+
+---
+
+## v1.3.0 (2026-06-09)
+
+### Mejoras
+- **Modo deploy**: se agrega un mecanismo de `deploy mode` que impide la ejecución de comandos durante actualizaciones del servicio, mostrando un mensaje "Actualizando servicio" al usuario.
+- **API de gremios**: nuevo endpoint `/api/guilds` en el admin server que expone información de los servidores activos (canal de voz, track actual, tamaño de cola, estado de autoplay).
+- **Nueva interfaz de administración**: panel de administración rediseñado con tabla de servidores activos, indicadores de estado en tiempo real y diseño responsive.
+
+### Correcciones
+- **Corrupción de estado de reproducción**: se corrige un bug donde el estado de reproducción se corrompía al cambiar de track rápidamente, causando que el scheduler quedara en un estado inconsistente.
+
+---
+
+## v1.2.1 (2026-06-07)
+
+### Correcciones
+- **Desconexión automática**: cuando la cola se vacía y el autoplay está desactivado, el bot ahora se desconecta automáticamente del canal de voz y limpia los mensajes de la interfaz.
+- **Redundancia en comandos**: se eliminan llamadas redundantes a `processQueue` y `updateQueueForGuild` en los comandos de control (`/pause`, `/resume`, `/skip`, `/stop`, `/loop`, `/shuffle`, `/clear`), ya que el scheduler maneja estos estados internamente.
+- **Centralización de guards**: se unifica la lógica de verificación de sesión activa en `requireSession()` y `requirePlaying()`, usadas por todos los comandos.
+
+---
+
+## v1.2.0 (2026-06-07)
+
+### Mejoras
+- **Unificación de renders**: se extrae la lógica de construcción de componentes visuales (embeds y botones) a funciones compartidas en `src/ui/`. Ahora `QueueComponents.ts`, `QueueEmbed.ts`, `NowPlayingEmbed.ts` y `HelpEmbed.ts` usan utilidades comunes (`createBaseEmbed`, `paginate`, `formatTime`, `buildProgressBar`).
+- **Embed base**: se crea `BaseEmbed.ts` con un embed reutilizable que incluye el color y footer por defecto.
+- **Helpers en guards**: `requireSession` y `requirePlaying` ahora son funciones reutilizables en `guards.ts`, eliminando la duplicación en los comandos.
+
+---
+
+## v1.1.3 (2026-06-07)
+
+### Correcciones
+- **Saltos de línea en logs**: se corrige la renderización de `\n` literal en los logs del panel de administración. Ahora los saltos de línea se muestran correctamente como nuevas líneas.
+
+---
+
+## v1.1.2 (2026-06-07)
+
+### Correcciones
+- **Bloqueos de Chromium**: se agrega limpieza de archivos de bloqueo (`SingletonLock`, `SingletonSocket`, `SingletonCookie`) en el perfil de Chromium antes de iniciar VNC, incluso después de un redeploy. Esto previene errores de "profile is locked" en Coolify.
+
+---
+
+## v1.1.1 (2026-06-07)
+
+### Correcciones
+- **Cookies expiradas**: se agrega renovación automática de cookies al iniciar el bot. Si las cookies de YouTube han expirado, se refrescan antes de intentar cualquier descarga.
+- **Validación de conexión**: se verifica el estado de la conexión de voz antes de actualizar la interfaz de la cola. Si el bot se desconectó, se limpian los mensajes en lugar de intentar editarlos y lanzar errores.
+
+---
+
+## v1.1.0 (2026-06-06)
+
+### Refactorización
+- **Intervalo de refresco de cookies**: se crea `CookieRefresherService` con un intervalo programado que renueva las cookies periódicamente, evitando que expiren durante largas sesiones de reproducción.
+- **Reestructuración de servicios**: se mueve la lógica de cookies a `services/cookie/`, separando `CookieManager` (navegador) de `CookieRefresherService` (programación).
+- **Nuevo panel admin**: se implementa `AdminServer` con una página HTML completa que muestra el dashboard de administración con estado del bot, logs en tiempo real y controles de navegador.
+- **Bootstrap centralizado**: se crea `bootstrap.ts` como punto de entrada único que inicializa todos los servicios (cookies, admin server, bot).
+
+### Correcciones
+- **Race condition en cola**: se reemplaza el sistema de cola FIFO para ediciones de mensajes con `last-edit-wins`, eliminando condiciones de carrera donde mensajes anteriores sobrescribían a los más recientes.
+- **Limpieza al desconectar**: se corrige la limpieza de recursos cuando el bot se desconecta del canal de voz, asegurando que todos los intervals y mensajes se eliminen.
+
+---
+
+## v1.0.0 (2026-06-06)
+
+### Funcionalidades principales
+- **Reproducción de audio**: sistema completo de reproducción desde YouTube con cola, control de reproducción (pause, resume, skip, stop, seek) y modos de loop (one/all).
+- **Autoplay v2**: sistema de radio automática con detección de género, búsqueda multi-consulta (Last.fm + YouTube) y filtrado por duración. Incluye rotación de artistas para evitar bucles del mismo artista.
+- **Barra de progreso**: indicador visual de progreso en tiempo real dentro del embed de la cola, actualizado cada 3 segundos.
+- **Búsqueda con autocompletado**: sugerencias de búsqueda con categorías (canciones, álbumes, playlists, canales) y emojis distintivos.
+- **Sistema de cola completo**: agregar tracks, agregar al frente, remover, reordenar, mezclar, y paginación del embed.
+
+### Integración con YouTube
+- **Extracción de audio**: múltiples estrategias de formato para yt-dlp con fallback automático (web, tv_embedded, android).
+- **Cookies de YouTube**: sistema basado en Playwright para extraer cookies del navegador y mantener la sesión activa.
+- **Resolución de búsquedas**: motor de búsqueda que soporta URLs directas y consultas por texto, con resolución de playlists.
+
+### Panel de administración
+- **Servidor admin unificado**: todas las funcionalidades de administración en un solo puerto (3002) con interfaz web desde `admin-page.html`.
+- **Autenticación**: sistema de autenticación basado en token para proteger el panel y los endpoints de la API.
+- **Dashboard en vivo**: panel con estado del bot, logs en tiempo real, controles del navegador Chromium e indicadores de validez de cookies.
+- **Integración VNC**: servidor VNC integrado con noVNC para acceso remoto al navegador Chromium, con proxy autenticado y recovery automático.
+
+### Infraestructura
+- **Docker multi-etapa**: imagen Docker optimizada con multi-stage build, Deno para yt-dlp, Chromium para cookies, y FFmpeg para audio.
+- **Coolify compatible**: despliegue listo para Coolify con variables de entorno configurables y volúmenes persistentes.
+- **Logging estructurado**: sistema de logs con formato `[timestamp][LEVEL][service] mensaje` para facilitar el debugging.
+
+### Calidad de código
+- **Tests con Vitest**: suite de tests unitarios para scheduler, guards, format, embeds, botones, búsqueda y mensajes.
+- **Arquitectura limpia**: separación en `commands/`, `services/`, `ui/`, `handlers/`, `utils/` siguiendo principios de Screaming Architecture.
+- **Mensajes temporales**: los mensajes de "cola vacía" y errores se auto-eliminan después de 5 segundos.

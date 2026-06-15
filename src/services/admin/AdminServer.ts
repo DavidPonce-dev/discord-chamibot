@@ -9,7 +9,6 @@ import { config } from "@/config"
 import { getBotClient } from "@/bot"
 import { guildManager } from "@/services/guild/GuildManager"
 import { isDeployMode, enableDeployMode, disableDeployMode } from "@/services/deploy/DeployGuard"
-import { cleanupQueueUI } from "@/services/queue/QueueUIManager"
 
 const ADMIN_PAGE = fs.readFileSync(path.join(__dirname, "admin-page.html"), "utf-8")
 
@@ -405,7 +404,6 @@ export function startAdminServer(port: number) {
             if (scheduler) {
               scheduler.destroy()
             }
-            cleanupQueueUI(guildId)
             disconnectedCount++
           }
 

@@ -36,6 +36,7 @@ vi.mock("@/services/guild/GuildManager", () => ({
   guildManager: {
     get: vi.fn(),
     toggleAutoplayPref: mockToggleAutoplayPref,
+    clearNowPlayingMessage: vi.fn(),
   },
 }))
 
@@ -60,8 +61,8 @@ vi.mock("@/config/ui", () => ({
     queuePlaybackPause: "q_playback_pause",
     queuePlaybackSkip: "q_playback_skip",
     queuePlaybackShuffle: "q_playback_shuffle",
-    queuePlaybackClear: "q_playback_clear",
     queuePlaybackAutoplay: "q_playback_autoplay",
+    queuePlaybackStop: "q_playback_stop",
     nowPlayingPause: "np_pause",
     nowPlayingResume: "np_resume",
     nowPlayingSkip: "np_skip",
@@ -86,6 +87,8 @@ function makeInteraction(overrides: Record<string, unknown> = {}): ButtonInterac
     editReply: vi.fn().mockResolvedValue(undefined),
     update: vi.fn().mockResolvedValue(undefined),
     followUp: vi.fn().mockResolvedValue(undefined),
+    deferUpdate: vi.fn().mockResolvedValue(undefined),
+    message: { delete: vi.fn().mockResolvedValue(undefined) },
     replied: false,
     deferred: false,
     ...overrides,
@@ -101,6 +104,7 @@ function makeScheduler(overrides: Partial<TrackScheduler> = {}): TrackScheduler 
     skip: vi.fn(),
     shuffle: vi.fn(),
     clear: vi.fn(),
+    destroy: vi.fn(),
     toggleAutoplay: vi.fn().mockReturnValue(true),
     pause: vi.fn(),
     resume: vi.fn(),
@@ -256,13 +260,13 @@ describe("ButtonHandler", () => {
       expect(mockRefreshQueueMessage).toHaveBeenCalledWith(interaction)
     })
 
-    it("q_playback_clear llama clear", async () => {
+    it("q_playback_stop llama destroy", async () => {
       const scheduler = makeScheduler()
       mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
-      const interaction = makeInteraction({ customId: "q_playback_clear" })
+      const interaction = makeInteraction({ customId: "q_playback_stop" })
       await handleButton(interaction)
 
-      expect(scheduler.clear).toHaveBeenCalled()
+      expect(scheduler.destroy).toHaveBeenCalled()
       expect(mockRefreshQueueMessage).toHaveBeenCalledWith(interaction)
     })
 
@@ -318,7 +322,8 @@ describe("ButtonHandler", () => {
       await handleButton(interaction)
 
       expect(scheduler.pause).toHaveBeenCalled()
-      expect(interaction.update).toHaveBeenCalledWith({ components: [] })
+      expect(interaction.deferUpdate).toHaveBeenCalled()
+      expect(interaction.message.delete).toHaveBeenCalled()
       expect(interaction.followUp).toHaveBeenCalledWith({ content: "⏸ Pausado", ephemeral: true })
     })
 
@@ -329,6 +334,8 @@ describe("ButtonHandler", () => {
       await handleButton(interaction)
 
       expect(scheduler.resume).toHaveBeenCalled()
+      expect(interaction.deferUpdate).toHaveBeenCalled()
+      expect(interaction.message.delete).toHaveBeenCalled()
       expect(interaction.followUp).toHaveBeenCalledWith({ content: "▶ Reanudado", ephemeral: true })
     })
 
@@ -339,6 +346,8 @@ describe("ButtonHandler", () => {
       await handleButton(interaction)
 
       expect(scheduler.skip).toHaveBeenCalled()
+      expect(interaction.deferUpdate).toHaveBeenCalled()
+      expect(interaction.message.delete).toHaveBeenCalled()
       expect(interaction.followUp).toHaveBeenCalledWith({ content: "⏭ Saltado", ephemeral: true })
     })
 
@@ -349,6 +358,8 @@ describe("ButtonHandler", () => {
       await handleButton(interaction)
 
       expect(scheduler.toggleLoop).toHaveBeenCalled()
+      expect(interaction.deferUpdate).toHaveBeenCalled()
+      expect(interaction.message.delete).toHaveBeenCalled()
       expect(interaction.followUp).toHaveBeenCalledWith({ content: "Loop uno", ephemeral: true })
     })
 
@@ -359,6 +370,8 @@ describe("ButtonHandler", () => {
       await handleButton(interaction)
 
       expect(scheduler.shuffle).toHaveBeenCalled()
+      expect(interaction.deferUpdate).toHaveBeenCalled()
+      expect(interaction.message.delete).toHaveBeenCalled()
       expect(interaction.followUp).toHaveBeenCalledWith({ content: "🔀 Cola mezclada", ephemeral: true })
     })
 
@@ -369,6 +382,8 @@ describe("ButtonHandler", () => {
       await handleButton(interaction)
 
       expect(scheduler.seek).toHaveBeenCalledWith(15)
+      expect(interaction.deferUpdate).toHaveBeenCalled()
+      expect(interaction.message.delete).toHaveBeenCalled()
       expect(interaction.followUp).toHaveBeenCalledWith({ content: "⏪ -15s", ephemeral: true })
     })
 

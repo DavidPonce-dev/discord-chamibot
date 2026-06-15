@@ -1,5 +1,6 @@
 import { GuildTextBasedChannel } from "discord.js"
-import { guildManager, registerCleanup, registerPreDestroyCleanup } from "@/services/guild/GuildManager"
+import { guildManager } from "@/services/guild/GuildManager"
+import { registerCleanup, registerPreDestroyCleanup } from "@/services/guild/cleanupRegistry"
 import { ensureQueueMessage, updateQueueForGuild, setQueuePage, cleanupQueueUI } from "@/services/queue/QueueUIManager"
 import { isQueueEmpty } from "@/utils/guards"
 import { PROGRESS_UPDATE_INTERVAL_MS } from "@/config/timeouts"
@@ -19,11 +20,9 @@ function updateProgress(guildId: string) {
   }
   if (!scheduler!.isConnected()) {
     stopProgressUpdates(guildId)
-    cleanupQueueUI(guildId)
     return
   }
-  const statusTitle = guildManager.getStatusTitle(guildId)
-  updateQueueForGuild(guildId, statusTitle)
+  updateQueueForGuild(guildId)
 }
 
 function startProgressUpdates(guildId: string) {
@@ -49,8 +48,7 @@ export function setupSchedulerCallbacks(scheduler: import("../scheduler/TrackSch
 
   scheduler.onTrackChange = (gId) => {
     setQueuePage(gId, 1)
-    const statusTitle = guildManager.getStatusTitle(gId)
-    updateQueueForGuild(gId, statusTitle)
+    updateQueueForGuild(gId)
     const s = guildManager.get(gId)
     if (s?.getCurrentTrack()) {
       startProgressUpdates(gId)
@@ -61,17 +59,16 @@ export function setupSchedulerCallbacks(scheduler: import("../scheduler/TrackSch
     callbacksSetup.delete(gId)
     stopProgressUpdates(gId)
     cleanupQueueUI(gId)
+    guildManager.delete(gId)
   }
 }
 
 export async function initializeQueueDisplay(
   guildId: string,
   channel: GuildTextBasedChannel | undefined,
-  statusTitle: string,
   totalPages: number,
 ) {
-  guildManager.setStatusTitle(guildId, statusTitle)
   if (!channel?.send) return
-  await ensureQueueMessage(guildId, channel, statusTitle, totalPages)
+  await ensureQueueMessage(guildId, channel, totalPages)
   startProgressUpdates(guildId)
 }

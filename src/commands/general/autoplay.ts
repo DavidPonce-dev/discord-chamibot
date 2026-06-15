@@ -9,7 +9,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const scheduler = guildManager.get(guildId)
 
   if (scheduler) {
-    const newState = scheduler.toggleAutoplay()
+    const newState = await scheduler.toggleAutoplay()
     guildManager.toggleAutoplayPref(guildId)
     await replyTemporary(interaction, `Autoplay: ${newState ? "✅ Activado" : "❌ Desactivado"}`)
     return
