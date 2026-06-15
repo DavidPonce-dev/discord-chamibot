@@ -35,7 +35,7 @@ export function buildQueueContent(queue: TrackScheduler, page: number) {
   }
 
   if (current?.thumbnail) {
-    embed.setImage(current.thumbnail)
+    embed.setThumbnail(current.thumbnail)
   }
 
   return embed

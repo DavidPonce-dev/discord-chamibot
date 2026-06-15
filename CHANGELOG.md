@@ -6,8 +6,7 @@ Todas las versiones notables de este proyecto.
 
 ## v1.4.1 (2026-06-15)
 
-### Mejoras
-- **Imagen más grande**: se reemplaza `setThumbnail()` por `setImage()` en los embeds de cola y now-playing para mostrar la carátula en mayor tamaño.
+### Correcciones
 - **Espaciado**: se agrega un salto de línea entre el artista y la barra de progreso en el embed de cola para mejorar la legibilidad.
 
 ---

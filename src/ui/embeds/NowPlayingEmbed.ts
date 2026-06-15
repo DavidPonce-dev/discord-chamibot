@@ -42,7 +42,7 @@ export function buildNowPlayingEmbed(queue: TrackScheduler) {
   embed.addFields(fields)
 
   if (track.thumbnail) {
-    embed.setImage(track.thumbnail)
+    embed.setThumbnail(track.thumbnail)
   }
 
   return embed
