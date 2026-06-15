@@ -10,6 +10,9 @@ import {
   LastFmSimilarTrack,
 } from "@/services/lastfm/LastFmService"
 import { logger } from "@/utils/logger"
+import { parseTrackTitle } from "@/services/llm/TrackParser"
+import { groqRecommend } from "@/services/llm/RadioRecommender"
+import { getTrackTopTags } from "@/services/lastfm/LastFmService"
 
 export interface RadioResult {
   track: Omit<Track, "requestedBy">
@@ -18,12 +21,17 @@ export interface RadioResult {
 
 const SEPARATORS = [
   { pattern: /\sft\.\s|\sfeat\.\s|\bfeat\./i, label: "feat" },
-  { pattern: /\s[-–—|]\s/, label: "dash" },
+  { pattern: /\s[-–—|│]\s/, label: "dash" },
   { pattern: /\s\/\/\s/, label: "slash" },
   { pattern: /\s?:\s/, label: "colon" },
 ]
 
 export function extractArtist(title: string): string {
+  const jpOpen = title.indexOf("「")
+  if (jpOpen > 0) {
+    return title.slice(0, jpOpen).trim()
+  }
+
   const clean = title.replace(/\[.*?\]|\(.*?\)/g, "").trim()
 
   for (const { pattern } of SEPARATORS) {
@@ -40,6 +48,12 @@ export function extractArtist(title: string): string {
 }
 
 export function extractSongOnly(title: string): string {
+  const jpOpen = title.indexOf("「")
+  const jpClose = title.indexOf("」")
+  if (jpOpen >= 0 && jpClose > jpOpen) {
+    return title.slice(jpOpen + 1, jpClose).trim()
+  }
+
   const clean = title.replace(/\[.*?\]|\(.*?\)/g, "").trim()
 
   for (const { pattern } of SEPARATORS) {
@@ -107,12 +121,18 @@ async function tryLastFmRecommendation(
   const candidates = await getSimilarTracks(artist, track, 15)
   if (candidates.length === 0) return null
 
-  const shuffled = [...candidates].sort(() => Math.random() - 0.5)
-  const picks = shuffled.slice(0, MAX_RETRIES)
+  const sorted = [...candidates].sort((a, b) => b.match - a.match)
+  const pool = sorted.slice(0, 10)
+  const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, MAX_RETRIES)
 
-  for (const cand of picks) {
+  for (const cand of shuffled) {
     const fullTitle = `${cand.artist} ${cand.name}`.toLowerCase()
-    if (last5Titles.has(fullTitle)) continue
+    const songLower = cand.name.toLowerCase()
+
+    const alreadyPlayed = [...last5Titles].some(
+      (t) => t.includes(fullTitle) || t.includes(songLower),
+    )
+    if (alreadyPlayed) continue
 
     const result = await resolveToYouTube(cand.artist, cand.name, excludeIds)
     if (result) return result
@@ -130,9 +150,9 @@ async function tryArtistSwitch(
   const similarArtists = await getSimilarArtists(currentArtist, 5)
   if (similarArtists.length === 0) return null
 
-  const shuffled = [...similarArtists].sort(() => Math.random() - 0.5)
+  const sorted = [...similarArtists].sort((a, b) => b.match - a.match)
 
-  for (const similar of shuffled) {
+  for (const similar of sorted) {
     const topTracks = await getArtistTopTracks(similar.name, 10)
     if (topTracks.length === 0) continue
 
@@ -141,7 +161,12 @@ async function tryArtistSwitch(
 
     for (const cand of picks) {
       const fullTitle = `${cand.artist} ${cand.name}`.toLowerCase()
-      if (last5Titles.has(fullTitle)) continue
+      const songLower = cand.name.toLowerCase()
+
+      const alreadyPlayed = [...last5Titles].some(
+        (t) => t.includes(fullTitle) || t.includes(songLower),
+      )
+      if (alreadyPlayed) continue
 
       const result = await resolveToYouTube(cand.artist, cand.name, excludeIds)
       if (result) {
@@ -182,11 +207,25 @@ export async function findRelated(
   last5History: string[],
   shouldSwitch = false,
   currentArtist: string | null = null,
+  artistHistory: string[] = [],
 ): Promise<RadioResult | null> {
   if (!lastTrackTitle) return null
 
-  const artist = extractArtist(lastTrackTitle)
-  const songOnly = extractSongOnly(lastTrackTitle)
+  let artist = extractArtist(lastTrackTitle)
+  let songOnly = extractSongOnly(lastTrackTitle)
+
+  if (!artist) {
+    const parsed = await parseTrackTitle(lastTrackTitle)
+    if (parsed?.artist && parsed?.song) {
+      logger.debug("radio", "LLM parsed title", {
+        original: lastTrackTitle,
+        artist: parsed.artist,
+        song: parsed.song,
+      })
+      artist = parsed.artist
+      songOnly = parsed.song
+    }
+  }
 
   const excludeIds = new Set(last5History.map((t) => {
     const match = t.match(/v=([a-zA-Z0-9_-]+)/)
@@ -194,6 +233,9 @@ export async function findRelated(
   }).filter(Boolean) as string[])
 
   const last5Titles = new Set(last5History.map((t) => t.toLowerCase()))
+  if (lastTrackTitle) {
+    last5Titles.add(lastTrackTitle.toLowerCase())
+  }
 
   if (shouldSwitch && currentArtist) {
     const switchResult = await tryArtistSwitch(currentArtist, excludeIds, last5Titles)
@@ -224,27 +266,43 @@ export async function findRelated(
     return lastfmResult
   }
 
-  logger.debug("radio", "Last.fm sin resultados, fallback a YouTube")
+  if (!lastfmResult && (artist || songOnly)) {
+    logger.debug("radio", "Last.fm sin resultados, buscando con Groq", {
+      artist: artist || songOnly,
+      song: songOnly,
+    })
 
-  const fallbackQuery = artist ? `${artist} music` : songOnly
-  const videos = await searchPlayDl(fallbackQuery)
-  if (!videos.length) return null
+    let genreTags: string[] = []
+    if (artist && songOnly) {
+      const tags = await getTrackTopTags(artist, songOnly)
+      genreTags = tags
+        .filter((t) => t.count && t.count > 10)
+        .slice(0, 5)
+        .map((t) => t.name)
+    }
 
-  const filtered = filterVideos(videos, excludeIds)
-  if (!filtered.length) return null
-
-  const shuffled = [...filtered].sort(() => Math.random() - 0.5)
-  const picked = shuffled[0]
-
-  return {
-    track: {
-      title: picked.title ?? "Unknown",
-      url: picked.url ?? `https://youtube.com/watch?v=${picked.id}`,
-      duration: picked.durationRaw,
-      id: picked.id,
-      thumbnail: picked.id
-        ? `https://img.youtube.com/vi/${picked.id}/hqdefault.jpg`
-        : undefined,
-    },
+    const groqCandidates = await groqRecommend(
+      artist || songOnly,
+      songOnly,
+      last5Titles,
+      5,
+      artistHistory,
+      genreTags,
+    )
+    for (const cand of groqCandidates) {
+      const result = await resolveToYouTube(cand.artist, cand.name, excludeIds)
+      if (result) {
+        logger.info("radio", "Recomendación Groq encontrada", {
+          title: result.track.title,
+          id: result.track.id,
+          artist: cand.artist,
+          song: cand.name,
+        })
+        lastfmResult = result
+        break
+      }
+    }
   }
+
+  return lastfmResult
 }

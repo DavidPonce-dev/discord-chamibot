@@ -12,6 +12,9 @@ export interface ResolveResult {
     duration?: string
     id?: string
     thumbnail?: string
+    track?: string
+    artist?: string
+    channel?: string
   }[]
   playlistTitle?: string
   type?: "single" | "album" | "playlist"
@@ -37,11 +40,11 @@ function extractVideoId(url: string): string | undefined {
   }
 }
 
-async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string } | null> {
+async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string; track?: string; artist?: string; channel?: string } | null> {
   return resolveWithYtDlpInternal(url, false)
 }
 
-async function resolveWithYtDlpInternal(url: string, retried: boolean): Promise<{ title: string; duration: string; id: string } | null> {
+async function resolveWithYtDlpInternal(url: string, retried: boolean): Promise<{ title: string; duration: string; id: string; track?: string; artist?: string; channel?: string } | null> {
   const args = buildYtDlpArgs(["--dump-json"])
   args.push(url)
 
@@ -71,7 +74,14 @@ async function resolveWithYtDlpInternal(url: string, retried: boolean): Promise<
     const duration = data.duration ?? 0
     const id = data.id ?? extractVideoId(url) ?? ""
     const durationStr = formatTime(duration)
-    return { title, duration: durationStr, id }
+    return {
+      title,
+      duration: durationStr,
+      id,
+      track: data.track ?? undefined,
+      artist: data.artist ?? data.album_artist ?? undefined,
+      channel: data.channel ?? data.uploader ?? undefined,
+    }
   } catch {
     return null
   }
@@ -114,6 +124,9 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
             duration: ytDlpResult.duration,
             id: ytDlpResult.id,
             thumbnail: ytDlpResult.id ? `https://img.youtube.com/vi/${ytDlpResult.id}/hqdefault.jpg` : undefined,
+            track: ytDlpResult.track,
+            artist: ytDlpResult.artist,
+            channel: ytDlpResult.channel,
           }],
         }
       }

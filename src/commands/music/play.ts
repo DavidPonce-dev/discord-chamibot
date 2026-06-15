@@ -16,6 +16,12 @@ import type { Track } from "@/core/types";
 import type { ResolveResult } from "@/services/search/YouTubeResolver";
 
 function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track {
+  const canonicalTitle = video.track && video.artist
+    ? `${video.artist} - ${video.track}`
+    : video.track
+      ? video.track
+      : undefined
+
   return {
     title: video.title,
     url: video.url,
@@ -23,6 +29,7 @@ function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track 
     duration: video.duration,
     id: video.id,
     thumbnail: video.thumbnail,
+    canonicalTitle,
   }
 }
 

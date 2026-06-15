@@ -200,7 +200,7 @@ export class TrackScheduler {
       historyCount: this.last5Tracks.length,
       shouldSwitch,
     })
-    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist)
+    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist, this.artistHistory)
     if (result) {
       const track = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle } as Track
       this.radioQueue.push(track)
@@ -616,7 +616,7 @@ export class TrackScheduler {
     if (!searchTitle) return null
 
     const shouldSwitch = this.sameArtistStreak >= ARTIST_ROTATION_LIMIT
-    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist)
+    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist, this.artistHistory)
     if (!result) return null
 
     const track = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle } as Track
@@ -642,7 +642,7 @@ export class TrackScheduler {
     if (!searchTitle || !this.autoplay || this.radioQueue.length > 0) return
 
     const shouldSwitch = this.sameArtistStreak >= ARTIST_ROTATION_LIMIT
-    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist)
+    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist, this.artistHistory)
     if (!result || this.radioQueue.length > 0) return
 
     const track = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle } as Track
@@ -660,7 +660,7 @@ export class TrackScheduler {
     if (!searchTitle) return null
     this.radioNext = null
     const shouldSwitch = this.sameArtistStreak >= ARTIST_ROTATION_LIMIT
-    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist)
+    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist, this.artistHistory)
     if (result) {
       this.radioNext = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle } as Track
       if (result.canonicalTitle) {
@@ -679,7 +679,7 @@ export class TrackScheduler {
     const searchTitle = this.radioBaseTitle ?? this.lastTrackTitle
     if (!searchTitle) return
     const shouldSwitch = this.sameArtistStreak >= ARTIST_ROTATION_LIMIT
-    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist)
+    const result = await findRelated(searchTitle, this.last5Tracks, shouldSwitch, this.currentArtist, this.artistHistory)
     if (result) {
       this.radioNext = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle } as Track
       if (result.canonicalTitle) {

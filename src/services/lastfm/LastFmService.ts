@@ -43,6 +43,28 @@ export interface LastFmSearchResult {
   url: string
 }
 
+export interface LastFmTag {
+  name: string
+  count?: number
+}
+
+export async function getTrackTopTags(
+  artist: string,
+  track: string,
+): Promise<LastFmTag[]> {
+  try {
+    const api = getTrackApi()
+    const response = await api.getTopTags({ artist, track })
+    if (!response.toptags?.tag) return []
+    return response.toptags.tag.map((t) => ({
+      name: t.name,
+      count: t.count,
+    }))
+  } catch {
+    return []
+  }
+}
+
 export async function getSimilarTracks(
   artist: string,
   track: string,

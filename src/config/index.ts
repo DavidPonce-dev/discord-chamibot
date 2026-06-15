@@ -36,6 +36,9 @@ export const config = {
   lastfm: {
     apiKey: process.env.LASTFM_API_KEY ?? "",
   },
+  groq: {
+    apiKey: process.env.GROQ_API_KEY ?? "",
+  },
   services: {
     cookieRefresherUrl: optional("COOKIE_REFRESHER_URL", ""),
   },

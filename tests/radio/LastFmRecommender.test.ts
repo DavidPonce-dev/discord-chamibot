@@ -4,6 +4,11 @@ import { findRelated, extractArtist, extractSongOnly } from "@/radio/LastFmRecom
 const mockSearchPlayDl = vi.hoisted(() => vi.fn())
 const mockGetSimilarTracks = vi.hoisted(() => vi.fn())
 const mockSearchTrack = vi.hoisted(() => vi.fn())
+const mockGetTrackTopTags = vi.hoisted(() => vi.fn(async () => []))
+const mockParseTrackTitle = vi.hoisted(() => vi.fn(async () => null))
+const mockGroqRecommend = vi.hoisted(() =>
+  vi.fn(async () => [{ artist: "Default Artist", name: "Default Song" }]),
+)
 
 vi.mock("@/radio/RadioSearchService", () => ({
   searchPlayDl: mockSearchPlayDl,
@@ -14,6 +19,15 @@ vi.mock("@/services/lastfm/LastFmService", () => ({
   getSimilarArtists: vi.fn(),
   getArtistTopTracks: vi.fn(),
   searchTrack: mockSearchTrack,
+  getTrackTopTags: mockGetTrackTopTags,
+}))
+
+vi.mock("@/services/llm/TrackParser", () => ({
+  parseTrackTitle: mockParseTrackTitle,
+}))
+
+vi.mock("@/services/llm/RadioRecommender", () => ({
+  groqRecommend: mockGroqRecommend,
 }))
 
 function makePlayResult(id: string, title: string, durationRaw: string) {
@@ -46,7 +60,7 @@ describe("findRelated", () => {
       expect(result!.track.id).toBe("xyz789")
     })
 
-    it("Last.fm devuelve vacío → fallback a YouTube search", async () => {
+    it("Last.fm devuelve vacío → fallback a Groq", async () => {
       mockGetSimilarTracks.mockResolvedValue([])
       mockSearchPlayDl.mockResolvedValue([
         makePlayResult("fallback1", "Artist Name music mix", "3:00"),
@@ -74,7 +88,7 @@ describe("findRelated", () => {
       expect(mockSearchTrack).toHaveBeenCalledWith("Song Title", 5)
     })
 
-    it("searchTrack sin resultados → fallback YouTube", async () => {
+    it("searchTrack sin resultados → fallback a Groq", async () => {
       mockSearchTrack.mockResolvedValue([])
       mockSearchPlayDl.mockResolvedValue([
         makePlayResult("fallback2", "Song Title remix", "3:00"),
@@ -166,6 +180,14 @@ describe("extractArtist", () => {
   it("ignora paréntesis y brackets", () => {
     expect(extractArtist("Bohemian Rhapsody (Official Video)")).toBe("")
   })
+
+  it("extrae artista con brackets japoneses「」", () => {
+    expect(extractArtist("The GazettE「FILTH IN THE BEAUTY」HDフル")).toBe("The GazettE")
+  })
+
+  it("extrae artista con brackets japoneses y sin separador", () => {
+    expect(extractArtist("Ado「唱」")).toBe("Ado")
+  })
 })
 
 describe("extractSongOnly", () => {
@@ -187,5 +209,13 @@ describe("extractSongOnly", () => {
 
   it("devuelve título limpio sin separador", () => {
     expect(extractSongOnly("Bohemian Rhapsody (Official Video)")).toBe("Bohemian Rhapsody")
+  })
+
+  it("extrae canción con brackets japoneses「」", () => {
+    expect(extractSongOnly("The GazettE「FILTH IN THE BEAUTY」HDフル")).toBe("FILTH IN THE BEAUTY")
+  })
+
+  it("extrae canción con brackets japoneses sin separador", () => {
+    expect(extractSongOnly("Ado「唱」")).toBe("唱")
   })
 })

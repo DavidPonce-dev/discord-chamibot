@@ -25,6 +25,8 @@ services:
       - COOKIE_REFRESHER_URL=${COOKIE_REFRESHER_URL:-}
       # LastFM
       - LASTFM_API_KEY=${LASTFM_API_KEY}
+      # LLM (Groq)
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
     ports:
       - "3002:3002"
     volumes:

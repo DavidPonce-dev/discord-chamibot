@@ -4,6 +4,15 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.4.2 (2026-06-15)
+
+### Mejoras
+- **Radio**: optimizada la búsqueda de recomendaciones para mantener el género musical, ordenando por match score de Last.fm y usando el contexto de historial de artistas + tags de género en Groq.
+- **Parsing**: agregado soporte para brackets japoneses `「」` en la extracción de artista/título.
+- **Variedad**: los candidatos de Last.fm ahora se mezclan dentro del top 10 de mayor coincidencia para evitar repetir siempre los mismos temas de la banda.
+
+---
+
 ## v1.4.1 (2026-06-15)
 
 ### Correcciones
