@@ -163,6 +163,14 @@ export function startAdminServer(port: number) {
     const path = url.pathname
     const method = req.method
 
+    logger.debug("admin", "Incoming request", {
+      method,
+      path,
+      search: url.search,
+      host: req.headers.host,
+      origin: req.headers.origin,
+    })
+
     if (!isAllowedOrigin(req)) {
       res.writeHead(403, { "Content-Type": "application/json" })
       res.end(JSON.stringify({ error: "Origin not allowed" }))
@@ -416,11 +424,13 @@ export function startAdminServer(port: number) {
           return
         }
 
+        logger.warn("admin", "API route not found", { path, method })
         res.writeHead(404)
         res.end(JSON.stringify({ error: "Not found" }))
         return
       }
 
+      logger.warn("admin", "Route not found", { path, method })
       res.writeHead(404, { "Content-Type": "application/json" })
       res.end(JSON.stringify({ error: "Not found" }))
     } catch (err) {
@@ -455,7 +465,7 @@ export function startAdminServer(port: number) {
     }
   })
 
-  server.listen(port, () => {
+  server.listen(port, "0.0.0.0", () => {
     const origins = config.admin.allowedOrigins
     logger.info("admin", `Admin server started on port ${port}`, {
       allowedOrigins: origins.length > 0 ? origins : "any",

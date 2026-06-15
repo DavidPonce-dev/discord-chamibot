@@ -1,40 +1,83 @@
-# 🎵 Charmin Charmeleon — Discord Music Bot
+# 🎵 Charmin Charmeleon
 
-Bot de música para Discord que reproduce audio desde YouTube con una interfaz de reproductor interactiva que se actualiza en tiempo real. Cola, controles, modo radio y búsqueda inteligente con diferenciación de álbumes y playlists.
-
----
-
-## ¿Qué es?
-
-Un bot de música autocontenido para Discord que no depende de APIs externas de música. Usa **yt-dlp + FFmpeg** directamente para obtener y transmitir audio desde YouTube, con una interfaz de cola interactiva que vive en un solo mensaje editable.
+Bot de música para Discord. Escribís `/play`, elegís un tema, y tenés la cola entera en un solo mensaje con botones. Simple.
 
 ---
 
-## ¿Qué hace?
+## Cómo se usa
 
-- **Reproduce desde YouTube** — URLs directas, playlists, o búsqueda por texto
-- **Cola visual interactiva** — Un solo mensaje con botones para pausar, saltar, mezclar, limpiar, subir/bajar tracks
-- **Modo Radio** — Autoplay inteligente que sugiere tracks similares basándose en historial de reproducción, rotando artistas para evitar repetición
-- **Búsqueda inteligente** — Autocomplete que diferencia canciones (🎵), álbumes (💿) y playlists (📋) con iconos
-- **Controles completos** — Loop (none/one/all), seek, shuffle, remove por posición
-- **Reproductor resiliente** — Si borran el mensaje de la cola, lo recrea automáticamente
-- **Multi-guild** — Cada servidor tiene su propia sesión, cola y preferencias independientes
-- **Cookies de YouTube** — Sistema integrado de refresco automático con Playwright (sin servicio separado)
-- **Admin panel protegido** — Dashboard web con autenticación por token para gestión de cookies y browser
+```
+/play [nombre o URL]
+```
+
+Eso es todo. El bot te muestra resultados con autocompletado diferenciando canciones, álbumes y playlists. Elegís uno y aparece el reproductor.
+
+<img src="assets/queue-ui.png" alt="Reproductor con cola interactiva en un solo mensaje — botones de control, lista paginada, portada del álbum y barra de progreso" width="600">
+
+El reproductor es **un solo mensaje** que vive en el canal. Ahí mismo tenés todo:
+
+- ⏸ Pausar / reanudar
+- ⏭ Saltar al siguiente
+- 🔀 Mezclar cola
+- ⏹ Detener y salir
+- 🔁 Loop (una canción / toda la cola / desactivado)
+- 💿 Activar modo radio (autoplay inteligente)
+- 🎲 Re-sugerir track (si no te gusta el que sugirió la radio)
+
+Cada track en la cola tiene sus propios botones 🗑 ⬆ ⬇ para eliminar, subir o bajar. No hay comandos raros, no hay menús anidados, no hay mil mensajes. Todo desde el mismo lugar.
 
 ---
 
-## ¿En qué se diferencia?
+## ¿Qué tiene de diferente?
 
 | | Charmin Charmeleon | Bots típicos (Groovy, Hydra, etc.) |
 |---|---|---|
-| **Interfaz** | Un solo mensaje editable con botones | Múltiples mensajes o sin UI |
-| **Audio source** | yt-dlp directo (sin API key) | APIs externas o Lavalink |
-| **Autoplay** | Basado en historial + rotación de artistas | Aleatorio o por seed |
-| **Búsqueda** | Diferencia álbumes/playlists/canciones | Lista plana de resultados |
-| **Resiliencia** | Recrea el mensaje si se borra | Se pierde la UI |
-| **Dependencias** | Solo yt-dlp + FFmpeg | Lavalink, API keys, servidores externos |
-| **Costo** | Zero — todo local | Requiere infraestructura externa |
+| **Interfaz** | Un solo mensaje con botones ⏯️ | Múltiples mensajes embed, sin interactividad real |
+| **Búsqueda** | Autocomplete con categorías 🎵💿📋 | Lista plana de resultados |
+| **Audio source** | yt-dlp directo — sin API key | APIs externas o Lavalink |
+| **Autoplay** | Por contexto real de la sesión (últimos 5 tracks, historial de artistas, tags de género de Last.fm + LLM) | Aleatorio o por seed muerto |
+| **Resiliencia** | Recrea el mensaje automáticamente si lo borran | Perdés la UI y tenés que escribir otro comando |
+| **Dependencias** | Solo yt-dlp + FFmpeg (corre solo) | Lavalink, API keys, servidores de música externos |
+| **Costo** | Zero — no necesita nada externo | Requiere infraestructura adicional |
+
+---
+
+## El modo radio
+
+Cuando activás autoplay, el bot no se limita a sugerir aleatorio. Usa un sistema de tres capas:
+
+1. **Last.fm** — busca tracks similares al que terminó, ordenados por coeficiente de similitud (match score). Si el mismo artista lleva 3 tracks seguidos, rota a un artista similar del mismo palo.
+2. **LLM (Groq)** — si Last.fm no encuentra nada, usa un modelo de lenguaje para analizar el título del video y sugerir tracks del mismo artista o género. Conoce el historial de la sesión (últimos artistas) y los tags de género de Last.fm para mantener la coherencia.
+3. **Detección de brackets japoneses 「」** — parsea títulos de YouTube en japonés sin depender de separadores occidentales.
+
+El resultado: la radio se queda en la misma veta musical en vez de saltar de género como hacen otros bots.
+
+---
+
+## Búsqueda inteligente
+
+Cuando escribís `/play` y usás autocompletado, el bot organiza los resultados de YouTube en categorías visuales:
+
+- **🎵 Canciones** — videos individuales
+- **💿 Álbumes** — detecta automáticamente álbumes completos, EPs, remasters
+- **📋 Playlists** — mixes, recopilaciones, best-of
+
+<img src="assets/search-autocomplete.png" alt="Autocompletado de /play mostrando resultados organizados en categorías: canciones, álbumes y playlists" width="500">
+
+---
+
+## ¿Para qué sirve el panel de admin?
+
+Para manejar las cookies de YouTube. Algunos videos requieren sesión iniciada (música con restricción regional, por ejemplo). El bot tiene un navegador Chromium integrado que podés controlar desde un dashboard web:
+
+1. Abrí el dashboard con tu token
+2. Iniciá sesión en YouTube una vez
+3. Extraé las cookies
+4. El bot las refresca automáticamente cada 12 horas
+
+Vivís en un datacenter (Coolify, Railway, etc.) y YouTube te pide login constantemente? El panel de admin resuelve eso.
+
+<img src="assets/admin-dashboard.png" alt="Dashboard de administración: estado de cookies, controles VNC, botón de extracción" width="600">
 
 ---
 
