@@ -9,8 +9,6 @@ import { CookieScheduler } from "./CookieScheduler"
 
 const COOKIE_DIR = config.youtube.cookieDir
 const COOKIE_PATH = path.join(COOKIE_DIR, "youtube-cookies.txt")
-const MIN_COOKIE_LENGTH = 10
-
 const COOKIE_ERROR_PATTERNS = [
   "sign in to confirm",
   "please sign in",
@@ -106,20 +104,6 @@ export function setupCookies(): string | null {
       })
       return COOKIE_PATH
     }
-  }
-
-  const cookies = config.youtube.cookiesEnv
-  if (cookies && cookies.length > MIN_COOKIE_LENGTH) {
-    fs.writeFileSync(COOKIE_PATH, cookies, { mode: 0o600 })
-    const validation = validateCookies()
-    logger.info("cookie", "YouTube cookies written from env var", {
-      path: COOKIE_PATH,
-      uniqueCookies: validation.cookieCount,
-      cookieNames: validation.cookieNames.join(", "),
-      hasPSID: validation.hasPSID,
-      hasSID: validation.hasSID,
-    })
-    return COOKIE_PATH
   }
 
   // Return path anyway so yt-dlp can use it after cookies are extracted later

@@ -103,7 +103,7 @@ describe("resolveQuery", () => {
       mockVideoInfo.mockRejectedValue(new Error("blocked"))
 
       await expect(resolveQuery("https://youtube.com/watch?v=abc123")).rejects.toThrow(
-        "YOUTUBE_COOKIES"
+        "admin panel"
       )
     })
   })

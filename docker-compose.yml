@@ -21,8 +21,7 @@ services:
       - COOKIE_DIR=/cookies
       - BROWSER_PROFILE=/profile
       - COOKIE_REFRESH_INTERVAL_MS=43200000
-      - YOUTUBE_COOKIES=${YOUTUBE_COOKIES:-}
-      - COOKIE_REFRESHER_URL=${COOKIE_REFRESHER_URL:-}
+
       # LastFM
       - LASTFM_API_KEY=${LASTFM_API_KEY}
       # LLM (Groq)

@@ -41,18 +41,11 @@ export function paginate<T>(items: T[], page: number, perPage: number) {
 }
 
 const EMPTY = "\u2591"
+const FILLED = "\u2588"
 
-export function buildProgressBar(pos: number, total: number, width = 36): string {
+export function buildProgressBar(pos: number, total: number, width = 24): string {
   if (total <= 0) return `[${EMPTY.repeat(width)}] ${formatTime(pos)} / ?:??`
-  // Each unit represents 2 "half-blocks" for smooth progress rendering
-  // filled >= 2 → full block (█), filled === 1 → half block (▌), else empty
-  const units = Math.round((pos / total) * width * 2)
-  let bar = ""
-  for (let i = 0; i < width; i++) {
-    const filled = units - i * 2
-    if (filled >= 2) bar += "█"
-    else if (filled === 1) bar += "▌"
-    else bar += EMPTY
-  }
+  const filledCount = Math.round((pos / total) * width)
+  const bar = FILLED.repeat(filledCount) + EMPTY.repeat(width - filledCount)
   return `[${bar}] ${formatTime(pos)} / ${formatTime(total)}`
 }

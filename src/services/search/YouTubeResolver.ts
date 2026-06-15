@@ -144,7 +144,7 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
           }],
         }
       } catch {
-        throw new Error("No se pudo obtener info del video. Si estás en un servidor cloud, configurá YOUTUBE_COOKIES")
+        throw new Error("No se pudo obtener info del video. Usá el admin panel para extraer cookies de YouTube.")
       }
     }
   }

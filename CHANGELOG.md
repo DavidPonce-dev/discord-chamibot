@@ -4,6 +4,17 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.4.3 (2026-06-15)
+
+### Mejoras
+- **Admin server**: logging de debug en requests entrantes, bind explícito a 0.0.0.0, warns en 404s.
+- **UI**: barra de progreso reducida un tercio (36 → 24), eliminado medio bloque (▌).
+- **UI**: botón stop ahora usa ✖ en vez de ⏹.
+- **Config**: eliminadas variables obsoletas `YOUTUBE_COOKIES` y `COOKIE_REFRESHER_URL`.
+- **Error message**: actualizado mensaje de error para referir al admin panel.
+
+---
+
 ## v1.4.2 (2026-06-15)
 
 ### Mejoras

@@ -116,7 +116,7 @@ export function buildPlaybackRow(queue: TrackScheduler) {
       .setStyle(queue.isAutoplayEnabled() ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(BUTTON_PREFIXES.queuePlaybackStop)
-      .setEmoji("\u23f9")
+      .setEmoji("\u2716")
       .setStyle(ButtonStyle.Danger),
   )
 }
