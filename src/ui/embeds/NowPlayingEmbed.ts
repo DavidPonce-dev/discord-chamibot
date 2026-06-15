@@ -20,6 +20,8 @@ export function buildNowPlayingEmbed(queue: TrackScheduler) {
     embedLines.push(`***${track.title}***`)
   }
 
+  embedLines.push("")
+
   const embed = createBaseEmbed()
     .setDescription(embedLines.join("\n"))
 
@@ -40,7 +42,7 @@ export function buildNowPlayingEmbed(queue: TrackScheduler) {
   embed.addFields(fields)
 
   if (track.thumbnail) {
-    embed.setThumbnail(track.thumbnail)
+    embed.setImage(track.thumbnail)
   }
 
   return embed

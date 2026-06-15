@@ -22,6 +22,7 @@ export function buildQueueContent(queue: TrackScheduler, page: number) {
       embedLines.push(`***${current.title}***`)
     }
 
+    embedLines.push("")
     const pos = queue.getPosition()
     const total = parseDuration(current.duration)
     embedLines.push(buildProgressBar(pos, total))
@@ -34,7 +35,7 @@ export function buildQueueContent(queue: TrackScheduler, page: number) {
   }
 
   if (current?.thumbnail) {
-    embed.setThumbnail(current.thumbnail)
+    embed.setImage(current.thumbnail)
   }
 
   return embed
