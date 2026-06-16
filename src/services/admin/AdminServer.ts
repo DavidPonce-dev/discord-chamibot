@@ -171,6 +171,19 @@ export function startAdminServer(port: number) {
       origin: req.headers.origin,
     })
 
+    // Health check must be first — before origin/auth checks — so that
+    // Docker/Traefik/Coolify health probes (wget, curl, etc.) never get blocked
+    if (path === "/health" && method === "GET") {
+      try {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify(buildHealthResponse(validateCookies())))
+      } catch {
+        res.writeHead(500)
+        res.end(JSON.stringify({ error: "health check failed" }))
+      }
+      return
+    }
+
     if (!isAllowedOrigin(req)) {
       res.writeHead(403, { "Content-Type": "application/json" })
       res.end(JSON.stringify({ error: "Origin not allowed" }))
@@ -178,12 +191,6 @@ export function startAdminServer(port: number) {
     }
 
     try {
-      if (path === "/health" && method === "GET") {
-        res.writeHead(200, { "Content-Type": "application/json" })
-        res.end(JSON.stringify(buildHealthResponse(validateCookies())))
-        return
-      }
-
       if (path.startsWith("/vnc/")) {
         if (!vncActive) {
           logger.warn("vnc", "VNC not active", { path })

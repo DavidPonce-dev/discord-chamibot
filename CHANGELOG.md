@@ -4,6 +4,13 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.4.4 (2026-06-15)
+
+### Correcciones
+- **Health check**: movido el handler de `/health` antes de la validación `isAllowedOrigin()` para que Docker/Traefik/Coolify no bloqueen las probes de salud. El health check de `wget` no manda header `Origin`, lo que causaba un 403.
+
+---
+
 ## v1.4.3 (2026-06-15)
 
 ### Mejoras
