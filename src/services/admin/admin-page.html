@@ -340,6 +340,27 @@
           stroke-linecap="round"
           stroke-linejoin="round"
         >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+        </svg>
+        Blacklisted Servers
+        <span id="blacklist-count" style="font-size:0.85rem;color:#666;margin-left:auto;"></span>
+      </h2>
+      <div id="blacklist-list">Loading...</div>
+    </div>
+
+    <div class="card">
+      <h2>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         </svg>
         Security
@@ -782,6 +803,8 @@
           html += '<div class="guild-id">' + g.id + " · " + g.memberCount + " members</div></div>";
           if (m.connected) {
             html += '<span class="status ok">CONNECTED</span>';
+          } else if (g.blacklisted) {
+            html += '<span class="status err">BLACKLISTED</span>';
           } else {
             html += '<span class="status err">IDLE</span>';
           }
@@ -807,6 +830,15 @@
             html += "</div>";
           }
 
+          html += '<div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">';
+          html += '<button class="btn danger" onclick="leaveGuild(\'' + g.id + '\')">Leave Server</button>';
+          if (g.blacklisted) {
+            html += '<button class="btn warning" disabled>Blacklisted</button>';
+          } else {
+            html += '<button class="btn warning" onclick="blacklistGuild(\'' + g.id + '\')">Blacklist</button>';
+          }
+          html += "</div>";
+
           html += "</div>";
         }
         el.innerHTML = html;
@@ -825,6 +857,78 @@
           log("Toggle failed: " + e.message);
         } finally {
           btn.disabled = false;
+        }
+      }
+
+      async function leaveGuild(id) {
+        if (!confirm("Are you sure? The bot will leave this server.")) return;
+        try {
+          const r = await apiFetch("/guild/leave?id=" + id, { method: "POST" });
+          const d = await r.json();
+          if (d.error) { log("Leave error: " + d.error); return; }
+          log("Leave: " + d.message);
+          updateGuilds();
+        } catch (e) {
+          log("Leave failed: " + e.message);
+        }
+      }
+
+      async function blacklistGuild(id) {
+        if (!confirm("Blacklist this server? The bot will leave immediately and never rejoin.")) return;
+        try {
+          const r = await apiFetch("/guild/blacklist?id=" + id, { method: "POST" });
+          const d = await r.json();
+          if (d.error) { log("Blacklist error: " + d.error); return; }
+          log("Blacklist: " + d.message);
+          updateGuilds();
+          updateBlacklist();
+        } catch (e) {
+          log("Blacklist failed: " + e.message);
+        }
+      }
+
+      async function updateBlacklist() {
+        try {
+          const r = await apiFetch("/blacklist");
+          const d = await r.json();
+          renderBlacklist(d.blacklist || []);
+        } catch (e) {
+          document.getElementById("blacklist-list").innerHTML = '<div class="no-guilds">Error: ' + e.message + "</div>";
+        }
+      }
+
+      function renderBlacklist(entries) {
+        const el = document.getElementById("blacklist-list");
+        const count = document.getElementById("blacklist-count");
+        count.textContent = "(" + entries.length + ")";
+        if (entries.length === 0) {
+          el.innerHTML = '<div class="no-guilds">No blacklisted servers</div>';
+          return;
+        }
+        let html = "";
+        for (const entry of entries) {
+          const date = new Date(entry.blacklistedAt).toLocaleString();
+          html += '<div class="guild-card">';
+          html += '<div class="guild-header">';
+          html += '<div><div class="guild-name">' + escapeHtml(entry.guildName) + '</div>';
+          html += '<div class="guild-id">' + entry.guildId + " · " + date + "</div></div>";
+          html += '<button class="btn success" onclick="unblacklistGuild(\'' + entry.guildId + '\')">Unblacklist</button>';
+          html += "</div></div>";
+        }
+        el.innerHTML = html;
+      }
+
+      async function unblacklistGuild(id) {
+        if (!confirm("Unblacklist this server?")) return;
+        try {
+          const r = await apiFetch("/blacklist/remove?id=" + id, { method: "POST" });
+          const d = await r.json();
+          if (d.error) { log("Unblacklist error: " + d.error); return; }
+          log("Unblacklist: " + d.message);
+          updateBlacklist();
+          updateGuilds();
+        } catch (e) {
+          log("Unblacklist failed: " + e.message);
         }
       }
 
@@ -866,6 +970,7 @@
 
       checkStatus();
       updateGuilds();
+      updateBlacklist();
       renderSecurity();
       setInterval(checkStatus, 30000);
       setInterval(updateTimer, 1000);

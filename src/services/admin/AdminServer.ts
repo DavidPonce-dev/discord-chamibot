@@ -9,6 +9,7 @@ import { config } from "@/config"
 import { getBotClient } from "@/bot"
 import { guildManager } from "@/services/guild/GuildManager"
 import { isDeployMode, enableDeployMode, disableDeployMode } from "@/services/deploy/DeployGuard"
+import { blacklistStore } from "@/services/admin/BlacklistStore"
 
 const ADMIN_PAGE = fs.readFileSync(path.join(__dirname, "admin-page.html"), "utf-8")
 
@@ -386,6 +387,7 @@ export function startAdminServer(port: number) {
                 id: guild.id,
                 name: guild.name,
                 memberCount: guild.memberCount,
+                blacklisted: blacklistStore.isBlacklisted(guild.id),
                 music: musicInfo,
               })
             }
@@ -428,6 +430,107 @@ export function startAdminServer(port: number) {
             disconnectedGuilds: disconnectedCount,
             message: `Deploy mode enabled — ${disconnectedCount} voice channel(s) disconnected`,
           }))
+          return
+        }
+
+        if (path === "/api/guild/leave" && method === "POST") {
+          const guildId = url.searchParams.get("id")
+          if (!guildId) {
+            res.writeHead(400)
+            res.end(JSON.stringify({ error: "Missing guild id" }))
+            return
+          }
+
+          const client = getBotClient()
+          if (!client) {
+            res.writeHead(503)
+            res.end(JSON.stringify({ error: "Bot not connected" }))
+            return
+          }
+
+          const guild = client.guilds.cache.get(guildId)
+          if (!guild) {
+            res.writeHead(404)
+            res.end(JSON.stringify({ error: "Guild not found" }))
+            return
+          }
+
+          const scheduler = guildManager.get(guildId)
+          if (scheduler) {
+            scheduler.destroy()
+          }
+
+          try {
+            await guild.leave()
+            logger.info("admin", `Bot left guild ${guild.name} (${guildId})`)
+            res.writeHead(200)
+            res.end(JSON.stringify({ message: `Left guild ${guild.name}` }))
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            res.writeHead(500)
+            res.end(JSON.stringify({ error: msg }))
+          }
+          return
+        }
+
+        if (path === "/api/guild/blacklist" && method === "POST") {
+          const guildId = url.searchParams.get("id")
+          if (!guildId) {
+            res.writeHead(400)
+            res.end(JSON.stringify({ error: "Missing guild id" }))
+            return
+          }
+
+          const client = getBotClient()
+          let guildName = guildId
+
+          if (client) {
+            const guild = client.guilds.cache.get(guildId)
+            if (guild) {
+              guildName = guild.name
+            }
+          }
+
+          blacklistStore.add(guildId, guildName)
+
+          if (client) {
+            const guild = client.guilds.cache.get(guildId)
+            if (guild) {
+              const scheduler = guildManager.get(guildId)
+              if (scheduler) {
+                scheduler.destroy()
+              }
+              try {
+                await guild.leave()
+              } catch (err) {
+                logger.warn("admin", "Failed to leave guild after blacklist", { error: String(err) })
+              }
+            }
+          }
+
+          res.writeHead(200)
+          res.end(JSON.stringify({ message: `Blacklisted ${guildName}` }))
+          return
+        }
+
+        if (path === "/api/blacklist" && method === "GET") {
+          const entries = blacklistStore.getAll()
+          res.writeHead(200)
+          res.end(JSON.stringify({ blacklist: entries }))
+          return
+        }
+
+        if (path === "/api/blacklist/remove" && method === "POST") {
+          const guildId = url.searchParams.get("id")
+          if (!guildId) {
+            res.writeHead(400)
+            res.end(JSON.stringify({ error: "Missing guild id" }))
+            return
+          }
+
+          blacklistStore.remove(guildId)
+          res.writeHead(200)
+          res.end(JSON.stringify({ message: "Removed from blacklist" }))
           return
         }
 

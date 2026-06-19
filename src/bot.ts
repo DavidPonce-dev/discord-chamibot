@@ -5,6 +5,7 @@ import { handleButton } from "@/handlers/ButtonHandler"
 import { editTemporary } from "@/utils/messages"
 import { logger } from "@/utils/logger"
 import { getErrorMessage } from "@/utils/error"
+import { blacklistStore } from "@/services/admin/BlacklistStore"
 
 let botClient: Client | null = null
 
@@ -39,7 +40,16 @@ export function createBot(): Client {
     logger.error("discord", "Error del cliente Discord", { error: error.message })
   })
 
-  client.on("guildCreate", (guild) => {
+  client.on("guildCreate", async (guild) => {
+    if (blacklistStore.isBlacklisted(guild.id)) {
+      logger.event("blacklist", `Auto-leaving blacklisted guild ${guild.name} (${guild.id})`)
+      try {
+        await guild.leave()
+      } catch (err) {
+        logger.error("blacklist", `Failed to leave blacklisted guild`, { error: String(err) })
+      }
+      return
+    }
     logger.event("discord", "Bot añadido a servidor", {
       guild: guild.name,
       id: guild.id,
