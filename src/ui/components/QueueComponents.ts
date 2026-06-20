@@ -9,6 +9,19 @@ import { paginate } from "@/utils/format"
 
 const MAX_TRACK_LABEL = 50
 
+let autoplayEmojiTick = 0
+
+function getAutoplayEmoji(queue: TrackScheduler): { emoji: string; label?: string } {
+  if (!queue.isAutoplayEnabled()) {
+    return { emoji: "\ud83d\udcfb" }
+  }
+  autoplayEmojiTick++
+  if (autoplayEmojiTick % 2 === 0) {
+    return { emoji: "\ud83d\udcfb", label: "\ud83c\udfb6" }
+  }
+  return { emoji: "\ud83d\udce1", label: "\u2728" }
+}
+
 function truncateLabel(text: string, max: number): string {
   if (text.length <= max) return text
   return text.slice(0, max - 3) + "..."
@@ -96,6 +109,13 @@ export function buildNavRow(page: number, totalPages: number) {
 
 export function buildPlaybackRow(queue: TrackScheduler) {
   const isPaused = queue.isPaused()
+  const ap = getAutoplayEmoji(queue)
+
+  const autoplayBtn = new ButtonBuilder()
+    .setCustomId(BUTTON_PREFIXES.queuePlaybackAutoplay)
+    .setStyle(queue.isAutoplayEnabled() ? ButtonStyle.Success : ButtonStyle.Secondary)
+    .setEmoji(ap.emoji)
+  if (ap.label) autoplayBtn.setLabel(ap.label)
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -110,10 +130,7 @@ export function buildPlaybackRow(queue: TrackScheduler) {
       .setCustomId(BUTTON_PREFIXES.queuePlaybackShuffle)
       .setEmoji("\ud83d\udd00")
       .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(BUTTON_PREFIXES.queuePlaybackAutoplay)
-      .setEmoji("\ud83d\udcbf")
-      .setStyle(queue.isAutoplayEnabled() ? ButtonStyle.Success : ButtonStyle.Secondary),
+    autoplayBtn,
     new ButtonBuilder()
       .setCustomId(BUTTON_PREFIXES.queuePlaybackStop)
       .setEmoji("\u2716")

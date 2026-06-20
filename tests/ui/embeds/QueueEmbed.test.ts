@@ -156,10 +156,16 @@ describe("QueueComponents", () => {
       expect(btnData(row.components[0]).label).toBeUndefined()
     })
 
-    it("autoplay button no tiene label", () => {
+    it("autoplay OFF button no tiene label", () => {
+      const q = mockQueue({ isAutoplayEnabled: vi.fn().mockReturnValue(false) })
+      const row = buildPlaybackRow(q)
+      expect(btnData(row.components[3]).label).toBeUndefined()
+    })
+
+    it("autoplay ON button tiene label", () => {
       const q = mockQueue({ isAutoplayEnabled: vi.fn().mockReturnValue(true) })
       const row = buildPlaybackRow(q)
-      expect(btnData(row.components[4]).label).toBeUndefined()
+      expect(btnData(row.components[3]).label).toBeDefined()
     })
   })
 
