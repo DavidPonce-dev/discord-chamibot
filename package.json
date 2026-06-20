@@ -1,6 +1,6 @@
 {
   "name": "charmin-charmeleon",
-  "version": "1.4.4",
+  "version": "1.4.6",
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=--no-deprecation tsx src/index.ts",

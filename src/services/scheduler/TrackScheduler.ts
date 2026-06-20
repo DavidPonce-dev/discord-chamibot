@@ -317,7 +317,7 @@ export class TrackScheduler {
     this.isProcessing = true
     try {
       while (!this.isPlaying) {
-        const nextTrack = this.userQueue.shift() ?? this.radioQueue.shift()
+        const nextTrack = this.userQueue.shift() ?? (this.autoplay ? this.radioQueue.shift() : null)
         if (!nextTrack) return
 
         this.isPlaying = true
@@ -601,10 +601,15 @@ export class TrackScheduler {
       guildId: this.connection.joinConfig.guildId,
     })
 
-    if (this.autoplay && this.current && this.userQueue.length === 0 && this.radioQueue.length === 0) {
+    if (!this.autoplay) {
+      this.radioQueue = []
+      this.radioNext = null
+      this.radioBaseTitle = null
+    } else if (this.current && this.userQueue.length === 0 && this.radioQueue.length === 0) {
       await this.populateRadioQueue()
     }
 
+    this.onTrackChange?.(this.connection.joinConfig.guildId)
     return this.autoplay
   }
 
