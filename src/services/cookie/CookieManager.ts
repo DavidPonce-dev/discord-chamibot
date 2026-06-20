@@ -129,3 +129,7 @@ export function isBrowserActive(): boolean {
 export async function forceResetProfile() {
   return getRefresher().forceResetProfile()
 }
+
+export async function deleteCookies() {
+  return getRefresher().deleteCookies()
+}

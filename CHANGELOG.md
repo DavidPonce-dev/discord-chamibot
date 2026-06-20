@@ -4,6 +4,30 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.4.7 (2026-06-19)
+
+### Nuevos endpoints
+- **POST /api/cookies/delete**: elimina solo el archivo de cookies (`youtube-cookies.txt`) sin matar Chrome ni borrar el perfil del navegador. Difiere de `/api/profile/reset` en que es no-destructivo para el perfil. Después de llamar, `/api/status` devuelve `cookiesValid: false`, `cookieCount: 0`.
+
+---
+
+## v1.4.6 (2026-06-15)
+
+### Correcciones
+- **Autoplay**: se limpia la cola de radio al desactivar el autoplay.
+
+### Nuevas funcionalidades
+- **Blacklist**: sistema de blacklist de servidores con botones en el admin panel para blacklistear y hacer que el bot salga de un servidor.
+
+---
+
+## v1.4.5 (2026-06-15)
+
+### Correcciones
+- **Health check**: movido el handler de `/health` antes de la validación `isAllowedOrigin()` para que Docker/Traefik/Coolify no bloqueen las probes de salud.
+
+---
+
 ## v1.4.4 (2026-06-15)
 
 ### Correcciones

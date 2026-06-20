@@ -115,6 +115,15 @@ export class CookieRefresherService {
     logger.info("cookies", "Profile force reset — browser will need re-initialization")
   }
 
+  async deleteCookies() {
+    if (!fs.existsSync(this.config.cookieFile)) {
+      logger.warn("cookies", "Cookie file not found, nothing to delete")
+      return
+    }
+    fs.unlinkSync(this.config.cookieFile)
+    logger.info("cookies", "Cookie file deleted")
+  }
+
   private async checkChromiumAvailable(): Promise<boolean> {
     try {
       const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] })

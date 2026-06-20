@@ -3,7 +3,7 @@ import httpProxy from "http-proxy"
 import fs from "fs"
 import path from "path"
 import { logger } from "@/utils/logger"
-import { getRefresherInstance, validateCookies, refreshCookies, extractCookies, setScheduler, initBrowser, closeBrowser, isBrowserActive, forceResetProfile } from "@/services/cookie/CookieManager"
+import { getRefresherInstance, validateCookies, refreshCookies, extractCookies, setScheduler, initBrowser, closeBrowser, isBrowserActive, forceResetProfile, deleteCookies } from "@/services/cookie/CookieManager"
 import { CookieScheduler } from "@/services/cookie/CookieScheduler"
 import { config } from "@/config"
 import { getBotClient } from "@/bot"
@@ -277,6 +277,19 @@ export function startAdminServer(port: number) {
           await forceResetProfile()
           res.writeHead(200)
           res.end(JSON.stringify({ message: "Profile reset — use VNC login to re-authenticate" }))
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          res.writeHead(500)
+          res.end(JSON.stringify({ error: msg }))
+        }
+        return
+      }
+
+      if (path === "/api/cookies/delete" && method === "POST") {
+        try {
+          await deleteCookies()
+          res.writeHead(200)
+          res.end(JSON.stringify({ message: "Cookies eliminadas correctamente" }))
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
           res.writeHead(500)
