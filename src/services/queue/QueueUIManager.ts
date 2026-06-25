@@ -24,6 +24,16 @@ const queuePages = new Map<string, number>()
 const activeEdits = new Map<string, Promise<void>>()
 const dirtyGuilds = new Set<string>()
 const DELETED_MESSAGE_CODES = [10008, 50001, 10004]
+const EDIT_TIMEOUT_MS = 15_000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ])
+}
 
 function isMessageDeletedError(err: unknown): boolean {
   const msg = getErrorMessage(err)
@@ -131,7 +141,7 @@ async function doEdit(guildId: string, page?: number) {
     }
 
     try {
-      await msg.edit(buildQueuePayload(scheduler, currentPage))
+      await withTimeout(msg.edit(buildQueuePayload(scheduler, currentPage)), EDIT_TIMEOUT_MS, "queue edit")
     } catch (err) {
       if (isMessageDeletedError(err)) {
         logger.debug("queue", "Queue message deleted, recreating", { guildId })
@@ -147,8 +157,13 @@ async function doEdit(guildId: string, page?: number) {
   })()
 
   activeEdits.set(guildId, edit)
-  await edit
-  activeEdits.delete(guildId)
+  try {
+    await withTimeout(edit, EDIT_TIMEOUT_MS, `edit[${guildId}]`)
+  } catch {
+    logger.debug("queue", "Edit timed out, clearing active edit", { guildId })
+  } finally {
+    activeEdits.delete(guildId)
+  }
 }
 
 export async function ensureQueueMessage(

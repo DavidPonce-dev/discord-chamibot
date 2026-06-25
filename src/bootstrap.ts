@@ -1,4 +1,4 @@
-import { setupCookies, setCookieFile, validateCookies, getRefresherInstance, setScheduler, initBrowser, refreshCookies } from "@/services/cookie/CookieManager"
+import { setupCookies, setCookieFile, validateCookies, getRefresherInstance, setScheduler, initBrowser, refreshCookies, closeBrowser } from "@/services/cookie/CookieManager"
 import { CookieScheduler } from "@/services/cookie/CookieScheduler"
 import { startAdminServer, stopAdminServer, setSchedulerInstance } from "@/services/admin/AdminServer"
 import { createBot } from "@/bot"
@@ -39,15 +39,17 @@ async function stopCookieScheduler() {
 
 function setupProcessHandlers() {
   process.on("SIGINT", async () => {
-    logger.info("process", "Shutting down (browser left running for persistence)...")
+    logger.info("process", "Shutting down...")
     await stopCookieScheduler()
+    await closeBrowser()
     await stopAdminServer()
     process.exit(0)
   })
 
   process.on("SIGTERM", async () => {
-    logger.info("process", "Shutting down (browser left running for persistence)...")
+    logger.info("process", "Shutting down...")
     await stopCookieScheduler()
+    await closeBrowser()
     await stopAdminServer()
     process.exit(0)
   })

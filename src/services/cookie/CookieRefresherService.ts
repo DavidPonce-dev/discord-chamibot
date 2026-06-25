@@ -165,8 +165,9 @@ export class CookieRefresherService {
       return { success: false, error: "Failed to initialize browser", timestamp: new Date().toISOString() }
     }
 
+    let page: import("playwright").Page | null = null
     try {
-      const page = await this.browser.newPage()
+      page = await this.browser.newPage()
       await page.goto("https://www.youtube.com", {
         waitUntil: "domcontentloaded",
         timeout: 30000,
@@ -187,8 +188,6 @@ export class CookieRefresherService {
         expires: c.expires || 0,
         httpOnly: c.httpOnly || false,
       }))
-
-      await page.close()
 
       if (ytCookies.length === 0) {
         throw new Error("No YouTube cookies found in browser profile")
@@ -222,6 +221,10 @@ export class CookieRefresherService {
         success: false,
         error: msg,
         timestamp: new Date().toISOString(),
+      }
+    } finally {
+      if (page) {
+        await page.close().catch(() => {})
       }
     }
   }
@@ -272,7 +275,9 @@ export class CookieRefresherService {
       return { success: false, error: "Browser not running", timestamp: new Date().toISOString() }
     }
 
+    let page: import("playwright").Page | null = null
     try {
+      page = await this.browser.newPage()
       const cookies = await this.browser.cookies()
       const ytCookies = this.filterYouTubeCookies(cookies).map((c) => ({
         ...c,
@@ -307,6 +312,10 @@ export class CookieRefresherService {
         success: false,
         error: msg,
         timestamp: new Date().toISOString(),
+      }
+    } finally {
+      if (page) {
+        await page.close().catch(() => {})
       }
     }
   }
@@ -346,22 +355,30 @@ export class CookieRefresherService {
         env: { ...process.env, DISPLAY: display },
       })
 
-      const page = await this.browser.newPage()
-      await page.goto("https://www.youtube.com", {
-        waitUntil: "domcontentloaded",
-      })
+      let page: import("playwright").Page | null = null
+      try {
+        page = await this.browser.newPage()
+        await page.goto("https://www.youtube.com", {
+          waitUntil: "domcontentloaded",
+        })
 
-      this.browser.on("close", () => {
-        logger.info("cookies", "Browser closed unexpectedly during VNC session")
-        this.browser = null
-        this.stopVNC(vncProcesses)
-        this.stopXvfb(xvfb)
-      })
+        this.browser.on("close", () => {
+          logger.info("cookies", "Browser closed unexpectedly during VNC session")
+          this.browser = null
+          this.stopVNC(vncProcesses)
+          this.stopXvfb(xvfb)
+        })
 
-      const vncUrl = `http://localhost:${vncPort}/vnc.html?autoconnect=true`
-      return {
-        url: vncUrl,
-        instructions: `Open ${vncUrl} in your browser. If you're not logged in, sign in to YouTube. Then use the "Extract Cookies" button in the admin panel.`,
+        const vncUrl = `http://localhost:${vncPort}/vnc.html?autoconnect=true`
+        return {
+          url: vncUrl,
+          instructions: `Open ${vncUrl} in your browser. If you're not logged in, sign in to YouTube. Then use the "Extract Cookies" button in the admin panel.`,
+        }
+      } catch (err) {
+        if (page) {
+          await page.close().catch(() => {})
+        }
+        throw err
       }
     } catch (err) {
       this.stopVNC(vncProcesses)

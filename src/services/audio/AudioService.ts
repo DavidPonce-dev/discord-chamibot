@@ -31,8 +31,34 @@ const FORMAT_STRATEGIES: FormatStrategy[] = [
 
 export class AudioService {
   private activeFfmpeg: ReturnType<typeof spawn> | null = null
+  private ffmpegStdoutHandler: ((data: Buffer) => void) | null = null
+  private ffmpegStderrHandler: ((data: Buffer) => void) | null = null
+  private ffmpegErrorHandler: ((err: Error) => void) | null = null
+  private ffmpegCloseHandler: ((code: number | null) => void) | null = null
+
+  private cleanupFfmpegListeners() {
+    if (!this.activeFfmpeg) return
+    const proc = this.activeFfmpeg
+    if (this.ffmpegStdoutHandler && proc.stdout) {
+      proc.stdout.removeListener("data", this.ffmpegStdoutHandler)
+    }
+    if (this.ffmpegStderrHandler && proc.stderr) {
+      proc.stderr.removeListener("data", this.ffmpegStderrHandler)
+    }
+    if (this.ffmpegErrorHandler) {
+      proc.removeListener("error", this.ffmpegErrorHandler)
+    }
+    if (this.ffmpegCloseHandler) {
+      proc.removeListener("close", this.ffmpegCloseHandler)
+    }
+    this.ffmpegStdoutHandler = null
+    this.ffmpegStderrHandler = null
+    this.ffmpegErrorHandler = null
+    this.ffmpegCloseHandler = null
+  }
 
   killProcess() {
+    this.cleanupFfmpegListeners()
     if (this.activeFfmpeg && !this.activeFfmpeg.killed) {
       this.activeFfmpeg.kill("SIGKILL")
     }
@@ -167,24 +193,29 @@ export class AudioService {
         "pipe:1",
       )
 
+      // Clean up any previous listeners before attaching new ones
+      this.cleanupFfmpegListeners()
+
       const ffmpeg = spawn("ffmpeg", ffmpegArgs)
       this.activeFfmpeg = ffmpeg
 
       let bytesWritten = 0
-      ffmpeg.stdout?.on("data", (data) => {
+      this.ffmpegStdoutHandler = (data) => {
         bytesWritten += data.length
-      })
+      }
+      ffmpeg.stdout?.on("data", this.ffmpegStdoutHandler)
 
       let ffmpegStderr = ""
-      ffmpeg.stderr?.on("data", (data) => {
+      this.ffmpegStderrHandler = (data) => {
         ffmpegStderr += data.toString()
-      })
+      }
+      ffmpeg.stderr?.on("data", this.ffmpegStderrHandler)
 
-      ffmpeg.on("error", (err) =>
+      this.ffmpegErrorHandler = (err) =>
         logger.error("audio", "Error en FFmpeg", { error: err.message })
-      )
+      ffmpeg.on("error", this.ffmpegErrorHandler)
 
-      ffmpeg.on("close", (code) => {
+      this.ffmpegCloseHandler = (code) => {
         logger.debug("audio", "FFmpeg cerrado", {
           code,
           bytesWritten,
@@ -196,7 +227,8 @@ export class AudioService {
             stderr: ffmpegStderr.slice(0, FFMPEG_STDERR_MAX_LENGTH),
           })
         }
-      })
+      }
+      ffmpeg.on("close", this.ffmpegCloseHandler)
 
       logger.debug("audio", "Stream iniciado exitosamente (opus via FFmpeg)")
       return createAudioResource(ffmpeg.stdout!, { inputType: StreamType.OggOpus })
