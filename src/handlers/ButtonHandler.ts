@@ -8,19 +8,6 @@ import { BUTTON_COOLDOWN_MS, SEEK_BACK_SECONDS } from "@/config/timeouts"
 import { getErrorMessage } from "@/utils/error"
 
 const userCooldowns = new Map<string, number>()
-const COOLDOWN_CLEANUP_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
-
-function cleanupExpiredCooldowns() {
-  const now = Date.now()
-  for (const [userId, timestamp] of userCooldowns) {
-    if (now - timestamp >= BUTTON_COOLDOWN_MS) {
-      userCooldowns.delete(userId)
-    }
-  }
-}
-
-const cleanupTimer = setInterval(cleanupExpiredCooldowns, COOLDOWN_CLEANUP_INTERVAL_MS)
-cleanupTimer.unref()
 
 function isOnCooldown(userId: string): boolean {
   const last = userCooldowns.get(userId)
