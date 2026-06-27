@@ -1,6 +1,7 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import type { GuildTextBasedChannel } from "discord.js"
-import { ensureQueueMessage, setQueuePage } from "@/services/queue/QueueUIManager"
+import { ensureQueueMessage } from "@/services/queue/QueueUIManager"
+import { guildManager } from "@/services/guild/GuildManager"
 import { requireSession } from "@/utils/guards"
 import { silentReply } from "@/utils/messages"
 
@@ -13,7 +14,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     return
   }
 
-  setQueuePage(result.guildId, 1)
+  guildManager.setQueuePage(result.guildId, 1)
   await silentReply(interaction)
   await ensureQueueMessage(result.guildId, interaction.channel as GuildTextBasedChannel | undefined)
 }

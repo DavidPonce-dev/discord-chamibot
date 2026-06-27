@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction } from "discord.js"
-import { updateQueueForGuild, setQueuePage } from "@/services/queue/QueueUIManager"
+import { updateQueueForGuild } from "@/services/queue/QueueUIManager"
+import { guildManager } from "@/services/guild/GuildManager"
 import { requirePlaying } from "@/utils/guards"
 import { silentReply } from "@/utils/messages"
 
@@ -8,7 +9,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   if (!result) return
 
   result.scheduler.skip()
-  setQueuePage(result.guildId, 1)
+  guildManager.setQueuePage(result.guildId, 1)
   await silentReply(interaction)
   await updateQueueForGuild(result.guildId)
 }
