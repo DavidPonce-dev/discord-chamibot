@@ -148,7 +148,7 @@ export class TrackScheduler {
     this.last5Tracks.unshift(norm)
     if (this.last5Tracks.length > this.MAX_LAST5) this.last5Tracks.pop()
 
-    const artist = extractArtist(finished.title)
+    const artist = finished.artist || extractArtist(finished.title)
     if (artist) {
       if (artist === this.currentArtist) {
         this.sameArtistStreak++
@@ -333,8 +333,8 @@ export class TrackScheduler {
           })
         }
 
-        const logArtist = nextTrack.canonicalTitle ? extractArtist(nextTrack.canonicalTitle) : extractArtist(nextTrack.title)
-        const logSong = nextTrack.canonicalTitle ? extractSongOnly(nextTrack.canonicalTitle) : extractSongOnly(nextTrack.title)
+        const logArtist = nextTrack.artist || extractArtist(nextTrack.canonicalTitle ?? nextTrack.title)
+        const logSong = nextTrack.song || extractSongOnly(nextTrack.canonicalTitle ?? nextTrack.title)
 
         logger.event("scheduler", "Reproduciendo track", {
           artist: logArtist || "(desconocido)",
@@ -566,19 +566,6 @@ export class TrackScheduler {
     }
   }
 
-  stop() {
-    const totalSize = this.userQueue.length + this.radioQueue.length
-    logger.event("scheduler", "Stop", {
-      title: this.current?.title ?? "none",
-      queueSize: totalSize,
-      guildId: this.connection.joinConfig.guildId,
-    })
-    this.userQueue = []
-    this.radioQueue = []
-    this.audio.killProcess()
-    this.player.stop()
-  }
-
   destroy() {
     if (this.destroyed || this.isProcessing) return
     this.destroyed = true
@@ -586,7 +573,10 @@ export class TrackScheduler {
     logger.info("scheduler", "Scheduler destruido", {
       guildId,
     })
-    this.stop()
+    this.userQueue = []
+    this.radioQueue = []
+    this.audio.killProcess()
+    this.player.stop()
     this.connection.destroy()
     if (!this.disconnectCalled) {
       this.disconnectCalled = true

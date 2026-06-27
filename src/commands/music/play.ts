@@ -3,8 +3,7 @@ import type { GuildTextBasedChannel } from "discord.js";
 import { joinVoiceChannel } from "@discordjs/voice";
 import { resolveQuery } from "@/services/search/YouTubeResolver";
 import { guildManager } from "@/services/guild/GuildManager";
-import { setupSchedulerCallbacks, initializeQueueDisplay } from "@/services/queue/QueueProgressTracker";
-import { updateQueueForGuild, setQueuePage } from "@/services/queue/QueueUIManager";
+import { initializeQueueDisplay } from "@/services/queue/QueueProgressTracker";
 import { editTemporary } from "@/utils/messages";
 import { logger } from "@/utils/logger";
 import { TRACKS_PER_PAGE } from "@/config/ui"
@@ -14,6 +13,7 @@ import { requireGuild } from "@/utils/guards";
 import { isDeployMode } from "@/services/deploy/DeployGuard";
 import type { Track } from "@/core/types";
 import type { ResolveResult } from "@/services/search/YouTubeResolver";
+import { extractArtist, extractSongOnly } from "@/radio/LastFmRecommender";
 
 function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track {
   const canonicalTitle = video.track && video.artist
@@ -22,6 +22,7 @@ function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track 
       ? video.track
       : undefined
 
+  const titleForExtraction = canonicalTitle ?? video.title
   return {
     title: video.title,
     url: video.url,
@@ -30,6 +31,8 @@ function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track 
     id: video.id,
     thumbnail: video.thumbnail,
     canonicalTitle,
+    artist: extractArtist(titleForExtraction) || undefined,
+    song: extractSongOnly(titleForExtraction),
   }
 }
 
@@ -89,8 +92,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
       scheduler = guildManager.create(guildId, connection);
     }
-
-    setupSchedulerCallbacks(scheduler, guildId)
 
     const lastPage = () => calcTotalPages(scheduler!.getSize(), TRACKS_PER_PAGE)
 

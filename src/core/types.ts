@@ -6,6 +6,8 @@ export interface Track {
   id?: string
   thumbnail?: string
   canonicalTitle?: string
+  artist?: string
+  song?: string
 }
 
 export type LoopMode = "none" | "one" | "all"

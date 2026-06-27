@@ -95,8 +95,8 @@ describe("AudioService", () => {
     })
   })
 
-  describe("format strategies", () => {
-    it("bestaudio funciona → retorna URL sin probar otras", async () => {
+  describe("getAudioUrl", () => {
+    it("usa bestaudio y retorna URL", async () => {
       mockSpawnYtDlp.mockResolvedValueOnce(makeYtDlpResult())
 
       await service.createResource(TEST_URL)
@@ -107,106 +107,15 @@ describe("AudioService", () => {
       expect(args).toContain("bestaudio")
     })
 
-    it("bestaudio falla → prueba worstaudio", async () => {
-      mockSpawnYtDlp
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult())
-
-      await service.createResource(TEST_URL)
-
-      expect(mockSpawnYtDlp).toHaveBeenCalledTimes(2)
-      const args = mockSpawnYtDlp.mock.calls[1][0]
-      expect(args).toContain("worstaudio")
-    })
-
-    it("todas las estrategias fallan → corre diagnóstico y fallback", async () => {
+    it("falla → lanza error", async () => {
       mockSpawnYtDlp.mockResolvedValue(makeYtDlpResult({ code: 1, stderr: "failed" }))
 
       await expect(service.createResource(TEST_URL)).rejects.toThrow()
-
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        "audio",
-        "All format strategies failed, running --list-formats for diagnostics",
-      )
-    })
-  })
-
-  describe("dump-json fallback", () => {
-    it("estrategias fallan → dump-json encuentra URL en formats", async () => {
-      mockSpawnYtDlp
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify({
-            url: AUDIO_URL,
-            formats: [{ url: "https://alt.example.com/audio", acodec: "opus", vcodec: "none" }],
-          }),
-          stderr: "",
-          code: 0,
-        })
-
-      await service.createResource(TEST_URL)
-
-      expect(mockSpawnYtDlp).toHaveBeenCalledTimes(5)
     })
 
-    it("dump-json sin URL ni formats → lanza error", async () => {
+    it("cookie error → refresca → reintenta", async () => {
       mockSpawnYtDlp
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify({ url: null, formats: [] }),
-          stderr: "",
-          code: 0,
-        })
-
-      await expect(service.createResource(TEST_URL)).rejects.toThrow("No audio URL")
-    })
-
-    it("dump-json prefiere audio-only sobre audio-con-video", async () => {
-      mockSpawnYtDlp
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify({
-            url: "https://fallback.example.com",
-            formats: [
-              { url: "https://with-video.example.com", acodec: "opus", vcodec: "h264" },
-              { url: "https://audio-only.example.com", acodec: "opus", vcodec: "none" },
-            ],
-          }),
-          stderr: "",
-          code: 0,
-        })
-
-      await service.createResource(TEST_URL)
-
-      const ffmpegCall = mockSpawn.mock.calls.find((c) => c[0] === "ffmpeg")
-      expect(ffmpegCall).toBeDefined()
-      const ffmpegArgs = ffmpegCall![1]
-      const inputIdx = ffmpegArgs.indexOf("-i")
-      expect(ffmpegArgs[inputIdx + 1]).toBe("https://audio-only.example.com")
-    })
-  })
-
-  describe("cookie error recovery", () => {
-    it("detecta cookie error → refresca → reintenta", async () => {
-      mockSpawnYtDlp
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify({ url: null, formats: [] }),
-          stderr: "Sign in to confirm your age",
-          code: 1,
-        })
+        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "Sign in to confirm" }))
         .mockResolvedValueOnce(makeYtDlpResult())
 
       mockIsCookieError.mockReturnValue(true)
@@ -215,20 +124,11 @@ describe("AudioService", () => {
       await service.createResource(TEST_URL)
 
       expect(mockRefreshCookies).toHaveBeenCalledTimes(1)
-      expect(mockSpawnYtDlp).toHaveBeenCalledTimes(6)
+      expect(mockSpawnYtDlp).toHaveBeenCalledTimes(2)
     })
 
     it("cookie error pero refresh falla → re-tira error", async () => {
-      mockSpawnYtDlp
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify({ url: null, formats: [] }),
-          stderr: "Sign in to confirm your age",
-          code: 1,
-        })
+      mockSpawnYtDlp.mockResolvedValue(makeYtDlpResult({ code: 1, stderr: "Sign in to confirm" }))
 
       mockIsCookieError.mockReturnValue(true)
       mockRefreshCookies.mockResolvedValue({ success: false })
@@ -238,16 +138,7 @@ describe("AudioService", () => {
     })
 
     it("error no es de cookies → no intenta refresh", async () => {
-      mockSpawnYtDlp
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce(makeYtDlpResult({ code: 1, stderr: "failed" }))
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify({ url: null, formats: [] }),
-          stderr: "Network error",
-          code: 1,
-        })
+      mockSpawnYtDlp.mockResolvedValue(makeYtDlpResult({ code: 1, stderr: "Network error" }))
 
       mockIsCookieError.mockReturnValue(false)
 

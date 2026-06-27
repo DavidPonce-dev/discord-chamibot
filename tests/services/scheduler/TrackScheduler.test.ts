@@ -220,10 +220,10 @@ describe("TrackScheduler", () => {
   })
 
   describe("stop / destroy", () => {
-    it("stop resetea cola y mata proceso", () => {
+    it("destroy resetea cola y mata proceso", () => {
       const { scheduler } = createScheduler()
       scheduler.addNext(makeTrack())
-      scheduler.stop()
+      scheduler.destroy()
       expect(scheduler.getSize()).toBe(0)
       expect(mockKillProcess).toHaveBeenCalled()
     })

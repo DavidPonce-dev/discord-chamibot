@@ -1,23 +1,11 @@
 import { ButtonInteraction } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
-import { refreshQueueMessage, getQueuePage, updateQueueForGuild } from "@/services/queue/QueueUIManager"
+import { refreshQueueMessage, updateQueueForGuild } from "@/services/queue/QueueUIManager"
 import { logger } from "@/utils/logger"
 import { requireSession } from "@/utils/guards"
 import { BUTTON_PREFIXES, LOOP_LABELS } from "@/config/ui"
-import { BUTTON_COOLDOWN_MS, SEEK_BACK_SECONDS } from "@/config/timeouts"
+import { SEEK_BACK_SECONDS } from "@/config/timeouts"
 import { getErrorMessage } from "@/utils/error"
-
-const userCooldowns = new Map<string, number>()
-
-function isOnCooldown(userId: string): boolean {
-  const last = userCooldowns.get(userId)
-  if (!last) return false
-  return Date.now() - last < BUTTON_COOLDOWN_MS
-}
-
-function setCooldown(userId: string) {
-  userCooldowns.set(userId, Date.now())
-}
 
 interface QueueButtonAction {
   action: (scheduler: import("../services/scheduler/TrackScheduler").TrackScheduler, idx: number) => void
@@ -36,14 +24,6 @@ export async function handleButton(interaction: ButtonInteraction) {
 
   const { guildId, scheduler } = result
   const user = interaction.user.username
-  const userId = interaction.user.id
-
-  if (isOnCooldown(userId)) {
-    await interaction.reply({ content: "Esper\u00e1 un momento antes de usar otro bot\u00f3n", ephemeral: true }).catch(() => {})
-    return
-  }
-
-  setCooldown(userId)
 
   try {
     for (const [prefix, { action, logEvent }] of Object.entries(queueIndexActions)) {
@@ -99,11 +79,11 @@ type ButtonHandler = (
 const buttonHandlers: Record<string, ButtonHandler> = {
   [BUTTON_PREFIXES.queuePagePrev]: async (s, interaction, guildId, user) => {
     logger.event("button", "P\u00e1gina anterior", { user, guildId })
-    await refreshQueueMessage(interaction, Math.max(1, (getQueuePage(guildId) || 1) - 1))
+    await refreshQueueMessage(interaction, Math.max(1, (guildManager.getQueuePage(guildId) || 1) - 1))
   },
   [BUTTON_PREFIXES.queuePageNext]: async (s, interaction, guildId, user) => {
     logger.event("button", "P\u00e1gina siguiente", { user, guildId })
-    await refreshQueueMessage(interaction, getQueuePage(guildId) + 1)
+    await refreshQueueMessage(interaction, guildManager.getQueuePage(guildId) + 1)
   },
   [BUTTON_PREFIXES.queuePlaybackPause]: async (s, interaction, guildId, user) => {
     s.togglePause()

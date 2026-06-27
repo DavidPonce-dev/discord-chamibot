@@ -1,12 +1,10 @@
 import { GuildTextBasedChannel } from "discord.js"
 import { guildManager } from "@/services/guild/GuildManager"
-import { registerCleanup, registerPreDestroyCleanup } from "@/services/guild/cleanupRegistry"
-import { ensureQueueMessage, updateQueueForGuild, setQueuePage, cleanupQueueUI } from "@/services/queue/QueueUIManager"
+import { ensureQueueMessage, updateQueueForGuild, cleanupQueueUI } from "@/services/queue/QueueUIManager"
 import { isQueueEmpty } from "@/utils/guards"
 import { PROGRESS_UPDATE_INTERVAL_MS } from "@/config/timeouts"
 
 const progressIntervals = new Map<string, NodeJS.Timeout>()
-const callbacksSetup = new Set<string>()
 
 function updateProgress(guildId: string) {
   const scheduler = guildManager.get(guildId)
@@ -38,16 +36,9 @@ function stopProgressUpdates(guildId: string) {
   }
 }
 
-registerCleanup(stopProgressUpdates)
-registerPreDestroyCleanup(stopProgressUpdates)
-
 export function setupSchedulerCallbacks(scheduler: import("../scheduler/TrackScheduler").TrackScheduler, guildId: string) {
-  if (callbacksSetup.has(guildId)) return
-
-  callbacksSetup.add(guildId)
-
   scheduler.onTrackChange = (gId) => {
-    setQueuePage(gId, 1)
+    guildManager.setQueuePage(gId, 1)
     updateQueueForGuild(gId)
     const s = guildManager.get(gId)
     if (s?.getCurrentTrack()) {
@@ -56,7 +47,6 @@ export function setupSchedulerCallbacks(scheduler: import("../scheduler/TrackSch
   }
 
   scheduler.onDisconnect = (gId) => {
-    callbacksSetup.delete(gId)
     stopProgressUpdates(gId)
     cleanupQueueUI(gId)
     guildManager.delete(gId)

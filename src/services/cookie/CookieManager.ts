@@ -10,14 +10,14 @@ import { CookieScheduler } from "./CookieScheduler"
 const COOKIE_DIR = config.youtube.cookieDir
 const COOKIE_PATH = path.join(COOKIE_DIR, "youtube-cookies.txt")
 const COOKIE_ERROR_PATTERNS = [
-  "sign in to confirm",
-  "please sign in",
-  "http error 403",
-  "consent age gate",
-  "youtube.*cookie",
-  "rejected.*cookie",
-  "account.*unavailable",
-  "authentication.*required",
+  /sign in to confirm/i,
+  /please sign in/i,
+  /http error 403/i,
+  /consent age gate/i,
+  /youtube.*cookie/i,
+  /rejected.*cookie/i,
+  /account.*unavailable/i,
+  /authentication.*required/i,
 ]
 
 let cookieFile: string | null = null
@@ -42,8 +42,7 @@ function getRefresher(): CookieRefresherService {
 }
 
 export function isCookieError(error: string): boolean {
-  const lower = error.toLowerCase()
-  return COOKIE_ERROR_PATTERNS.some((pattern) => new RegExp(pattern).test(lower))
+  return COOKIE_ERROR_PATTERNS.some((pattern) => pattern.test(error))
 }
 
 export async function refreshCookies(): Promise<{ success: boolean; cookieCount?: number }> {

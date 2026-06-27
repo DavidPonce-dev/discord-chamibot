@@ -165,7 +165,6 @@ describe("play command", () => {
       expect(scheduler.add).toHaveBeenCalledWith(
         expect.objectContaining({ title: "Test Song", url: "https://youtube.com/watch?v=test" })
       )
-      expect(mockSetupSchedulerCallbacks).toHaveBeenCalledWith(scheduler, "guild-1")
       expect(mockInitializeQueueDisplay).toHaveBeenCalled()
       expect(interaction.deleteReply).toHaveBeenCalled()
     })

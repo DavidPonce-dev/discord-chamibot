@@ -20,9 +20,6 @@ type QueueMessagePayload = {
   components: ActionRowBuilder<ButtonBuilder>[]
 }
 
-const queuePages = new Map<string, number>()
-const activeEdits = new Map<string, Promise<void>>()
-const dirtyGuilds = new Set<string>()
 const DELETED_MESSAGE_CODES = [10008, 50001, 10004]
 
 function isMessageDeletedError(err: unknown): boolean {
@@ -30,7 +27,7 @@ function isMessageDeletedError(err: unknown): boolean {
   return DELETED_MESSAGE_CODES.some(code => msg.includes(String(code))) || msg.includes("Unknown Message")
 }
 
-export function buildQueuePayload(scheduler: ReturnType<typeof guildManager.get>, page: number): QueueMessagePayload {
+function buildQueuePayload(scheduler: ReturnType<typeof guildManager.get>, page: number): QueueMessagePayload {
   if (!scheduler) return { embeds: [buildEmptyEmbed()], components: [] }
 
   const embed = buildQueueContent(scheduler, page)
@@ -58,8 +55,7 @@ export async function cleanupQueueUI(guildId: string) {
   guildManager.clearNowPlayingMessage(guildId)
 
   guildManager.clearQueueChannel(guildId)
-  guildManager.clearStatusTitle(guildId)
-  clearQueuePage(guildId)
+  guildManager.clearQueuePage(guildId)
 }
 
 async function recreateQueueMessage(guildId: string, page?: number) {
@@ -67,8 +63,8 @@ async function recreateQueueMessage(guildId: string, page?: number) {
   const channel = guildManager.getQueueChannel(guildId)
   if (!scheduler || scheduler.isDestroyed() || !channel) return
 
-  const currentPage = page ?? queuePages.get(guildId) ?? 1
-  queuePages.set(guildId, currentPage)
+  const currentPage = page ?? guildManager.getQueuePage(guildId) ?? 1
+  guildManager.setQueuePage(guildId, currentPage)
 
   try {
     const msg = await channel.send(buildQueuePayload(scheduler, currentPage))
@@ -82,73 +78,33 @@ async function recreateQueueMessage(guildId: string, page?: number) {
   }
 }
 
-export function getQueuePage(guildId: string): number {
-  return queuePages.get(guildId) ?? 1
-}
-
-export function setQueuePage(guildId: string, page: number) {
-  queuePages.set(guildId, page)
-}
-
-export function clearQueuePage(guildId: string) {
-  queuePages.delete(guildId)
-}
-
 export async function updateQueueForGuild(guildId: string, page?: number) {
   const scheduler = guildManager.get(guildId)
   if (!scheduler || scheduler.isDestroyed()) return
 
-  if (activeEdits.has(guildId)) {
-    dirtyGuilds.add(guildId)
+  const msg = guildManager.getQueueMessage(guildId)
+  if (!msg) {
+    await recreateQueueMessage(guildId, page)
     return
   }
 
-  await doEdit(guildId, page)
+  const currentPage = page ?? guildManager.getQueuePage(guildId) ?? 1
+  guildManager.setQueuePage(guildId, currentPage)
 
-  if (dirtyGuilds.delete(guildId)) {
-    await doEdit(guildId, page)
-  }
-}
-
-async function doEdit(guildId: string, page?: number) {
-  const edit = (async () => {
-    const scheduler = guildManager.get(guildId)
-    const msg = guildManager.getQueueMessage(guildId)
-    if (!scheduler || scheduler.isDestroyed()) return
-
-    if (isQueueEmpty(scheduler)) {
-      await cleanupQueueUI(guildId)
-      guildManager.delete(guildId)
-      return
-    }
-
-    const currentPage = page ?? queuePages.get(guildId) ?? 1
-    queuePages.set(guildId, currentPage)
-
-    if (!msg) {
+  try {
+    await msg.edit(buildQueuePayload(scheduler, currentPage))
+  } catch (err) {
+    if (isMessageDeletedError(err)) {
+      logger.debug("queue", "Queue message deleted, recreating", { guildId })
+      guildManager.clearQueueMessage(guildId)
       await recreateQueueMessage(guildId, currentPage)
-      return
+    } else {
+      logger.debug("queue", "Error editing queue message (transient, will retry)", {
+        guildId,
+        error: getErrorMessage(err),
+      })
     }
-
-    try {
-      await msg.edit(buildQueuePayload(scheduler, currentPage))
-    } catch (err) {
-      if (isMessageDeletedError(err)) {
-        logger.debug("queue", "Queue message deleted, recreating", { guildId })
-        guildManager.clearQueueMessage(guildId)
-        await recreateQueueMessage(guildId, currentPage)
-      } else {
-        logger.debug("queue", "Error editing queue message (transient, will retry)", {
-          guildId,
-          error: getErrorMessage(err),
-        })
-      }
-    }
-  })()
-
-  activeEdits.set(guildId, edit)
-  await edit
-  activeEdits.delete(guildId)
+  }
 }
 
 export async function ensureQueueMessage(
@@ -167,8 +123,8 @@ export async function ensureQueueMessage(
   const scheduler = guildManager.get(guildId)
   if (!scheduler || scheduler.isDestroyed()) return
 
-  const currentPage = page ?? queuePages.get(guildId) ?? 1
-  queuePages.set(guildId, currentPage)
+  const currentPage = page ?? guildManager.getQueuePage(guildId) ?? 1
+  guildManager.setQueuePage(guildId, currentPage)
   try {
     const msg = await channel.send(buildQueuePayload(scheduler, currentPage))
     guildManager.setQueueMessage(guildId, msg)
@@ -189,8 +145,8 @@ export async function refreshQueueMessage(interaction: MessageComponentInteracti
 
   const isEmpty = isQueueEmpty(scheduler)
   const payload = isEmpty ? buildEmptyPayload() : (() => {
-    const currentPage = page ?? queuePages.get(guildId) ?? 1
-    queuePages.set(guildId, currentPage)
+    const currentPage = page ?? guildManager.getQueuePage(guildId) ?? 1
+    guildManager.setQueuePage(guildId, currentPage)
     return buildQueuePayload(scheduler, currentPage)
   })()
 
@@ -206,10 +162,8 @@ export async function refreshQueueMessage(interaction: MessageComponentInteracti
       if (message) {
         await message.delete().catch(() => {})
         guildManager.clearQueueMessage(guildId)
-        clearQueuePage(guildId)
+        guildManager.clearQueuePage(guildId)
       }
     }, EMPTY_MESSAGE_TIMEOUT_MS)
   }
 }
-
-

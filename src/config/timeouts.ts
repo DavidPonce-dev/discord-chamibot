@@ -1,5 +1,4 @@
 export const PROGRESS_UPDATE_INTERVAL_MS = 5_000
-export const BUTTON_COOLDOWN_MS = 1_500
 export const SEEK_BACK_SECONDS = 15
 export const AUTO_DELETE_MS = 5_000
 export const EMPTY_MESSAGE_TIMEOUT_MS = 5_000

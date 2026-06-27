@@ -5,8 +5,8 @@ import type { TrackScheduler } from "@/services/scheduler/TrackScheduler"
 const mockRequireGuild = vi.hoisted(() => vi.fn())
 const mockRequireSession = vi.hoisted(() => vi.fn())
 const mockRefreshQueueMessage = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
-const mockGetQueuePage = vi.hoisted(() => vi.fn().mockReturnValue(1))
 const mockToggleAutoplayPref = vi.hoisted(() => vi.fn().mockReturnValue(true))
+const mockGetQueuePage = vi.hoisted(() => vi.fn().mockReturnValue(1))
 const mockLogger = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
@@ -29,7 +29,6 @@ vi.mock("@/utils/guards", () => ({
 
 vi.mock("@/services/queue/QueueUIManager", () => ({
   refreshQueueMessage: mockRefreshQueueMessage,
-  getQueuePage: mockGetQueuePage,
 }))
 
 vi.mock("@/services/guild/GuildManager", () => ({
@@ -37,6 +36,8 @@ vi.mock("@/services/guild/GuildManager", () => ({
     get: vi.fn(),
     toggleAutoplayPref: mockToggleAutoplayPref,
     clearNowPlayingMessage: vi.fn(),
+    getQueuePage: mockGetQueuePage,
+    setQueuePage: vi.fn(),
   },
 }))
 
@@ -74,7 +75,6 @@ vi.mock("@/config/ui", () => ({
 }))
 
 vi.mock("@/config/timeouts", () => ({
-  BUTTON_COOLDOWN_MS: 1500,
   SEEK_BACK_SECONDS: 15,
 }))
 
@@ -134,39 +134,6 @@ describe("ButtonHandler", () => {
 
     const mod = await import("@/handlers/ButtonHandler")
     handleButton = mod.handleButton
-  })
-
-  describe("cooldown", () => {
-    it("bloquea si el usuario usó un botón hace menos de 1.5s", async () => {
-      const interaction = makeInteraction()
-      await handleButton(interaction)
-
-      const secondInteraction = makeInteraction({ customId: "q_playback_skip" })
-      await handleButton(secondInteraction)
-
-      expect(secondInteraction.reply).toHaveBeenCalledWith({
-        content: "Esperá un momento antes de usar otro botón",
-        ephemeral: true,
-      })
-    })
-
-    it("permite después de 1.5s", async () => {
-      vi.useFakeTimers()
-      const interaction = makeInteraction()
-      await handleButton(interaction)
-
-      vi.advanceTimersByTime(1600)
-
-      const secondInteraction = makeInteraction({ customId: "q_playback_skip" })
-      await handleButton(secondInteraction)
-
-      vi.useRealTimers()
-      const cooldownReply = secondInteraction.reply as ReturnType<typeof vi.fn>
-      const cooldownCalls = cooldownReply.mock.calls.filter(
-        (c) => c[0]?.content === "Esperá un momento antes de usar otro botón"
-      )
-      expect(cooldownCalls).toHaveLength(0)
-    })
   })
 
   describe("sin guild", () => {

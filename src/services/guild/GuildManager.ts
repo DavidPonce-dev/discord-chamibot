@@ -1,17 +1,15 @@
 import { VoiceConnection } from "@discordjs/voice"
 import { Message, GuildTextBasedChannel } from "discord.js"
 import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
-import { registerCleanup, registerPreDestroyCleanup, runPreDestroyCleanup, runCleanup } from "@/services/guild/cleanupRegistry"
+import { setupSchedulerCallbacks } from "@/services/queue/QueueProgressTracker"
 import { logger } from "@/utils/logger"
-
-export { registerCleanup, registerPreDestroyCleanup }
 
 export class GuildManager {
   private sessions = new Map<string, TrackScheduler>()
   private autoplayPrefs = new Map<string, boolean>()
+  private queuePages = new Map<string, number>()
   private queueMessages = new Map<string, Message>()
   private queueChannels = new Map<string, GuildTextBasedChannel>()
-  private statusTitles = new Map<string, string>()
   private nowPlayingMessages = new Map<string, Message>()
   private lastfmUsernames = new Map<string, string>()
 
@@ -27,16 +25,16 @@ export class GuildManager {
     this.queueChannels.delete(guildId)
   }
 
-  getStatusTitle(guildId: string): string | undefined {
-    return this.statusTitles.get(guildId)
+  getQueuePage(guildId: string): number {
+    return this.queuePages.get(guildId) ?? 1
   }
 
-  setStatusTitle(guildId: string, title: string) {
-    this.statusTitles.set(guildId, title)
+  setQueuePage(guildId: string, page: number) {
+    this.queuePages.set(guildId, page)
   }
 
-  clearStatusTitle(guildId: string) {
-    this.statusTitles.delete(guildId)
+  clearQueuePage(guildId: string) {
+    this.queuePages.delete(guildId)
   }
 
   getAutoplayPref(guildId: string): boolean {
@@ -54,9 +52,12 @@ export class GuildManager {
   }
 
   create(guildId: string, connection: VoiceConnection) {
+    const existing = this.sessions.get(guildId)
+    if (existing) return existing
     logger.event("guild", "Sesión de música creada", { guildId })
     const session = new TrackScheduler(connection, this.getAutoplayPref(guildId))
     this.sessions.set(guildId, session)
+    setupSchedulerCallbacks(session, guildId)
     return session
   }
 
@@ -66,7 +67,6 @@ export class GuildManager {
 
   delete(guildId: string) {
     logger.event("guild", "Sesión de música eliminada", { guildId })
-    runPreDestroyCleanup(guildId)
     const session = this.sessions.get(guildId)
     if (session) {
       session.destroy()
@@ -79,10 +79,9 @@ export class GuildManager {
 
     this.sessions.delete(guildId)
     this.queueChannels.delete(guildId)
-    this.statusTitles.delete(guildId)
+    this.queuePages.delete(guildId)
     this.autoplayPrefs.delete(guildId)
     this.lastfmUsernames.delete(guildId)
-    runCleanup(guildId)
   }
 
   has(guildId: string) {

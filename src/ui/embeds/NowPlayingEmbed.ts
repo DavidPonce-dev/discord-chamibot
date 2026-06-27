@@ -1,16 +1,15 @@
 import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
 import { formatTime } from "@/utils/format"
 import { createBaseEmbed } from "@/ui/embeds/BaseEmbed"
-import { extractArtist, extractSongOnly } from "@/radio/LastFmRecommender"
+import { extractSongOnly } from "@/radio/LastFmRecommender"
 
 export function buildNowPlayingEmbed(queue: TrackScheduler) {
   const track = queue.getCurrentTrack()!
   const position = queue.getPosition()
   const progress = formatTime(position)
 
-  const titleForExtraction = track.canonicalTitle ?? track.title
-  const artist = extractArtist(titleForExtraction)
-  const song = extractSongOnly(titleForExtraction)
+  const artist = track.artist
+  const song = track.song ?? track.title
 
   const embedLines: string[] = []
   if (artist) {

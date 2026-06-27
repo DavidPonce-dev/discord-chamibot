@@ -7,7 +7,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   const result = requireSession(interaction)
   if (!result) return
 
-  result.scheduler.stop()
-  guildManager.delete(result.guildId)
+  result.scheduler.destroy()
   await silentReply(interaction)
 }

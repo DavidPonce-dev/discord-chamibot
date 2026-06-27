@@ -66,7 +66,7 @@ describe("QueueEmbed", () => {
 
     it("con artista muestra formato destacado", () => {
       const q = mockQueue({
-        getCurrentTrack: vi.fn().mockReturnValue(makeTrack({ canonicalTitle: "Artist - Song" })),
+        getCurrentTrack: vi.fn().mockReturnValue(makeTrack({ artist: "Artist", song: "Song" })),
         getPosition: vi.fn().mockReturnValue(0),
       })
       const embed = buildQueueContent(q, 1)
