@@ -1,5 +1,6 @@
 import { createAudioResource, AudioResource, StreamType } from "@discordjs/voice"
 import { spawn } from "child_process"
+import fs from "fs"
 import { logger } from "@/utils/logger"
 import { getCookieFile, isCookieError, refreshCookies } from "@/cookies/CookieManager"
 import { buildYtDlpArgs, spawnYtDlp } from "@/utils/ytdlp"
@@ -14,6 +15,29 @@ export class AudioService {
       this.activeFfmpeg.kill("SIGKILL")
     }
     this.activeFfmpeg = null
+  }
+
+  private getCookieHeader(): string | null {
+    const cookieFile = getCookieFile()
+    if (!cookieFile) return null
+    try {
+      if (!fs.existsSync(cookieFile)) return null
+      const content = fs.readFileSync(cookieFile, "utf-8")
+      const cookies: string[] = []
+      for (const line of content.split("\n")) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith("#")) continue
+        const parts = trimmed.split("\t")
+        if (parts.length >= 7) {
+          const name = parts[5]
+          const value = parts[6]
+          if (name) cookies.push(`${name}=${value ?? ""}`)
+        }
+      }
+      return cookies.length > 0 ? cookies.join("; ") : null
+    } catch {
+      return null
+    }
   }
 
   private async getAudioUrl(url: string, retries = 0): Promise<string> {
@@ -54,6 +78,11 @@ export class AudioService {
         "-reconnect_delay_max", "5",
       ]
 
+      const cookieHeader = this.getCookieHeader()
+      if (cookieHeader) {
+        ffmpegArgs.push("-headers", `Cookie: ${cookieHeader}\r\n`)
+      }
+
       if (seekTo !== undefined) {
         ffmpegArgs.push("-ss", formatTime(seekTo, true))
       }
@@ -70,6 +99,10 @@ export class AudioService {
 
       const ffmpeg = spawn("ffmpeg", ffmpegArgs)
       this.activeFfmpeg = ffmpeg
+
+      logger.debug("audio", "FFmpeg command", {
+        args: ffmpegArgs.map(a => a.length > 80 ? a.slice(0, 80) + "..." : a),
+      })
 
       let bytesWritten = 0
       ffmpeg.stdout?.on("data", (data) => {
@@ -89,12 +122,12 @@ export class AudioService {
         logger.debug("audio", "FFmpeg cerrado", {
           code,
           bytesWritten,
-          stderr: ffmpegStderr.slice(0, 500),
+          stderr: ffmpegStderr.slice(0, 2000),
         })
         if (code && code !== 0) {
           logger.error("audio", "FFmpeg terminó con error", {
             code,
-            stderr: ffmpegStderr.slice(0, 500),
+            stderr: ffmpegStderr.slice(0, 2000),
           })
         }
       })
