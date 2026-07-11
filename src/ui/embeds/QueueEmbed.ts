@@ -1,4 +1,4 @@
-import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import { TrackScheduler } from "@/music/TrackScheduler"
 import { parseDuration, buildProgressBar, paginate } from "@/utils/format"
 import { createBaseEmbed } from "@/ui/embeds/BaseEmbed"
 import { TRACKS_PER_PAGE } from "@/config/ui"

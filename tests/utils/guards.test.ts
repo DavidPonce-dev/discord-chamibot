@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { ChatInputCommandInteraction, ButtonInteraction } from "discord.js"
-import type { TrackScheduler } from "../../src/services/scheduler/TrackScheduler"
+import type { TrackScheduler } from "../../src/music/TrackScheduler"
 
 const mockGuildManagerGet = vi.hoisted(() => vi.fn())
 
-vi.mock("@/services/guild/GuildManager", () => ({
+vi.mock("@/music/GuildManager", () => ({
   guildManager: {
     get: mockGuildManagerGet,
   },

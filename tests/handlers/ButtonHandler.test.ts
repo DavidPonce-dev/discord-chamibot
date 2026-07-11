@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { ButtonInteraction } from "discord.js"
-import type { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import type { TrackScheduler } from "@/music/TrackScheduler"
 
 const mockRequireGuild = vi.hoisted(() => vi.fn())
 const mockRequireSession = vi.hoisted(() => vi.fn())
@@ -27,11 +27,11 @@ vi.mock("@/utils/guards", () => ({
   requirePlaying: vi.fn(),
 }))
 
-vi.mock("@/services/queue/QueueUIManager", () => ({
+vi.mock("@/music/QueueUIManager", () => ({
   refreshQueueMessage: mockRefreshQueueMessage,
 }))
 
-vi.mock("@/services/guild/GuildManager", () => ({
+vi.mock("@/music/GuildManager", () => ({
   guildManager: {
     get: vi.fn(),
     toggleAutoplayPref: mockToggleAutoplayPref,
@@ -132,7 +132,7 @@ describe("ButtonHandler", () => {
     mockRefreshQueueMessage.mockResolvedValue(undefined)
     mockGetQueuePage.mockReturnValue(1)
 
-    const mod = await import("@/handlers/ButtonHandler")
+    const mod = await import("@/bot/ButtonHandler")
     handleButton = mod.handleButton
   })
 

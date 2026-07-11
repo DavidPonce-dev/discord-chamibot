@@ -1,17 +1,14 @@
 import { Client, GatewayIntentBits, ChatInputCommandInteraction } from "discord.js"
-import { getCommandMap } from "@/commands/registry"
-import { autocompleteSearch } from "@/services/search/YouTubeResolver"
-import { handleButton } from "@/handlers/ButtonHandler"
+import { getCommandMap } from "@/bot/commands/registry"
+import { autocompleteSearch } from "@/search/YouTubeResolver"
+import { handleButton } from "@/bot/ButtonHandler"
 import { editTemporary } from "@/utils/messages"
 import { logger } from "@/utils/logger"
 import { getErrorMessage } from "@/utils/error"
-import { blacklistStore } from "@/services/admin/BlacklistStore"
+import { blacklistStore } from "@/admin/BlacklistStore"
+import { setBotClient } from "@/core/client"
 
-let botClient: Client | null = null
-
-export function getBotClient(): Client | null {
-  return botClient
-}
+export { getBotClient } from "@/core/client"
 
 export function createBot(): Client {
   const client = new Client({
@@ -21,7 +18,7 @@ export function createBot(): Client {
     ],
   })
 
-  botClient = client
+  setBotClient(client)
 
   const commands = getCommandMap()
 

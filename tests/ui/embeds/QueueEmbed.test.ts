@@ -3,7 +3,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from "discord.js"
 import { buildQueueContent, buildEmptyEmbed } from "@/ui/embeds/QueueEmbed"
 import { buildTrackRows, buildNavRow, buildPlaybackRow, buildNowPlayingButtons } from "@/ui/components/QueueComponents"
 import { TRACKS_PER_PAGE } from "@/config/ui"
-import type { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import type { TrackScheduler } from "@/music/TrackScheduler"
 import type { Track } from "@/core/types"
 
 function makeTrack(overrides: Partial<Track> = {}): Track {

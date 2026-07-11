@@ -34,7 +34,7 @@ vi.mock("@/utils/ytdlp", () => ({
   USER_AGENT: "test-agent",
 }))
 
-vi.mock("@/services/cookie/CookieManager", () => ({
+vi.mock("@/cookies/CookieManager", () => ({
   isCookieError: mockIsCookieError,
   refreshCookies: mockRefreshCookies,
   getCookieFile: mockGetCookieFile,
@@ -61,7 +61,7 @@ vi.mock("child_process", () => ({
   spawn: mockSpawn,
 }))
 
-const { AudioService } = await import("@/services/audio/AudioService")
+const { AudioService } = await import("@/music/AudioService")
 
 const TEST_URL = "https://youtube.com/watch?v=test123"
 const AUDIO_URL = "https://rr5---sn-abc123.googlevideo.com/videoplayback?test=1"

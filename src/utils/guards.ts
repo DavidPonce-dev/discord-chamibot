@@ -1,6 +1,6 @@
 import { ChatInputCommandInteraction, ButtonInteraction, MessageComponentInteraction } from "discord.js"
-import { guildManager } from "@/services/guild/GuildManager"
-import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import { guildManager } from "@/music/GuildManager"
+import { TrackScheduler } from "@/music/TrackScheduler"
 
 type GuildInteraction = ChatInputCommandInteraction | ButtonInteraction | MessageComponentInteraction
 

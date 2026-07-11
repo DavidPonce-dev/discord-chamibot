@@ -14,7 +14,7 @@ vi.mock("@/radio/RadioSearchService", () => ({
   searchPlayDl: mockSearchPlayDl,
 }))
 
-vi.mock("@/services/lastfm/LastFmService", () => ({
+vi.mock("@/radio/lastfm/LastFmService", () => ({
   getSimilarTracks: mockGetSimilarTracks,
   getSimilarArtists: vi.fn(),
   getArtistTopTracks: vi.fn(),
@@ -22,11 +22,10 @@ vi.mock("@/services/lastfm/LastFmService", () => ({
   getTrackTopTags: mockGetTrackTopTags,
 }))
 
-vi.mock("@/services/llm/TrackParser", () => ({
+vi.mock("@/radio/llm/TrackParser", () => ({
   parseTrackTitle: mockParseTrackTitle,
 }))
-
-vi.mock("@/services/llm/RadioRecommender", () => ({
+vi.mock("@/radio/llm/RadioRecommender", () => ({
   groqRecommend: mockGroqRecommend,
 }))
 

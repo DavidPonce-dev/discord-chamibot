@@ -20,11 +20,11 @@ const mockUpdateQueueForGuild = vi.hoisted(() => vi.fn().mockResolvedValue(undef
 const mockSetQueuePage = vi.hoisted(() => vi.fn())
 const mockCalcTotalPages = vi.hoisted(() => vi.fn().mockReturnValue(1))
 
-vi.mock("@/services/search/YouTubeResolver", () => ({
+vi.mock("@/search/YouTubeResolver", () => ({
   resolveQuery: mockResolveQuery,
 }))
 
-vi.mock("@/services/guild/GuildManager", () => ({
+vi.mock("@/music/GuildManager", () => ({
   guildManager: {
     get: mockGuildManagerGet,
     create: mockGuildManagerCreate,
@@ -47,12 +47,12 @@ vi.mock("@discordjs/voice", () => ({
   joinVoiceChannel: mockJoinVoiceChannel,
 }))
 
-vi.mock("@/services/queue/QueueProgressTracker", () => ({
+vi.mock("@/music/QueueProgressTracker", () => ({
   setupSchedulerCallbacks: mockSetupSchedulerCallbacks,
   initializeQueueDisplay: mockInitializeQueueDisplay,
 }))
 
-vi.mock("@/services/queue/QueueUIManager", () => ({
+vi.mock("@/music/QueueUIManager", () => ({
   updateQueueForGuild: mockUpdateQueueForGuild,
   setQueuePage: mockSetQueuePage,
 }))
@@ -61,7 +61,7 @@ vi.mock("@/utils/format", () => ({
   calcTotalPages: mockCalcTotalPages,
 }))
 
-const { execute } = await import("@/commands/music/play")
+const { execute } = await import("@/bot/commands/music/play")
 
 function makeInteraction(overrides: Record<string, unknown> = {}): ChatInputCommandInteraction {
   const voiceChannel = makeVoiceChannel()

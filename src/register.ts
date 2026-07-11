@@ -1,6 +1,6 @@
 import { REST, Routes } from "discord.js"
 import { config } from "@/config"
-import { getCommandDefinitions } from "@/commands/registry"
+import { getCommandDefinitions } from "@/bot/commands/registry"
 
 const rest = new REST({ version: "10" }).setToken(config.discord.token)
 

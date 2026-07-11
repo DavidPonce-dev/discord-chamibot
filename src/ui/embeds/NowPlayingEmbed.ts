@@ -1,4 +1,4 @@
-import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import { TrackScheduler } from "@/music/TrackScheduler"
 import { formatTime } from "@/utils/format"
 import { createBaseEmbed } from "@/ui/embeds/BaseEmbed"
 import { extractSongOnly } from "@/radio/LastFmRecommender"

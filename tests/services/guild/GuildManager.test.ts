@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { GuildManager } from "@/services/guild/GuildManager"
+import { GuildManager } from "@/music/GuildManager"
 
 const createMockQueueMethods = vi.hoisted(() => {
   return () => ({
@@ -32,7 +32,7 @@ const createMockQueueMethods = vi.hoisted(() => {
   })
 })
 
-vi.mock("@/services/scheduler/TrackScheduler", () => ({
+vi.mock("@/music/TrackScheduler", () => ({
   TrackScheduler: class {
     constructor() {
       return createMockQueueMethods() as any

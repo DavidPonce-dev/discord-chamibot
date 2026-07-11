@@ -3,7 +3,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from "discord.js"
-import { TrackScheduler } from "@/services/scheduler/TrackScheduler"
+import { TrackScheduler } from "@/music/TrackScheduler"
 import { BUTTON_PREFIXES, TRACKS_PER_PAGE } from "@/config/ui"
 import { paginate } from "@/utils/format"
 
