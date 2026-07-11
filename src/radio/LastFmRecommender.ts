@@ -8,11 +8,11 @@ import {
   getArtistTopTracks,
   searchTrack,
   LastFmSimilarTrack,
-} from "@/services/lastfm/LastFmService"
+} from "@/radio/lastfm/LastFmService"
 import { logger } from "@/utils/logger"
-import { parseTrackTitle } from "@/services/llm/TrackParser"
-import { groqRecommend } from "@/services/llm/RadioRecommender"
-import { getTrackTopTags } from "@/services/lastfm/LastFmService"
+import { parseTrackTitle } from "@/radio/llm/TrackParser"
+import { groqRecommend } from "@/radio/llm/RadioRecommender"
+import { getTrackTopTags } from "@/radio/lastfm/LastFmService"
 
 export interface RadioResult {
   track: Omit<Track, "requestedBy">
@@ -301,6 +301,44 @@ export async function findRelated(
         lastfmResult = result
         break
       }
+    }
+  }
+
+  if (!lastfmResult && artist) {
+    logger.debug("radio", "Fallback: búsqueda amplia en YouTube", { artist })
+    const broadResult = await resolveToYouTube(artist, "songs", excludeIds)
+    if (broadResult) {
+      logger.info("radio", "Fallback YouTube encontrado (artist + songs)", {
+        title: broadResult.track.title,
+        id: broadResult.track.id,
+      })
+      return broadResult
+    }
+  }
+
+  if (!lastfmResult && songOnly) {
+    logger.debug("radio", "Fallback: búsqueda genérica en YouTube", { song: songOnly })
+    const videos = await searchPlayDl(songOnly)
+    const filtered = filterVideos(videos, excludeIds)
+    if (filtered.length > 0) {
+      const picked = filtered[0]
+      const genericResult: RadioResult = {
+        track: {
+          title: picked.title ?? "Unknown",
+          url: picked.url ?? `https://youtube.com/watch?v=${picked.id}`,
+          duration: picked.durationRaw,
+          id: picked.id,
+          thumbnail: picked.id
+            ? `https://img.youtube.com/vi/${picked.id}/hqdefault.jpg`
+            : undefined,
+        },
+        canonicalTitle: songOnly,
+      }
+      logger.info("radio", "Fallback YouTube encontrado (song only)", {
+        title: genericResult.track.title,
+        id: genericResult.track.id,
+      })
+      return genericResult
     }
   }
 

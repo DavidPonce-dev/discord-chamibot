@@ -4,6 +4,14 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.5.0 (2026-07-11)
+
+### Mejoras de Radio
+- **Recomendación inmediata**: al activar el botón de radio, ahora se pre-calcula el "Siguiente" tema inmediatamente. Antes había que esperar a que terminara el track actual.
+- **Fallback YouTube**: si Last.fm y Groq no encuentran recomendaciones, se hace una búsqueda amplia en YouTube como último recurso. El bot **SIEMPRE** recomienda algo si hay resultados en YouTube.
+
+---
+
 ## v1.4.7 (2026-06-19)
 
 ### Nuevos endpoints

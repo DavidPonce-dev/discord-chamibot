@@ -1,10 +1,10 @@
 {
   "name": "charmin-charmeleon",
-  "version": "1.4.6",
+  "version": "1.5.0",
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=--no-deprecation tsx src/index.ts",
-    "build": "rimraf dist && tsc && tsc-alias && shx cp src/services/admin/admin-page.html dist/services/admin/",
+    "build": "rimraf dist && tsc && tsc-alias && shx cp src/admin/admin-page.html dist/admin/",
     "start": "NODE_OPTIONS=--no-deprecation node dist/index.js",
     "register": "tsx src/register.ts",
     "test": "vitest run",
