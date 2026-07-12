@@ -11,9 +11,10 @@ const commands = [
   { name: "/h", description: "Muestra este mensaje de ayuda" },
   { name: "/sh", description: "Mezcla aleatoriamente la cola" },
   { name: "/rm", description: "Elimina un tema de la cola por posici\u00f3n" },
-  { name: "/np", description: "Muestra el tema que se est\u00e1 reproduciendo" },
+  { name: "/np", description: "Muestra/actualiza la cola de reproducci\u00f3n" },
   { name: "/l", description: "Cambia el modo de repetici\u00f3n (none / one / all)" },
   { name: "/sk", description: "Adelanta o atrasa la reproducci\u00f3n" },
+  { name: "/lastfm", description: "Configura tu usuario de Last.fm para recomendaciones" },
 ]
 
 export function buildHelpEmbed() {

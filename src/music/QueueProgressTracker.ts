@@ -38,7 +38,6 @@ function stopProgressUpdates(guildId: string) {
 
 export function setupSchedulerCallbacks(scheduler: import("./TrackScheduler").TrackScheduler, guildId: string) {
   scheduler.onTrackChange = (gId) => {
-    guildManager.setQueuePage(gId, 1)
     updateQueueForGuild(gId)
     const s = guildManager.get(gId)
     if (s?.getCurrentTrack()) {

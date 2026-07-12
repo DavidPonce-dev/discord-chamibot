@@ -35,7 +35,6 @@ vi.mock("@/music/GuildManager", () => ({
   guildManager: {
     get: vi.fn(),
     toggleAutoplayPref: mockToggleAutoplayPref,
-    clearNowPlayingMessage: vi.fn(),
     getQueuePage: mockGetQueuePage,
     setQueuePage: vi.fn(),
   },
@@ -59,17 +58,15 @@ vi.mock("@/config/ui", () => ({
     queuePagePrev: "q_page_prev",
     queuePageNext: "q_page_next",
     queuePageIndicator: "q_page_indicator",
+    queuePlaybackSeekBack: "q_playback_seek_back",
     queuePlaybackPause: "q_playback_pause",
     queuePlaybackSkip: "q_playback_skip",
+    queuePlaybackLoop: "q_playback_loop",
     queuePlaybackShuffle: "q_playback_shuffle",
     queuePlaybackAutoplay: "q_playback_autoplay",
     queuePlaybackStop: "q_playback_stop",
-    nowPlayingPause: "np_pause",
-    nowPlayingResume: "np_resume",
-    nowPlayingSkip: "np_skip",
-    nowPlayingLoop: "np_loop",
-    nowPlayingShuffle: "np_shuffle",
-    nowPlayingSeekBack: "np_seek_back",
+    queuePlaybackReshuffle: "q_playback_reshuffle",
+    queueRadioShuffle: "q_radio_shuffle_",
   },
   EMBED_COLORS: {},
 }))
@@ -111,6 +108,7 @@ function makeScheduler(overrides: Partial<TrackScheduler> = {}): TrackScheduler 
     toggleLoop: vi.fn().mockReturnValue("one"),
     getPosition: vi.fn().mockReturnValue(30),
     seek: vi.fn().mockResolvedValue(undefined),
+    reshuffleRadio: vi.fn().mockResolvedValue({ title: "Reshuffled" }),
     ...overrides,
   } as unknown as TrackScheduler
 }
@@ -197,6 +195,25 @@ describe("ButtonHandler", () => {
   })
 
   describe("queue playback buttons", () => {
+    it("q_playback_seek_back llama seek con posición -15s", async () => {
+      const scheduler = makeScheduler({ getPosition: vi.fn().mockReturnValue(30) })
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
+      const interaction = makeInteraction({ customId: "q_playback_seek_back" })
+      await handleButton(interaction)
+
+      expect(scheduler.seek).toHaveBeenCalledWith(15)
+      expect(mockRefreshQueueMessage).toHaveBeenCalledWith(interaction)
+    })
+
+    it("q_playback_seek_back no baja de 0", async () => {
+      const scheduler = makeScheduler({ getPosition: vi.fn().mockReturnValue(10) })
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
+      const interaction = makeInteraction({ customId: "q_playback_seek_back" })
+      await handleButton(interaction)
+
+      expect(scheduler.seek).toHaveBeenCalledWith(0)
+    })
+
     it("q_playback_pause llama togglePause", async () => {
       const scheduler = makeScheduler()
       mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
@@ -217,6 +234,16 @@ describe("ButtonHandler", () => {
       expect(mockRefreshQueueMessage).toHaveBeenCalledWith(interaction, 1)
     })
 
+    it("q_playback_loop llama toggleLoop", async () => {
+      const scheduler = makeScheduler()
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
+      const interaction = makeInteraction({ customId: "q_playback_loop" })
+      await handleButton(interaction)
+
+      expect(scheduler.toggleLoop).toHaveBeenCalled()
+      expect(mockRefreshQueueMessage).toHaveBeenCalledWith(interaction)
+    })
+
     it("q_playback_shuffle llama shuffle", async () => {
       const scheduler = makeScheduler()
       mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
@@ -224,6 +251,16 @@ describe("ButtonHandler", () => {
       await handleButton(interaction)
 
       expect(scheduler.shuffle).toHaveBeenCalled()
+      expect(mockRefreshQueueMessage).toHaveBeenCalledWith(interaction)
+    })
+
+    it("q_playback_reshuffle llama reshuffleRadio", async () => {
+      const scheduler = makeScheduler()
+      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
+      const interaction = makeInteraction({ customId: "q_playback_reshuffle" })
+      await handleButton(interaction)
+
+      expect(scheduler.reshuffleRadio).toHaveBeenCalled()
       expect(mockRefreshQueueMessage).toHaveBeenCalledWith(interaction)
     })
 
@@ -278,89 +315,6 @@ describe("ButtonHandler", () => {
       await handleButton(interaction)
 
       expect(mockRefreshQueueMessage).toHaveBeenCalledWith(interaction, 3)
-    })
-  })
-
-  describe("now playing buttons", () => {
-    it("np_pause llama pause y responde con followUp", async () => {
-      const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
-      const interaction = makeInteraction({ customId: "np_pause" })
-      await handleButton(interaction)
-
-      expect(scheduler.pause).toHaveBeenCalled()
-      expect(interaction.deferUpdate).toHaveBeenCalled()
-      expect(interaction.message.delete).toHaveBeenCalled()
-      expect(interaction.followUp).toHaveBeenCalledWith({ content: "⏸ Pausado", ephemeral: true })
-    })
-
-    it("np_resume llama resume y responde con followUp", async () => {
-      const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
-      const interaction = makeInteraction({ customId: "np_resume" })
-      await handleButton(interaction)
-
-      expect(scheduler.resume).toHaveBeenCalled()
-      expect(interaction.deferUpdate).toHaveBeenCalled()
-      expect(interaction.message.delete).toHaveBeenCalled()
-      expect(interaction.followUp).toHaveBeenCalledWith({ content: "▶ Reanudado", ephemeral: true })
-    })
-
-    it("np_skip llama skip y responde con followUp", async () => {
-      const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
-      const interaction = makeInteraction({ customId: "np_skip" })
-      await handleButton(interaction)
-
-      expect(scheduler.skip).toHaveBeenCalled()
-      expect(interaction.deferUpdate).toHaveBeenCalled()
-      expect(interaction.message.delete).toHaveBeenCalled()
-      expect(interaction.followUp).toHaveBeenCalledWith({ content: "⏭ Saltado", ephemeral: true })
-    })
-
-    it("np_loop llama toggleLoop y responde con label del modo", async () => {
-      const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
-      const interaction = makeInteraction({ customId: "np_loop" })
-      await handleButton(interaction)
-
-      expect(scheduler.toggleLoop).toHaveBeenCalled()
-      expect(interaction.deferUpdate).toHaveBeenCalled()
-      expect(interaction.message.delete).toHaveBeenCalled()
-      expect(interaction.followUp).toHaveBeenCalledWith({ content: "Loop uno", ephemeral: true })
-    })
-
-    it("np_shuffle llama shuffle y responde con followUp", async () => {
-      const scheduler = makeScheduler()
-      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
-      const interaction = makeInteraction({ customId: "np_shuffle" })
-      await handleButton(interaction)
-
-      expect(scheduler.shuffle).toHaveBeenCalled()
-      expect(interaction.deferUpdate).toHaveBeenCalled()
-      expect(interaction.message.delete).toHaveBeenCalled()
-      expect(interaction.followUp).toHaveBeenCalledWith({ content: "🔀 Cola mezclada", ephemeral: true })
-    })
-
-    it("np_seek_back llama seek con posición -15s", async () => {
-      const scheduler = makeScheduler({ getPosition: vi.fn().mockReturnValue(30) })
-      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
-      const interaction = makeInteraction({ customId: "np_seek_back" })
-      await handleButton(interaction)
-
-      expect(scheduler.seek).toHaveBeenCalledWith(15)
-      expect(interaction.deferUpdate).toHaveBeenCalled()
-      expect(interaction.message.delete).toHaveBeenCalled()
-      expect(interaction.followUp).toHaveBeenCalledWith({ content: "⏪ -15s", ephemeral: true })
-    })
-
-    it("np_seek_back no baja de 0", async () => {
-      const scheduler = makeScheduler({ getPosition: vi.fn().mockReturnValue(10) })
-      mockRequireSession.mockReturnValue({ guildId: "guild-1", scheduler })
-      const interaction = makeInteraction({ customId: "np_seek_back" })
-      await handleButton(interaction)
-
-      expect(scheduler.seek).toHaveBeenCalledWith(0)
     })
   })
 

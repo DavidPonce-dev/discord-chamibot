@@ -4,6 +4,17 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.5.1 (2026-07-12)
+
+### Optimización
+- **AudioService**: eliminado parsing síncrono de cookies para FFmpeg. Las URLs de YouTube CDN ya vienen firmadas con tokens, los cookies solo son necesarios para la extracción de URL (manejado por `--cookies` en yt-dlp).
+- **CookieRefresherService**: extraído método `extractAndWriteCookies()` compartido entre `refreshCookies()` y `extractCookies()`, eliminando ~30 líneas de código duplicado.
+- **ytdlp.ts**: simplificado el chequeo de cookies en `buildYtDlpArgs()`, eliminando logging verboso y syscalls innecesarias (`existsSync` + `statSync`) en el hot path.
+- **CookieManager**: unificadas las funciones `refreshCookies()` y `extractCookies()` con un helper `delegateToRefresher()`.
+- **CookieScheduler**: extraído `setupIntervals()` para eliminar duplicación entre `start()` y `resume()`.
+
+---
+
 ## v1.5.0 (2026-07-11)
 
 ### Mejoras de Radio

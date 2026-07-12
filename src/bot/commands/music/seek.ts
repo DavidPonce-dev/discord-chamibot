@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction } from "discord.js"
 import { requirePlaying } from "@/utils/guards"
+import { updateQueueForGuild } from "@/music/QueueUIManager"
 import { silentExecute } from "@/utils/messages"
 
 export async function execute(interaction: ChatInputCommandInteraction) {
@@ -10,5 +11,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
   await silentExecute(interaction, async () => {
     await result.scheduler.seek(seconds)
+    updateQueueForGuild(result.guildId)
   })
 }

@@ -7,7 +7,7 @@ import {
 } from "discord.js"
 import { guildManager } from "@/music/GuildManager"
 import { buildQueueContent, buildEmptyEmbed } from "@/ui/embeds/QueueEmbed"
-import { buildTrackRows, buildNavRow, buildPlaybackRow } from "@/ui/components/QueueComponents"
+import { buildTrackRows, buildNavRow, buildPlaybackRow, buildQueueControlRow } from "@/ui/components/QueueComponents"
 import { TRACKS_PER_PAGE } from "@/config/ui"
 import { paginate } from "@/utils/format"
 import { isQueueEmpty, requireGuild } from "@/utils/guards"
@@ -40,6 +40,7 @@ function buildQueuePayload(scheduler: ReturnType<typeof guildManager.get>, page:
   const navRow = buildNavRow(page, totalPages)
   if (navRow) rows.push(navRow)
   rows.push(buildPlaybackRow(scheduler))
+  rows.push(buildQueueControlRow(scheduler))
 
   return { embeds: [embed], components: rows }
 }
@@ -54,10 +55,6 @@ export async function cleanupQueueUI(guildId: string) {
   const msg = guildManager.getQueueMessage(guildId)
   if (msg) msg.delete().catch(() => {})
   guildManager.clearQueueMessage(guildId)
-
-  const npMsg = guildManager.getNowPlayingMessage(guildId)
-  if (npMsg) npMsg.delete().catch(() => {})
-  guildManager.clearNowPlayingMessage(guildId)
 
   guildManager.clearQueueChannel(guildId)
   guildManager.clearQueuePage(guildId)

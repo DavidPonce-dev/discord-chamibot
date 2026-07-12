@@ -148,6 +148,26 @@ export class CookieRefresherService {
     return this.browser
   }
 
+  private async extractAndWriteCookies(): Promise<{ ytCookies: import("playwright").Cookie[]; isLoggedIn?: boolean }> {
+    const cookies = await this.browser!.cookies()
+    const ytCookies = this.filterYouTubeCookies(cookies).map((c) => ({
+      ...c,
+      path: c.path || "/",
+      secure: c.secure || false,
+      expires: c.expires || 0,
+      httpOnly: c.httpOnly || false,
+    }))
+
+    if (ytCookies.length === 0) {
+      throw new Error("No YouTube cookies found in browser")
+    }
+
+    const netscapeContent = this.cookiesToNetscape(ytCookies)
+    fs.writeFileSync(this.config.cookieFile, netscapeContent, { mode: 0o600 })
+
+    return { ytCookies }
+  }
+
   async refreshCookies(): Promise<CookieRefreshResult> {
     logger.info("cookies", "Refreshing YouTube cookies via Playwright")
 
@@ -179,23 +199,10 @@ export class CookieRefresherService {
         logger.warn("cookies", "No active YouTube session detected in browser profile")
       }
 
-      const cookies = await this.browser.cookies()
-      const ytCookies = this.filterYouTubeCookies(cookies).map((c) => ({
-        ...c,
-        path: c.path || "/",
-        secure: c.secure || false,
-        expires: c.expires || 0,
-        httpOnly: c.httpOnly || false,
-      }))
+      const { ytCookies } = await this.extractAndWriteCookies()
+      ytCookies.forEach((c) => Object.assign(c, { isLoggedIn: undefined }))
 
       await page.close()
-
-      if (ytCookies.length === 0) {
-        throw new Error("No YouTube cookies found in browser profile")
-      }
-
-      const netscapeContent = this.cookiesToNetscape(ytCookies)
-      fs.writeFileSync(this.config.cookieFile, netscapeContent, { mode: 0o600 })
 
       logger.info("cookies", "Cookies refreshed successfully", {
         count: ytCookies.length,
@@ -273,21 +280,7 @@ export class CookieRefresherService {
     }
 
     try {
-      const cookies = await this.browser.cookies()
-      const ytCookies = this.filterYouTubeCookies(cookies).map((c) => ({
-        ...c,
-        path: c.path || "/",
-        secure: c.secure || false,
-        expires: c.expires || 0,
-        httpOnly: c.httpOnly || false,
-      }))
-
-      if (ytCookies.length === 0) {
-        throw new Error("No YouTube cookies found in browser")
-      }
-
-      const netscapeContent = this.cookiesToNetscape(ytCookies)
-      fs.writeFileSync(this.config.cookieFile, netscapeContent, { mode: 0o600 })
+      const { ytCookies } = await this.extractAndWriteCookies()
 
       logger.info("cookies", "Cookies extracted successfully", {
         count: ytCookies.length,

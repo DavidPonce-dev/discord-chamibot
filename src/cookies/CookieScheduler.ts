@@ -16,6 +16,18 @@ export class CookieScheduler {
     this.intervalMs = intervalMs
   }
 
+  private setupIntervals() {
+    this.timer = setInterval(() => {
+      this.runRefresh()
+    }, this.intervalMs)
+    this.timer.unref()
+
+    this.healthTimer = setInterval(() => {
+      this.runHealthCheck()
+    }, BROWSER_HEALTH_CHECK_MS)
+    this.healthTimer.unref()
+  }
+
   start() {
     if (this.isRunning) {
       logger.warn("cookies", "Scheduler already running")
@@ -28,17 +40,7 @@ export class CookieScheduler {
       healthCheckMinutes: BROWSER_HEALTH_CHECK_MS / (1000 * 60),
     })
 
-    this.timer = setInterval(() => {
-      this.runRefresh()
-    }, this.intervalMs)
-
-    this.timer.unref()
-
-    this.healthTimer = setInterval(() => {
-      this.runHealthCheck()
-    }, BROWSER_HEALTH_CHECK_MS)
-
-    this.healthTimer.unref()
+    this.setupIntervals()
   }
 
   pause() {
@@ -57,16 +59,7 @@ export class CookieScheduler {
     if (!this.isRunning) {
       return
     }
-    this.timer = setInterval(() => {
-      this.runRefresh()
-    }, this.intervalMs)
-    this.timer.unref()
-
-    this.healthTimer = setInterval(() => {
-      this.runHealthCheck()
-    }, BROWSER_HEALTH_CHECK_MS)
-    this.healthTimer.unref()
-
+    this.setupIntervals()
     logger.info("cookies", "Cookie scheduler resumed")
   }
 

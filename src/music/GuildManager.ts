@@ -10,7 +10,6 @@ export class GuildManager {
   private queuePages = new Map<string, number>()
   private queueMessages = new Map<string, Message>()
   private queueChannels = new Map<string, GuildTextBasedChannel>()
-  private nowPlayingMessages = new Map<string, Message>()
   private lastfmUsernames = new Map<string, string>()
 
   getQueueChannel(guildId: string): GuildTextBasedChannel | undefined {
@@ -74,8 +73,6 @@ export class GuildManager {
 
     this.queueMessages.get(guildId)?.delete().catch(() => {})
     this.queueMessages.delete(guildId)
-    this.nowPlayingMessages.get(guildId)?.delete().catch(() => {})
-    this.nowPlayingMessages.delete(guildId)
 
     this.sessions.delete(guildId)
     this.queueChannels.delete(guildId)
@@ -98,18 +95,6 @@ export class GuildManager {
 
   clearQueueMessage(guildId: string) {
     this.queueMessages.delete(guildId)
-  }
-
-  setNowPlayingMessage(guildId: string, message: Message) {
-    this.nowPlayingMessages.set(guildId, message)
-  }
-
-  getNowPlayingMessage(guildId: string): Message | undefined {
-    return this.nowPlayingMessages.get(guildId)
-  }
-
-  clearNowPlayingMessage(guildId: string) {
-    this.nowPlayingMessages.delete(guildId)
   }
 
   getLastfmUsername(guildId: string): string | undefined {

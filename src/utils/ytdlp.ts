@@ -15,17 +15,8 @@ export interface YtDlpResult {
 export function buildYtDlpArgs(baseArgs: string[], extraArgs: string[] = []): string[] {
   const args = [...baseArgs, "--js-runtimes", "deno", "--no-playlist", "--quiet", "--no-warnings", "--user-agent", USER_AGENT, ...extraArgs]
   const cookieFile = getCookieFile()
-  if (cookieFile) {
-    const exists = fs.existsSync(cookieFile)
-    const size = exists ? fs.statSync(cookieFile).size : 0
-    logger.debug("ytdlp", "Cookie file check", { path: cookieFile, exists, size })
-    if (exists && size > 0) {
-      args.push("--cookies", cookieFile)
-    } else {
-      logger.warn("ytdlp", "Cookie file missing or empty", { path: cookieFile, exists, size })
-    }
-  } else {
-    logger.debug("ytdlp", "No cookie file configured")
+  if (cookieFile && fs.existsSync(cookieFile)) {
+    args.push("--cookies", cookieFile)
   }
   return args
 }

@@ -96,6 +96,40 @@ export function buildNavRow(page: number, totalPages: number) {
 
 export function buildPlaybackRow(queue: TrackScheduler) {
   const isPaused = queue.isPaused()
+  const showReshuffle = queue.isAutoplayEnabled() && !!queue.getRadioNext()
+
+  const components = [
+    new ButtonBuilder()
+      .setCustomId(BUTTON_PREFIXES.queuePlaybackSeekBack)
+      .setEmoji("\u23ea")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(BUTTON_PREFIXES.queuePlaybackPause)
+      .setEmoji(isPaused ? "\u25b6" : "\u23f8")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(BUTTON_PREFIXES.queuePlaybackSkip)
+      .setEmoji("\u23ed")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(BUTTON_PREFIXES.queuePlaybackLoop)
+      .setEmoji("\ud83d\udd01")
+      .setStyle(ButtonStyle.Secondary),
+    showReshuffle
+      ? new ButtonBuilder()
+          .setCustomId(BUTTON_PREFIXES.queuePlaybackReshuffle)
+          .setEmoji("\ud83d\udd04")
+          .setStyle(ButtonStyle.Success)
+      : new ButtonBuilder()
+          .setCustomId(BUTTON_PREFIXES.queuePlaybackShuffle)
+          .setEmoji("\ud83d\udd00")
+          .setStyle(ButtonStyle.Secondary),
+  ]
+
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(...components)
+}
+
+export function buildQueueControlRow(queue: TrackScheduler) {
   const autoplayEnabled = queue.isAutoplayEnabled()
 
   const autoplayBtn = new ButtonBuilder()
@@ -105,46 +139,10 @@ export function buildPlaybackRow(queue: TrackScheduler) {
   if (autoplayEnabled) autoplayBtn.setLabel("\ud83c\udfb6")
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(BUTTON_PREFIXES.queuePlaybackPause)
-      .setEmoji(isPaused ? "\u25b6" : "\u23f8")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(BUTTON_PREFIXES.queuePlaybackSkip)
-      .setEmoji("\u23ed")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(BUTTON_PREFIXES.queuePlaybackShuffle)
-      .setEmoji("\ud83d\udd00")
-      .setStyle(ButtonStyle.Secondary),
     autoplayBtn,
     new ButtonBuilder()
       .setCustomId(BUTTON_PREFIXES.queuePlaybackStop)
       .setEmoji("\u2716")
       .setStyle(ButtonStyle.Danger),
   )
-}
-
-export function buildNowPlayingButtons(queue: TrackScheduler) {
-  const pauseId = queue.isPaused() ? BUTTON_PREFIXES.nowPlayingResume : BUTTON_PREFIXES.nowPlayingPause
-  const showReshuffle = queue.isAutoplayEnabled() && !!queue.getRadioNext()
-
-  const components = [
-    new ButtonBuilder().setCustomId(BUTTON_PREFIXES.nowPlayingSeekBack).setEmoji("\u23ea").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(pauseId).setEmoji(queue.isPaused() ? "\u25b6" : "\u23f8").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(BUTTON_PREFIXES.nowPlayingSkip).setEmoji("\u23ed").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(BUTTON_PREFIXES.nowPlayingLoop).setEmoji("\ud83d\udd01").setStyle(ButtonStyle.Secondary),
-  ]
-
-  if (showReshuffle) {
-    components.push(
-      new ButtonBuilder().setCustomId(BUTTON_PREFIXES.nowPlayingReshuffle).setEmoji("\ud83d\udd04").setStyle(ButtonStyle.Success),
-    )
-  } else {
-    components.push(
-      new ButtonBuilder().setCustomId(BUTTON_PREFIXES.nowPlayingShuffle).setEmoji("\ud83d\udd00").setStyle(ButtonStyle.Secondary),
-    )
-  }
-
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(...components)
 }

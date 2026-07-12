@@ -45,9 +45,11 @@ export function isCookieError(error: string): boolean {
   return COOKIE_ERROR_PATTERNS.some((pattern) => pattern.test(error))
 }
 
-export async function refreshCookies(): Promise<{ success: boolean; cookieCount?: number }> {
+async function delegateToRefresher(
+  method: "refreshCookies" | "extractCookies"
+): Promise<{ success: boolean; cookieCount?: number }> {
   try {
-    const result = await getRefresher().refreshCookies()
+    const result = await getRefresher()[method]()
     if (result.success) {
       cookieFile = COOKIE_PATH
     }
@@ -57,16 +59,12 @@ export async function refreshCookies(): Promise<{ success: boolean; cookieCount?
   }
 }
 
+export async function refreshCookies(): Promise<{ success: boolean; cookieCount?: number }> {
+  return delegateToRefresher("refreshCookies")
+}
+
 export async function extractCookies(): Promise<{ success: boolean; cookieCount?: number }> {
-  try {
-    const result = await getRefresher().extractCookies()
-    if (result.success) {
-      cookieFile = COOKIE_PATH
-    }
-    return { success: result.success, cookieCount: result.cookieCount }
-  } catch {
-    return { success: false }
-  }
+  return delegateToRefresher("extractCookies")
 }
 
 export function validateCookies(): CookieValidationResult {
