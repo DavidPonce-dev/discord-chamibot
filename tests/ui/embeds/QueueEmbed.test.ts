@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest"
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from "discord.js"
 import { buildQueueContent, buildEmptyEmbed } from "@/ui/embeds/QueueEmbed"
-import { buildTrackRows, buildNavRow, buildPlaybackRow, buildQueueControlRow } from "@/ui/components/QueueComponents"
+import { buildTrackRows, buildNavRow, buildPlaybackRow } from "@/ui/components/QueueComponents"
 import { TRACKS_PER_PAGE } from "@/config/ui"
 import type { TrackScheduler } from "@/music/TrackScheduler"
 import type { Track } from "@/core/types"
@@ -174,70 +174,29 @@ describe("QueueComponents", () => {
       expect(row.components).toHaveLength(5)
     })
 
-    it("primer botón es seek back", () => {
+    it("primer botón es pause", () => {
       const row = buildPlaybackRow(mockQueue())
-      expect(btnData(row.components[0]).custom_id).toBe("q_playback_seek_back")
+      expect(btnData(row.components[0]).custom_id).toBe("q_playback_pause")
     })
 
-    it("segundo botón es pause (sin label)", () => {
-      const q = mockQueue({ isPaused: vi.fn().mockReturnValue(false) })
-      const row = buildPlaybackRow(q)
-      expect(btnData(row.components[1]).custom_id).toBe("q_playback_pause")
-      expect(btnData(row.components[1]).label).toBeUndefined()
-    })
-
-    it("tercer botón es skip", () => {
+    it("segundo botón es skip", () => {
       const row = buildPlaybackRow(mockQueue())
-      expect(btnData(row.components[2]).custom_id).toBe("q_playback_skip")
+      expect(btnData(row.components[1]).custom_id).toBe("q_playback_skip")
     })
 
-    it("cuarto botón es loop", () => {
+    it("tercer botón es shuffle", () => {
       const row = buildPlaybackRow(mockQueue())
-      expect(btnData(row.components[3]).custom_id).toBe("q_playback_loop")
+      expect(btnData(row.components[2]).custom_id).toBe("q_playback_shuffle")
     })
 
-    it("quinto botón es shuffle cuando no hay radioNext", () => {
+    it("cuarto botón es autoplay", () => {
       const row = buildPlaybackRow(mockQueue())
-      expect(btnData(row.components[4]).custom_id).toBe("q_playback_shuffle")
+      expect(btnData(row.components[3]).custom_id).toBe("q_playback_autoplay")
     })
 
-    it("quinto botón es reshuffle cuando hay radioNext", () => {
-      const q = mockQueue({
-        isAutoplayEnabled: vi.fn().mockReturnValue(true),
-        getRadioNext: vi.fn().mockReturnValue({ title: "Next" }),
-      })
-      const row = buildPlaybackRow(q)
-      expect(btnData(row.components[4]).custom_id).toBe("q_playback_reshuffle")
-    })
-  })
-
-  describe("buildQueueControlRow", () => {
-    it("devuelve ActionRowBuilder con 2 botones", () => {
-      const row = buildQueueControlRow(mockQueue())
-      expect(row).toBeInstanceOf(ActionRowBuilder)
-      expect(row.components).toHaveLength(2)
-    })
-
-    it("primer botón es autoplay", () => {
-      const row = buildQueueControlRow(mockQueue())
-      expect(btnData(row.components[0]).custom_id).toBe("q_playback_autoplay")
-    })
-
-    it("segundo botón es stop", () => {
-      const row = buildQueueControlRow(mockQueue())
-      expect(btnData(row.components[1]).custom_id).toBe("q_playback_stop")
-    })
-
-    it("autoplay ON tiene label", () => {
-      const q = mockQueue({ isAutoplayEnabled: vi.fn().mockReturnValue(true) })
-      const row = buildQueueControlRow(q)
-      expect(btnData(row.components[0]).label).toBeDefined()
-    })
-
-    it("autoplay OFF no tiene label", () => {
-      const q = mockQueue({ isAutoplayEnabled: vi.fn().mockReturnValue(false) })
-      const row = buildQueueControlRow(q)
-      expect(btnData(row.components[0]).label).toBeUndefined()
+    it("quinto botón es stop", () => {
+      const row = buildPlaybackRow(mockQueue())
+      expect(btnData(row.components[4]).custom_id).toBe("q_playback_stop")
     })
   })
 })

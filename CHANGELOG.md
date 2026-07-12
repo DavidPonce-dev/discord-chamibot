@@ -4,6 +4,14 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.5.2 (2026-07-12)
+
+### Correcciones
+- **FFmpeg 403**: restaurado el Cookie header en FFmpeg. Las URLs de YouTube CDN requieren cookies para streaming, no solo para extracción de URL.
+- **Botones de UI**: revertida la reestructuración de botones del commit anterior. `buildPlaybackRow` ahora tiene el orden original: pause, skip, shuffle, autoplay, stop. Eliminada `buildQueueControlRow`.
+
+---
+
 ## v1.5.1 (2026-07-12)
 
 ### Optimización

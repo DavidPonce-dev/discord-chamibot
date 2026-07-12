@@ -14,14 +14,11 @@ export const BUTTON_PREFIXES = {
   queuePagePrev: "q_page_prev",
   queuePageNext: "q_page_next",
   queuePageIndicator: "q_page_indicator",
-  queuePlaybackSeekBack: "q_playback_seek_back",
   queuePlaybackPause: "q_playback_pause",
   queuePlaybackSkip: "q_playback_skip",
-  queuePlaybackLoop: "q_playback_loop",
   queuePlaybackShuffle: "q_playback_shuffle",
   queuePlaybackAutoplay: "q_playback_autoplay",
   queuePlaybackStop: "q_playback_stop",
-  queuePlaybackReshuffle: "q_playback_reshuffle",
   queueRadioShuffle: "q_radio_shuffle_",
 } as const
 

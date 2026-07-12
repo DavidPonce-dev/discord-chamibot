@@ -3,8 +3,7 @@ import { guildManager } from "@/music/GuildManager"
 import { refreshQueueMessage, updateQueueForGuild } from "@/music/QueueUIManager"
 import { logger } from "@/utils/logger"
 import { requireSession } from "@/utils/guards"
-import { BUTTON_PREFIXES, LOOP_LABELS } from "@/config/ui"
-import { SEEK_BACK_SECONDS } from "@/config/timeouts"
+import { BUTTON_PREFIXES } from "@/config/ui"
 import { getErrorMessage } from "@/utils/error"
 
 interface QueueButtonAction {
@@ -85,12 +84,6 @@ const buttonHandlers: Record<string, ButtonHandler> = {
     logger.event("button", "Página siguiente", { user, guildId })
     await refreshQueueMessage(interaction, guildManager.getQueuePage(guildId) + 1)
   },
-  [BUTTON_PREFIXES.queuePlaybackSeekBack]: async (s, interaction, guildId, user) => {
-    const pos = Math.max(0, s.getPosition() - SEEK_BACK_SECONDS)
-    await s.seek(pos)
-    logger.event("button", "Seek back -15s", { user, guildId, position: pos })
-    await refreshQueueMessage(interaction)
-  },
   [BUTTON_PREFIXES.queuePlaybackPause]: async (s, interaction, guildId, user) => {
     s.togglePause()
     logger.event("button", "Pause/Resume toggle", { user, guildId })
@@ -101,19 +94,9 @@ const buttonHandlers: Record<string, ButtonHandler> = {
     logger.event("button", "Saltando", { user, guildId })
     await refreshQueueMessage(interaction, 1)
   },
-  [BUTTON_PREFIXES.queuePlaybackLoop]: async (s, interaction, guildId, user) => {
-    const mode = s.toggleLoop()
-    logger.event("button", "Loop mode", { user, guildId, mode })
-    await refreshQueueMessage(interaction)
-  },
   [BUTTON_PREFIXES.queuePlaybackShuffle]: async (s, interaction, guildId, user) => {
     s.shuffle()
     logger.event("button", "Mezclando cola", { user, guildId })
-    await refreshQueueMessage(interaction)
-  },
-  [BUTTON_PREFIXES.queuePlaybackReshuffle]: async (s, interaction, guildId, user) => {
-    const next = await s.reshuffleRadio()
-    logger.event("button", "Reshuffle radio next", { user, guildId, next: next?.title })
     await refreshQueueMessage(interaction)
   },
   [BUTTON_PREFIXES.queuePlaybackStop]: async (s, interaction, guildId, user) => {
