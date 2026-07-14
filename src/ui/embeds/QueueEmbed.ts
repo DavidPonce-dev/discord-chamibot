@@ -2,14 +2,12 @@ import { TrackScheduler } from "@/music/TrackScheduler"
 import { parseDuration, buildProgressBar, formatTime, paginate } from "@/utils/format"
 import { createBaseEmbed } from "@/ui/embeds/BaseEmbed"
 import { TRACKS_PER_PAGE } from "@/config/ui"
-import { extractSongOnly } from "@/radio/LastFmRecommender"
 
 export function buildQueueContent(queue: TrackScheduler, page: number) {
   const tracks = queue.getQueue()
   const current = queue.getCurrentTrack()
   const { pageItems: pageTracks } = paginate(tracks, page, TRACKS_PER_PAGE)
 
-  const embedLines: string[] = []
   const fields: { name: string; value: string; inline: boolean }[] = []
 
   if (current) {
@@ -17,36 +15,28 @@ export function buildQueueContent(queue: TrackScheduler, page: number) {
     const song = current.song ?? current.title
 
     if (artist) {
-      embedLines.push(`***${song}***`)
-      embedLines.push(`**\uD83C\uDFA4 ${artist}**`)
+      fields.push({ name: "\uD83C\uDFB5 Canci\u00f3n", value: `***${song}***`, inline: false })
+      fields.push({ name: "\uD83C\uDFA4 Artista", value: `**${artist}**`, inline: false })
     } else {
-      embedLines.push(`***${current.title}***`)
+      fields.push({ name: "\uD83C\uDFB5 Canci\u00f3n", value: `***${current.title}***`, inline: false })
     }
 
-    embedLines.push("")
+    if (current.album) {
+      fields.push({ name: "\uD83D\uDCBF \u00c1lbum", value: current.album, inline: false })
+    }
+
     const pos = queue.getPosition()
     const total = parseDuration(current.duration)
-    embedLines.push(buildProgressBar(pos, total))
+    fields.push({ name: "\u200b", value: buildProgressBar(pos, total), inline: false })
 
     fields.push(
       { name: "Pedido por", value: current.requestedBy, inline: true },
       { name: "Duraci\u00f3n", value: current.duration ?? "Desconocida", inline: true },
       { name: "Transcurrido", value: formatTime(pos), inline: true },
     )
-
-    if (queue.isAutoplayEnabled()) {
-      const nextTrack = queue.getRadioNext()
-      if (nextTrack) {
-        const nextSong = extractSongOnly(nextTrack.canonicalTitle ?? nextTrack.title)
-        fields.push({ name: "\u23ed Siguiente", value: nextSong || nextTrack.title, inline: false })
-      }
-    }
   }
 
   const embed = createBaseEmbed()
-  if (embedLines.length > 0) {
-    embed.setDescription(embedLines.join("\n"))
-  }
   if (fields.length > 0) {
     embed.addFields(fields)
   }

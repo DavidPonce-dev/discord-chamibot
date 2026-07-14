@@ -4,6 +4,26 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.5.3 (2026-07-13)
+
+### Nuevas funcionalidades
+- **Campo álbum**: agregado `album` al tipo `Track`. Se extrae automáticamente del JSON de yt-dlp (`data.album`) al resolver URLs de YouTube. El álbum se muestra en el embed de la cola si está disponible.
+
+### Mejoras de UI
+- **QueueEmbed reestructurado**: toda la info del track (canción, artista, álbum, barra de progreso) ahora va en **fields** del embed en vez de description. El layout es: 🎵 Canción → 🎤 Artista → 💿 Álbum (si existe) → progress bar → Pedido por / Duración / Transcurrido.
+
+### Correcciones del sistema de cookies
+- **Error logging**: `delegateToRefresher()` ahora loguea errores explícitamente en vez de tragarlos silenciosamente.
+- **Doble lanzamiento de Chromium**: eliminado `checkChromiumAvailable()` redundante — se lanza directo al persistent context (ahorra un lanzamiento de Chromium en cada inicio).
+- **Timeout en busy-wait**: el loop `isInitializing` ahora tiene timeout de 30s. Si el browser se traba inicializando, lanza error en vez de girar infinitamente.
+- **initBrowser redundante**: eliminado el fire-and-forget de `initBrowser()` en bootstrap — `refreshCookies()` ya auto-inicializa el browser internamente.
+- **FFmpeg sin refresh reactivo**: si FFmpeg falla por error de cookies durante el streaming, ahora refresca automáticamente las cookies para el siguiente track.
+
+### Limpieza
+- **Dead code eliminado**: `COOKIE_REFRESH_INTERVAL_MS` en `timeouts.ts` (nunca se importaba) y `refreshIntervalMs` en `CookieRefresherConfig` (nunca se usaba).
+
+---
+
 ## v1.5.2 (2026-07-12)
 
 ### Correcciones

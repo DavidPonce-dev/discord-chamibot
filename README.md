@@ -218,11 +218,12 @@ El bot usa cookies de YouTube para evitar bloqueos en servidores cloud y acceder
 
 Playwright está **integrado directamente en el bot**:
 
-- **Auto-refresh programado** — Cada 12 horas (configurable) refresca cookies automáticamente
-- **Refresh on-demand** — Si detecta error de cookies (403, sign-in required), refresca inmediatamente
+- **Auto-refresh programado** — Cada 30 minutos (configurable) refresca cookies automáticamente
+- **Refresh on-demand** — Si detecta error de cookies (403, sign-in required), refresca inmediatamente (tanto en yt-dlp como en FFmpeg streaming)
 - **Perfil persistente** — Chromium guarda la sesión en un volumen Docker
 - **Extract manual** — Botón "Extract Cookies" para guardar cookies en cualquier momento
 - **Un solo contenedor** — No más servicio `cookie-refresher` separado
+- **Health check del browser** — Cada 5 minutos verifica que el browser esté vivo y lo re-inicializa si es necesario
 
 ### Variables de entorno
 
@@ -233,7 +234,7 @@ Playwright está **integrado directamente en el bot**:
 | `ADMIN_TOKEN` | — | Token de acceso al admin panel (requerido) |
 | `COOKIE_DIR` | `/cookies` | Directorio para archivo de cookies |
 | `BROWSER_PROFILE` | `/profile` | Directorio para perfil de Chromium |
-| `COOKIE_REFRESH_INTERVAL_MS` | `43200000` (12h) | Intervalo de auto-refresh |
+| `COOKIE_REFRESH_INTERVAL_MS` | `1800000` (30min) | Intervalo de auto-refresh |
 | `ADMIN_PORT` | `3002` | Puerto del admin server |
 
 ### Troubleshooting de cookies
@@ -242,7 +243,7 @@ Playwright está **integrado directamente en el bot**:
 |----------|-------|----------|
 | `403 Access Denied` | Sin token en URL | Agregá `?token=TU_ADMIN_TOKEN` |
 | `Sin YouTube cookies` | Primera ejecución | Hacer login inicial via VNC + Extract Cookies |
-| `Error de cookies` | Sesión expirada | Esperar auto-refresh o extraer manualmente |
+| `Error de cookies` | Sesión expirada | Esperar auto-refresh (30min) o extraer manualmente. El error se loguea explícitamente. |
 | `Xvfb not available` | Falta dependencia | `apt-get install xvfb x11vnc novnc websockify` |
 | Cookies no persisten | Bind mount en vez de volume | Usar named volumes en docker-compose.yml |
 
@@ -461,7 +462,7 @@ npm run test:watch # Tests en modo watch
 | `No hay audio` | Bot no tiene permisos de voz | Verificar permisos `Connect` y `Speak` |
 | `Error al reproducir` | URL inválida o video restringido | Probar con otra URL o búsqueda por texto |
 | `yt-dlp falla` | Versión desactualizada | Ejecutar `yt-dlp -U` o reconstruir Docker |
-| `Error de cookies` | Sesión de YouTube expirada | Esperar auto-refresh (12h) o extraer manualmente |
+| `Error de cookies` | Sesión de YouTube expirada | Esperar auto-refresh (30min) o extraer manualmente. El error se loguea explícitamente. |
 | `403 Access Denied` | Sin token en URL del admin | Agregar `?token=TU_ADMIN_TOKEN` |
 | `El reproductor desaparece` | Mensaje borrado | Se recrea automáticamente en el siguiente tick (3s) |
 

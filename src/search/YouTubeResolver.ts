@@ -14,6 +14,7 @@ export interface ResolveResult {
     thumbnail?: string
     track?: string
     artist?: string
+    album?: string
     channel?: string
   }[]
   playlistTitle?: string
@@ -40,11 +41,11 @@ function extractVideoId(url: string): string | undefined {
   }
 }
 
-async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string; track?: string; artist?: string; channel?: string } | null> {
+async function resolveWithYtDlp(url: string): Promise<{ title: string; duration: string; id: string; track?: string; artist?: string; album?: string; channel?: string } | null> {
   return resolveWithYtDlpInternal(url, false)
 }
 
-async function resolveWithYtDlpInternal(url: string, retried: boolean): Promise<{ title: string; duration: string; id: string; track?: string; artist?: string; channel?: string } | null> {
+async function resolveWithYtDlpInternal(url: string, retried: boolean): Promise<{ title: string; duration: string; id: string; track?: string; artist?: string; album?: string; channel?: string } | null> {
   const args = buildYtDlpArgs(["--dump-json"])
   args.push(url)
 
@@ -80,6 +81,7 @@ async function resolveWithYtDlpInternal(url: string, retried: boolean): Promise<
       id,
       track: data.track ?? undefined,
       artist: data.artist ?? data.album_artist ?? undefined,
+      album: data.album ?? undefined,
       channel: data.channel ?? data.uploader ?? undefined,
     }
   } catch {
@@ -126,6 +128,7 @@ export async function resolveQuery(query: string): Promise<ResolveResult> {
             thumbnail: ytDlpResult.id ? `https://img.youtube.com/vi/${ytDlpResult.id}/hqdefault.jpg` : undefined,
             track: ytDlpResult.track,
             artist: ytDlpResult.artist,
+            album: ytDlpResult.album,
             channel: ytDlpResult.channel,
           }],
         }

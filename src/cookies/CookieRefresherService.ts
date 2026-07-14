@@ -6,6 +6,7 @@ import { logger } from "@/utils/logger"
 import { CookieRefreshResult, CookieValidationResult, CookieRefresherConfig } from "./types"
 
 const MIN_COOKIE_LENGTH = 10
+const BROWSER_INIT_TIMEOUT_MS = 30_000
 
 export class CookieRefresherService {
   private config: CookieRefresherConfig
@@ -66,7 +67,13 @@ export class CookieRefresherService {
     }
     if (this.isInitializing) {
       logger.debug("cookies", "Browser initialization in progress, waiting...")
+      const start = Date.now()
       while (this.isInitializing) {
+        if (Date.now() - start > BROWSER_INIT_TIMEOUT_MS) {
+          logger.error("cookies", "Browser init timeout — resetting flag")
+          this.isInitializing = false
+          throw new Error("Browser initialization timed out")
+        }
         await new Promise((r) => setTimeout(r, 500))
       }
       return
@@ -74,14 +81,6 @@ export class CookieRefresherService {
 
     this.isInitializing = true
     try {
-      const chromiumAvailable = await this.checkChromiumAvailable()
-      if (!chromiumAvailable) {
-        throw new Error(
-          "Chromium binary not found. Make sure Playwright and Chromium are installed. " +
-          "Run: npx playwright install chromium"
-        )
-      }
-
       await this.waitForProfileFree()
 
       logger.info("cookies", "Initializing persistent Chromium browser (preserving profile)")
@@ -122,18 +121,6 @@ export class CookieRefresherService {
     }
     fs.unlinkSync(this.config.cookieFile)
     logger.info("cookies", "Cookie file deleted")
-  }
-
-  private async checkChromiumAvailable(): Promise<boolean> {
-    try {
-      const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] })
-      await browser.close()
-      return true
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      logger.error("cookies", "Chromium not available", { error: msg })
-      return false
-    }
   }
 
   async closeBrowser() {

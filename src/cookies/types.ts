@@ -20,6 +20,5 @@ export interface CookieRefresherConfig {
   cookieDir: string
   cookieFile: string
   browserProfile: string
-  refreshIntervalMs: number
   refreshTimeoutMs: number
 }

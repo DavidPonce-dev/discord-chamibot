@@ -49,30 +49,79 @@ describe("QueueEmbed", () => {
   })
 
   describe("buildQueueContent", () => {
-    it("sin tracks ni current muestra embed sin description", () => {
+    it("sin tracks ni current muestra embed sin description ni fields", () => {
       const embed = buildQueueContent(mockQueue(), 1)
       expect(embed.data.title).toBe("🎵 Charmin Charmeleon 🎵")
       expect(embed.data.description).toBeUndefined()
+      expect(embed.data.fields).toBeUndefined()
     })
 
-    it("con current muestra el título en description", () => {
+    it("con current muestra el título en fields (no en description)", () => {
       const q = mockQueue({
         getCurrentTrack: vi.fn().mockReturnValue(makeTrack({ title: "Now Playing" })),
         getPosition: vi.fn().mockReturnValue(65),
       })
       const embed = buildQueueContent(q, 1)
-      expect(embed.data.description).toContain("***Now Playing***")
-      expect(embed.data.description).toContain("1:05")
+      expect(embed.data.description).toBeUndefined()
+      expect(embed.data.fields).toBeDefined()
+      expect(embed.data.fields!.some((f: any) => f.value.includes("Now Playing"))).toBe(true)
     })
 
-    it("con artista muestra formato destacado", () => {
+    it("con artista muestra formato destacado en fields", () => {
       const q = mockQueue({
         getCurrentTrack: vi.fn().mockReturnValue(makeTrack({ artist: "Artist", song: "Song" })),
         getPosition: vi.fn().mockReturnValue(0),
       })
       const embed = buildQueueContent(q, 1)
-      expect(embed.data.description).toContain("***Song***")
-      expect(embed.data.description).toContain("**🎤 Artist**")
+      expect(embed.data.fields).toBeDefined()
+      const fields = embed.data.fields!
+      expect(fields.some((f: any) => f.name === "🎵 Canción" && f.value.includes("Song"))).toBe(true)
+      expect(fields.some((f: any) => f.name === "🎤 Artista" && f.value.includes("Artist"))).toBe(true)
+    })
+
+    it("sin artista muestra solo Canción field", () => {
+      const q = mockQueue({
+        getCurrentTrack: vi.fn().mockReturnValue(makeTrack({ title: "Solo Title" })),
+        getPosition: vi.fn().mockReturnValue(0),
+      })
+      const embed = buildQueueContent(q, 1)
+      expect(embed.data.fields).toBeDefined()
+      const fields = embed.data.fields!
+      expect(fields.some((f: any) => f.name === "🎵 Canción")).toBe(true)
+      expect(fields.some((f: any) => f.name === "🎤 Artista")).toBe(false)
+    })
+
+    it("con álbum muestra field Álbum", () => {
+      const q = mockQueue({
+        getCurrentTrack: vi.fn().mockReturnValue(makeTrack({ title: "Song", album: "Greatest Hits" })),
+        getPosition: vi.fn().mockReturnValue(0),
+      })
+      const embed = buildQueueContent(q, 1)
+      expect(embed.data.fields).toBeDefined()
+      const fields = embed.data.fields!
+      expect(fields.some((f: any) => f.name === "💿 Álbum" && f.value === "Greatest Hits")).toBe(true)
+    })
+
+    it("sin álbum no muestra field Álbum", () => {
+      const q = mockQueue({
+        getCurrentTrack: vi.fn().mockReturnValue(makeTrack({ title: "Song" })),
+        getPosition: vi.fn().mockReturnValue(0),
+      })
+      const embed = buildQueueContent(q, 1)
+      expect(embed.data.fields).toBeDefined()
+      const fields = embed.data.fields!
+      expect(fields.some((f: any) => f.name === "💿 Álbum")).toBe(false)
+    })
+
+    it("progress bar está en fields (no en description)", () => {
+      const q = mockQueue({
+        getCurrentTrack: vi.fn().mockReturnValue(makeTrack({ duration: "3:30" })),
+        getPosition: vi.fn().mockReturnValue(65),
+      })
+      const embed = buildQueueContent(q, 1)
+      expect(embed.data.description).toBeUndefined()
+      expect(embed.data.fields).toBeDefined()
+      expect(embed.data.fields!.some((f: any) => f.value.includes("█"))).toBe(true)
     })
 
     it("tracks sin duration no explotan", () => {
@@ -93,17 +142,6 @@ describe("QueueEmbed", () => {
       expect(embed.data.fields!.some((f: any) => f.name === "Pedido por")).toBe(true)
       expect(embed.data.fields!.some((f: any) => f.name === "Duración")).toBe(true)
       expect(embed.data.fields!.some((f: any) => f.name === "Transcurrido")).toBe(true)
-    })
-
-    it("con autoplay y radioNext agrega campo Siguiente", () => {
-      const q = mockQueue({
-        getCurrentTrack: vi.fn().mockReturnValue(makeTrack({ title: "Test" })),
-        getPosition: vi.fn().mockReturnValue(0),
-        isAutoplayEnabled: vi.fn().mockReturnValue(true),
-        getRadioNext: vi.fn().mockReturnValue({ title: "Next Song", canonicalTitle: "Artist - Next Song" }),
-      })
-      const embed = buildQueueContent(q, 1)
-      expect(embed.data.fields!.some((f: any) => f.name === "⏭ Siguiente")).toBe(true)
     })
   })
 

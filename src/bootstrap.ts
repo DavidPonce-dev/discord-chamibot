@@ -1,4 +1,4 @@
-import { setupCookies, setCookieFile, validateCookies, getRefresherInstance, setScheduler, initBrowser, refreshCookies } from "@/cookies/CookieManager"
+import { setupCookies, setCookieFile, validateCookies, getRefresherInstance, setScheduler, refreshCookies } from "@/cookies/CookieManager"
 import { CookieScheduler } from "@/cookies/CookieScheduler"
 import { startAdminServer, stopAdminServer, setSchedulerInstance } from "@/admin/AdminServer"
 import { createBot } from "@/bot"
@@ -88,10 +88,6 @@ export async function bootstrap() {
       }
     }
   }
-
-  initBrowser().catch((err) => {
-    logger.error("cookies", "Failed to initialize browser", { error: err.message })
-  })
 
   const adminPort = parseInt(process.env.ADMIN_PORT || "3002", 10)
   startAdminServer(adminPort)

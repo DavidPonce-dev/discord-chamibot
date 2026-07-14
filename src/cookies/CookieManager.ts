@@ -34,7 +34,6 @@ function getRefresher(): CookieRefresherService {
       cookieDir: COOKIE_DIR,
       cookieFile: COOKIE_PATH,
       browserProfile: config.youtube.browserProfile,
-      refreshIntervalMs: config.youtube.cookieRefreshIntervalMs,
       refreshTimeoutMs: COOKIE_REFRESH_TIMEOUT_MS,
     })
   }
@@ -54,7 +53,9 @@ async function delegateToRefresher(
       cookieFile = COOKIE_PATH
     }
     return { success: result.success, cookieCount: result.cookieCount }
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.error("cookie", `delegateToRefresher ${method} threw`, { error: msg })
     return { success: false }
   }
 }

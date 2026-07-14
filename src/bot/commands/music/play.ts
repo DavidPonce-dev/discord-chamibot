@@ -33,6 +33,7 @@ function toTrack(video: ResolveResult["tracks"][0], requestedBy: string): Track 
     canonicalTitle,
     artist: extractArtist(titleForExtraction) || undefined,
     song: extractSongOnly(titleForExtraction),
+    album: video.album || undefined,
   }
 }
 

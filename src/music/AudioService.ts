@@ -125,9 +125,14 @@ export class AudioService {
           stderr: ffmpegStderr.slice(0, 2000),
         })
         if (code && code !== 0) {
-          logger.error("audio", "FFmpeg terminó con error", {
+          const stderr = ffmpegStderr.slice(0, 2000)
+          if (isCookieError(stderr)) {
+            logger.warn("audio", "FFmpeg fall\u00f3 por posible error de cookies, refrescando para el siguiente track")
+            refreshCookies().catch(() => {})
+          }
+          logger.error("audio", "FFmpeg termin\u00f3 con error", {
             code,
-            stderr: ffmpegStderr.slice(0, 2000),
+            stderr,
           })
         }
       })
