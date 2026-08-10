@@ -72,4 +72,12 @@ describe("usecases/cookie", () => {
     await cookie.resetProfile()
     expect(resetProfile).toHaveBeenCalled()
   })
+
+  it("close delegates to browser.close", async () => {
+    const close = vi.fn().mockResolvedValue(undefined)
+    const ports = createMockPorts({ browser: { ...createMockPorts().browser, close } })
+    const cookie = createCookieUseCases(ports)
+    await cookie.close()
+    expect(close).toHaveBeenCalled()
+  })
 })

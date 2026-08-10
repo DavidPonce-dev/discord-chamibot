@@ -9,6 +9,7 @@ export type CookieUseCases = Readonly<{
   setupLogin: () => Promise<Result<{ url: string; instructions: string }, string>>
   delete: () => Promise<Result<void, "not_found">>
   resetProfile: () => Promise<void>
+  close: () => Promise<void>
   isBrowserActive: () => boolean
 }>
 
@@ -28,6 +29,7 @@ export const createCookieUseCases = (ports: Ports): CookieUseCases => {
   }
 
   const resetProfile = (): Promise<void> => ports.browser.resetProfile()
+  const close = (): Promise<void> => ports.browser.close()
   const isBrowserActive = (): boolean => ports.browser.isActive()
 
   return {
@@ -37,6 +39,7 @@ export const createCookieUseCases = (ports: Ports): CookieUseCases => {
     setupLogin,
     delete: deleteCookies,
     resetProfile,
+    close,
     isBrowserActive,
   } as const
 }

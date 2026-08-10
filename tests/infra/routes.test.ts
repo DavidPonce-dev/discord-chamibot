@@ -35,6 +35,7 @@ const createMockCookie = (): CookieUseCases => ({
   setupLogin: vi.fn().mockResolvedValue({ ok: true, value: { url: "", instructions: "" } }),
   delete: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
   resetProfile: vi.fn().mockResolvedValue(undefined),
+  close: vi.fn().mockResolvedValue(undefined),
   isBrowserActive: vi.fn().mockReturnValue(true),
 })
 
@@ -97,6 +98,15 @@ describe("infra/http/routes", () => {
     const res = createMockRes()
     await handlers["POST /api/cookies/refresh"](createMockReq(), res, new URL("http://localhost/api/cookies/refresh"))
     expect(cookie.refresh).toHaveBeenCalled()
+  })
+
+  it("POST /api/browser/close extracts then closes the browser", async () => {
+    const { handlers, cookie } = setup()
+    const res = createMockRes()
+    await handlers["POST /api/browser/close"](createMockReq(), res, new URL("http://localhost/api/browser/close"))
+    expect(cookie.extract).toHaveBeenCalled()
+    expect(cookie.close).toHaveBeenCalled()
+    expect(res._data.message).toBe("Browser closed")
   })
 
   it("GET /api/guilds returns guild list", async () => {

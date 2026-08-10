@@ -108,8 +108,9 @@ export const createRoutes = (
     },
 
     "POST /api/browser/close": async (_req, res) => {
-      const refreshResult = await cookie.refresh()
-      json(res, 200, { message: "Browser closed", cookieRefresh: refreshResult })
+      const extractResult = await cookie.extract()
+      await cookie.close()
+      json(res, 200, { message: "Browser closed", cookieExtract: extractResult })
     },
 
     "GET /api/guilds": async (_req, res) => {

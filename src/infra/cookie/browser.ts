@@ -1,7 +1,7 @@
 import fs from "fs"
 import path from "path"
 import { execSync, spawn } from "child_process"
-import { chromium, type BrowserContext } from "playwright"
+import { chromium, type BrowserContext, type Page } from "playwright"
 import type { BrowserPort, LoggerPort } from "../../domain/ports"
 import type { CookieRefreshResult, CookieRefresherConfig } from "../../domain/types"
 import { ok, err, type Result } from "../../shared/result"
@@ -10,10 +10,12 @@ const BROWSER_INIT_TIMEOUT_MS = 30_000
 
 export const createPlaywrightBrowser = (
   config: CookieRefresherConfig,
-  _logger: LoggerPort,
+  logger: LoggerPort,
 ): BrowserPort => {
   let browser: BrowserContext | null = null
   let isInitializing = false
+
+  const cookieFile = config.cookieFile || path.join(config.cookieDir, "youtube-cookies.txt")
 
   fs.mkdirSync(config.cookieDir, { recursive: true, mode: 0o700 })
   fs.mkdirSync(config.browserProfile, { recursive: true, mode: 0o700 })
@@ -110,7 +112,7 @@ export const createPlaywrightBrowser = (
     }))
     if (ytCookies.length === 0) throw new Error("No YouTube cookies found")
     const netscape = cookiesToNetscape(ytCookies)
-    fs.writeFileSync(config.cookieFile, netscape, { mode: 0o600 })
+    fs.writeFileSync(cookieFile, netscape, { mode: 0o600 })
     return ytCookies.length
   }
 
@@ -121,20 +123,31 @@ export const createPlaywrightBrowser = (
     }
     if (!browser) return { success: false, error: "Browser unavailable", timestamp: new Date().toISOString() }
 
+    let page: Page | null = null
     try {
-      const page = await browser.newPage()
-      await page.goto("https://www.youtube.com", { waitUntil: "domcontentloaded", timeout: 30000 })
-      await page.waitForTimeout(3000)
+      page = await browser.newPage()
+      try {
+        await page.goto("https://www.youtube.com", { waitUntil: "domcontentloaded", timeout: 30000 })
+        await page.waitForTimeout(3000)
+      } catch (navError: unknown) {
+        logger.warn("cookies", "Navigation during cookie refresh failed, extracting cookies anyway", {
+          error: navError instanceof Error ? navError.message : String(navError),
+        })
+      }
 
-      const isLoggedIn = await page.evaluate(() => !!document.querySelector("yt-img-shadow#avatar"))
+      let isLoggedIn = false
+      try {
+        isLoggedIn = await page.evaluate(() => !!document.querySelector("yt-img-shadow#avatar"))
+      } catch {}
+
       const count = await extractAndWriteCookies()
-      await page.close()
-
       return { success: true, cookieCount: count, isLoggedIn, timestamp: new Date().toISOString() }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       if (msg.includes("closed") || msg.includes("crashed")) browser = null
       return { success: false, error: msg, timestamp: new Date().toISOString() }
+    } finally {
+      page?.close().catch(() => {})
     }
   }
 

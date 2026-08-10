@@ -1,3 +1,5 @@
+import path from "path"
+
 import type { Ports } from "./domain/ports"
 import type { GuildSession } from "./domain/types"
 import type { Client } from "discord.js"
@@ -36,12 +38,12 @@ const getBotClient = (): Client | null => botClient
 export async function bootstrap(): Promise<void> {
   const logger = createLogger()
 
+  const cookieFilePath = path.join(config.youtube.cookieDir, "youtube-cookies.txt")
   const cookieStore = createFileCookieStore(config.youtube.cookieDir, "youtube-cookies.txt", logger)
-  const cookiePath = cookieStore.filePath() ?? ""
 
   const browser = createPlaywrightBrowser({
     cookieDir: config.youtube.cookieDir,
-    cookieFile: cookiePath || "data/cookies/youtube-cookies.txt",
+    cookieFile: cookieFilePath,
     browserProfile: config.youtube.browserProfile,
     refreshTimeoutMs: 60_000,
   }, logger)
