@@ -1,4 +1,4 @@
-import type { LoopMode } from "../core/types"
+import type { LoopMode } from "../domain/types"
 
 export const LOOP_LABELS = {
   none: "❌ Desactivado",

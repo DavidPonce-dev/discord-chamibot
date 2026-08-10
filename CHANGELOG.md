@@ -4,6 +4,24 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.5.4 (2026-08-10)
+
+### Correcciones de radio
+- **`radioBaseTitle` stale**: se resetea a `null` cuando comienza una pista pedida por el usuario, evitando que la radio siga recomendando el estilo anterior tras un cambio de usuario/manual.
+- **Repetición de videos**: los IDs de las pistas ya reproducidas se excluyen de las recomendaciones (`excludeIds`), evitando el mismo video en bucle.
+
+### Correcciones de UI
+- **"Unknown interaction" en botones**: los botones ahora responden con `deferUpdate()` al inicio y editan el mensaje original con `editReply()`, eliminando el timeout de 3s (errores 10062) en acciones lentas como reshuffle.
+- **Mensaje "La cola esta vacía"**: al terminar la reproducción (fin natural, `/stop`, etc.) ya no queda ningún mensaje de cola en el chat; el mensaje se elimina en todos los casos.
+
+### Mejora de rendimiento
+- **Pre-carga de audio en radio**: `prefetchRadioUrl` resuelve la URL de audio al encolar la pista, evitando el delay de yt-dlp (~2-5s) entre pistas de radio.
+
+### Refactor
+- Reestructuración del proyecto en capas: `src/domain`, `src/usecases`, `src/infra` y `src/shared`, con tests actualizados por capa.
+
+---
+
 ## v1.5.3 (2026-07-13)
 
 ### Nuevas funcionalidades
