@@ -2,6 +2,7 @@ import { spawn } from "child_process"
 import fs from "fs"
 import { createAudioResource, StreamType, type AudioResource } from "@discordjs/voice"
 import type { AudioStreamPort, CookieStorePort, LoggerPort } from "../../domain/ports"
+import type { CookieRefreshResult } from "../../domain/types"
 import { isCookieError, withCookieRetry } from "../../domain/ports"
 import { ok, err, type Result } from "../../shared/result"
 import { buildYtDlpArgs, spawnYtDlp } from "./ytdlp"
@@ -10,6 +11,7 @@ import { formatTime } from "../../shared/format"
 export const createYtDlpAudio = (
   cookieStore: CookieStorePort,
   logger: LoggerPort,
+  refreshCookies?: () => Promise<CookieRefreshResult>,
 ): AudioStreamPort => {
   let ffmpegProcess: ReturnType<typeof spawn> | null = null
   let cachedCookieHeader: string | null = null
@@ -60,6 +62,7 @@ export const createYtDlpAudio = (
       },
       async () => {
         invalidateCookieCache()
+        if (refreshCookies) return refreshCookies()
         return cookieStore.read() ? { success: true, timestamp: new Date().toISOString() } : { success: false, timestamp: new Date().toISOString() }
       },
     )
@@ -81,6 +84,7 @@ export const createYtDlpAudio = (
 
       const cookieHeader = getCookieHeader()
       if (cookieHeader) {
+        logger.debug("audio", "Enviando cookies a FFmpeg", { cookieCount: cookieHeader.split("; ").length })
         ffmpegArgs.push("-headers", `Cookie: ${cookieHeader}\r\n`)
       }
 
@@ -126,6 +130,7 @@ export const createYtDlpAudio = (
           if (isCookieError(stderr)) {
             logger.warn("audio", "FFmpeg fallo por posible error de cookies, refrescando para el siguiente track")
             invalidateCookieCache()
+            refreshCookies?.().catch(() => {})
           }
           logger.error("audio", "FFmpeg termino con error", { code, stderr })
         }

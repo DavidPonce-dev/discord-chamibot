@@ -49,7 +49,7 @@ export async function bootstrap(): Promise<void> {
   }, logger)
 
   const blacklist = createJsonBlacklist("data/blacklist.json")
-  const audio = createYtDlpAudio(cookieStore, logger)
+  const audio = createYtDlpAudio(cookieStore, logger, () => browser.refresh())
   const search = createYouTubeSearch(cookieStore, logger)
 
   const lastfm = createLastFmAdapter(config.lastfm.apiKey)
