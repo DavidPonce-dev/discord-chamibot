@@ -130,8 +130,8 @@ export const createAdminServer = (
         ;(socket as any).destroy()
         return
       }
-      if (vncUrl.startsWith("/vnc/") && vncProxy && vncState.active) {
-        req.url = vncUrl.replace(/^\/vnc\//, "/")
+      if (/^\/+vnc\//.test(vncUrl) && vncProxy && vncState.active) {
+        req.url = vncUrl.replace(/^\/+vnc\//, "/")
         const vncTarget = `http://localhost:${process.env.VNC_PORT || "6080"}`
         logger.debug("vnc", "Proxying VNC websocket", { origin, target: vncTarget, path: req.url })
         vncProxy.ws(req, socket as any, head, { target: vncTarget })
