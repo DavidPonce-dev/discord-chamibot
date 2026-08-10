@@ -12,6 +12,7 @@ export type AudioStreamPort = Readonly<{
   getAudioUrl: (url: string) => Promise<Result<string, string>>
   createFromAudioUrl: (audioUrl: string, seek?: number) => Promise<Result<AudioResourceHandle, string>>
   killProcess: () => void
+  consumeStreamFailure: () => boolean
 }>
 
 export type TrackSearchPort = Readonly<{

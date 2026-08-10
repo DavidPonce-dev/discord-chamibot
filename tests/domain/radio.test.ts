@@ -10,6 +10,7 @@ const createMockPorts = (overrides: Partial<Ports> = {}): Ports => ({
     getAudioUrl: async () => ok("https://audio.example/stream"),
     createFromAudioUrl: async () => ok({} as any),
     killProcess: () => {},
+    consumeStreamFailure: () => false,
   },
   search: {
     resolveQuery: async () => ok({ tracks: [] }),

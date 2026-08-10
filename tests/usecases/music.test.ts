@@ -287,5 +287,58 @@ describe("usecases/music", () => {
         expect(deleteMessage).toHaveBeenCalledWith("g1")
       })
     })
+
+    it("retries the same track when the stream fails with a cookie error", async () => {
+      const createResource = vi.fn().mockResolvedValue({ ok: true as const, value: {} })
+      const consumeStreamFailure = vi.fn()
+        .mockReturnValueOnce(true)
+        .mockReturnValue(false)
+      const ports = createMockPorts({
+        audio: { ...createMockPorts().audio, createResource, consumeStreamFailure },
+      } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("solo", "g1", "u1", "v1", {})
+      const session = music.getSession("g1")!
+      expect(session.queue.current?.title).toBe("Test Track")
+
+      const onIdle = captureIdle(ports)
+      onIdle()
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")!.playback.isPlaying).toBe(true)
+      })
+      expect(createResource).toHaveBeenCalledTimes(2)
+      const after = music.getSession("g1")!
+      expect(after.queue.current?.title).toBe("Test Track")
+    })
+
+    it("destroys the session after stream retries are exhausted", async () => {
+      const createResource = vi.fn().mockResolvedValue({ ok: true as const, value: {} })
+      const consumeStreamFailure = vi.fn()
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(true)
+        .mockReturnValue(false)
+      const ports = createMockPorts({
+        audio: { ...createMockPorts().audio, createResource, consumeStreamFailure },
+      } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("solo", "g1", "u1", "v1", {})
+
+      const onIdle = captureIdle(ports)
+      onIdle()
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")!.playback.isPlaying).toBe(true)
+      })
+      expect(createResource).toHaveBeenCalledTimes(2)
+      onIdle()
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")!.playback.isPlaying).toBe(true)
+      })
+      expect(createResource).toHaveBeenCalledTimes(3)
+      onIdle()
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")).toBeNull()
+      })
+    })
   })
 })

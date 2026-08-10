@@ -52,6 +52,8 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
   let deployMode = false
   let activeGuildId: string | null = null
   let handlingIdle = false
+  const MAX_STREAM_RETRIES = 2
+  let streamRetries = 0
 
   const onTrackChange = (guildId: string): void => {
     callbacks?.onTrackChange?.(guildId)
@@ -128,6 +130,24 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     const session = sessions.get(guildId)
     if (!session || session.playback.seeking || session.playback.isPaused) return
 
+    if (ports.audio.consumeStreamFailure() && session.queue.current?.url && streamRetries < MAX_STREAM_RETRIES) {
+      streamRetries += 1
+      ports.logger.warn("music", "Stream fallo (posible 403), reintentando misma pista", {
+        guildId,
+        retry: streamRetries,
+        track: session.queue.current.title,
+      })
+      const current = session.queue.current
+      sessions.set(guildId, Session.setStopped({
+        ...session,
+        prefetchedUrl: null,
+        queue: Queue.addNext(session.queue, current),
+      }))
+      await startPlayback(guildId)
+      return
+    }
+
+    streamRetries = 0
     const finished = session.queue.current
     const base = finished ? Session.onTrackFinished(session, finished, extractArtist) : session
     const queued = finished ? Queue.applyLoop(base.queue, finished) : base.queue

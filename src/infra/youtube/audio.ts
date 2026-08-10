@@ -5,7 +5,7 @@ import type { AudioStreamPort, CookieStorePort, LoggerPort } from "../../domain/
 import type { CookieRefreshResult } from "../../domain/types"
 import { isCookieError, withCookieRetry } from "../../domain/ports"
 import { ok, err, type Result } from "../../shared/result"
-import { buildYtDlpArgs, spawnYtDlp } from "./ytdlp"
+import { buildYtDlpArgs, spawnYtDlp, USER_AGENT } from "./ytdlp"
 import { formatTime } from "../../shared/format"
 
 export const createYtDlpAudio = (
@@ -16,6 +16,13 @@ export const createYtDlpAudio = (
   let ffmpegProcess: ReturnType<typeof spawn> | null = null
   let cachedCookieHeader: string | null = null
   let cookieCacheDirty = true
+  let streamFailed = false
+
+  const consumeStreamFailure = (): boolean => {
+    const value = streamFailed
+    streamFailed = false
+    return value
+  }
 
   const getCookieHeader = (): string | null => {
     if (!cookieCacheDirty && cachedCookieHeader !== null) return cachedCookieHeader
@@ -70,6 +77,7 @@ export const createYtDlpAudio = (
 
   const createFromAudioUrl = async (audioUrl: string, seekTo?: number): Promise<Result<AudioResource, string>> => {
     killProcess()
+    streamFailed = false
 
     try {
       logger.debug("audio", "URL obtenida, iniciando FFmpeg stream", {
@@ -83,10 +91,15 @@ export const createYtDlpAudio = (
       ]
 
       const cookieHeader = getCookieHeader()
+      const headerLines = [
+        `User-Agent: ${USER_AGENT}`,
+        "Referer: https://www.youtube.com/",
+      ]
       if (cookieHeader) {
         logger.debug("audio", "Enviando cookies a FFmpeg", { cookieCount: cookieHeader.split("; ").length })
-        ffmpegArgs.push("-headers", `Cookie: ${cookieHeader}\r\n`)
+        headerLines.push(`Cookie: ${cookieHeader}`)
       }
+      ffmpegArgs.push("-headers", `${headerLines.join("\r\n")}\r\n`)
 
       if (seekTo !== undefined) {
         ffmpegArgs.push("-ss", formatTime(seekTo, true))
@@ -113,6 +126,10 @@ export const createYtDlpAudio = (
       let ffmpegStderr = ""
       ffmpeg.stderr?.on("data", (data: Buffer) => {
         ffmpegStderr += data.toString()
+        if (!streamFailed && isCookieError(ffmpegStderr)) {
+          streamFailed = true
+          invalidateCookieCache()
+        }
       })
 
       ffmpeg.on("error", (e: Error) =>
@@ -129,6 +146,7 @@ export const createYtDlpAudio = (
           const stderr = ffmpegStderr.slice(0, 2000)
           if (isCookieError(stderr)) {
             logger.warn("audio", "FFmpeg fallo por posible error de cookies, refrescando para el siguiente track")
+            streamFailed = true
             invalidateCookieCache()
             refreshCookies?.().catch(() => {})
           }
@@ -174,5 +192,5 @@ export const createYtDlpAudio = (
     ffmpegProcess = null
   }
 
-  return { createResource, getAudioUrl, createFromAudioUrl, killProcess } as const
+  return { createResource, getAudioUrl, createFromAudioUrl, killProcess, consumeStreamFailure } as const
 }

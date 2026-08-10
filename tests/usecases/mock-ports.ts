@@ -14,6 +14,7 @@ export const createMockPorts = (overrides: Partial<Ports> = {}): Ports => ({
     getAudioUrl: async (): Promise<Result<string, string>> => ok("https://audio.example/stream"),
     createFromAudioUrl: async (): Promise<Result<AudioResourceHandle, string>> => ok({} as AudioResourceHandle),
     killProcess: () => {},
+    consumeStreamFailure: () => false,
   },
   search: {
     resolveQuery: async (): Promise<Result<ResolveResult, string>> => ok({
