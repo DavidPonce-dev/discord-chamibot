@@ -3,10 +3,11 @@ import type { TrackSearchPort, CookieStorePort, LoggerPort } from "../../domain/
 import { withCookieRetry } from "../../domain/ports"
 import { ok, err, type Result } from "../../shared/result"
 import type { ResolveResult, ResolvedTrack, AutocompleteChoice, VideoSearchResult } from "../../domain/types"
-import { buildYtDlpArgs, spawnYtDlp, searchYtDlp, type YtDlpSearchEntry } from "./ytdlp"
+import { buildYtDlpArgs, spawnYtDlp, searchYtDlp } from "./ytdlp"
 import { formatTime } from "../../shared/format"
-import { sanitizeYouTubeUrl, extractVideoId, youtubeThumbnail, classifyPlaylist } from "../../domain/track-parser"
-import { YTDL_RESOLVE_TIMEOUT_MS } from "../../config/timeouts"
+import { sanitizeYouTubeUrl, extractVideoId, youtubeThumbnail } from "../../domain/track-parser"
+import { YTDL_RESOLVE_TIMEOUT_MS, AUTOCOMPLETE_FALLBACK_TIMEOUT_MS } from "../../config/timeouts"
+import { createSuggestionProvider } from "./suggestions"
 
 const resolveWithYtDlp = async (
   url: string,
@@ -52,6 +53,7 @@ export const createYouTubeSearch = (
   cookieStore: CookieStorePort,
   _logger: LoggerPort,
 ): TrackSearchPort => {
+  const suggestionsProvider = createSuggestionProvider()
   const resolveQuery = async (query: string): Promise<Result<ResolveResult, string>> => {
     const isUrl = query.startsWith("http://") || query.startsWith("https://")
 
@@ -122,67 +124,20 @@ export const createYouTubeSearch = (
   const autocomplete = async (query: string): Promise<readonly AutocompleteChoice[]> => {
     if (!query.trim()) return []
 
-    const [videosResult, playlistsResult] = await Promise.allSettled([
-      searchYtDlp(query, 10, cookieStore, { type: "video" }),
-      searchYtDlp(query, 20, cookieStore, { type: "playlist" }),
-    ])
+    const suggestions = await suggestionsProvider.suggestions(query)
+    if (suggestions.length > 0) return suggestions
 
-    const videos = videosResult.status === "fulfilled" ? videosResult.value : []
-    const playlistResults = playlistsResult.status === "fulfilled" ? playlistsResult.value : []
-
-    const albums: YtDlpSearchEntry[] = []
-    const playlists: YtDlpSearchEntry[] = []
-
-    for (const p of playlistResults) {
-      const classification = classifyPlaylist(p.title ?? "", 0)
-      if (classification === "album") {
-        if (albums.length < 4) albums.push(p)
-      } else {
-        if (playlists.length < 2) playlists.push(p)
-      }
-    }
-
-    const results: AutocompleteChoice[] = []
-
-    for (const v of videos.slice(0, 4)) {
-      if (results.length >= 10) break
+    const results = await searchYtDlp(query, 10, cookieStore, {
+      type: "video",
+      timeoutMs: AUTOCOMPLETE_FALLBACK_TIMEOUT_MS,
+    })
+    return results.slice(0, 10).map((v): AutocompleteChoice => {
       const name = `\u{1F3B5} ${v.title ?? "Unknown"}`
-      results.push({
+      return {
         name: name.length > 100 ? name.slice(0, 97) + "..." : name,
         value: v.url ?? `https://youtube.com/watch?v=${v.id}`,
-      })
-    }
-
-    for (const a of albums.slice(0, 4)) {
-      if (results.length >= 10) break
-      const name = `\u{1F4BF} ${a.title ?? "Unknown"}`
-      results.push({
-        name: name.length > 100 ? name.slice(0, 97) + "..." : name,
-        value: a.url ?? "",
-      })
-    }
-
-    for (const p of playlists.slice(0, 2)) {
-      if (results.length >= 10) break
-      const name = `\u{1F4CB} ${p.title ?? "Unknown"}`
-      results.push({
-        name: name.length > 100 ? name.slice(0, 97) + "..." : name,
-        value: p.url ?? "",
-      })
-    }
-
-    if (results.length < 10) {
-      for (const v of videos.slice(4)) {
-        if (results.length >= 10) break
-        const name = `\u{1F3B5} ${v.title ?? "Unknown"}`
-        results.push({
-          name: name.length > 100 ? name.slice(0, 97) + "..." : name,
-          value: v.url ?? `https://youtube.com/watch?v=${v.id}`,
-        })
       }
-    }
-
-    return results
+    })
   }
 
   const searchVideos = async (query: string, limit = 15): Promise<readonly VideoSearchResult[]> => {
