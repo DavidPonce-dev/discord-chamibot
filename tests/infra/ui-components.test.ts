@@ -5,6 +5,7 @@ import { buildHelpEmbed } from "@/infra/ui/help-embed"
 import type { GuildSession } from "@/domain/types"
 import { createSession } from "@/domain/session"
 import { addMultiple } from "@/domain/queue"
+import { BUTTON_PREFIXES } from "@/config/ui"
 
 const makeTrack = (title: string, requestedBy = "user1") => ({
   title, url: `https://youtube.com/watch?v=${title}`, requestedBy, duration: "3:00",
@@ -15,6 +16,9 @@ const sessionWithTracks = (trackCount: number): GuildSession => {
   const session = createSession("g1", "v1")
   return { ...session, queue: addMultiple(session.queue, tracks) }
 }
+
+const skipButton = (session: GuildSession) =>
+  buildPlaybackRow(session).components.find((c) => c.data.custom_id === BUTTON_PREFIXES.queuePlaybackSkip)
 
 describe("infra/ui/queue-components", () => {
   describe("buildTrackRows", () => {
@@ -31,6 +35,28 @@ describe("infra/ui/queue-components", () => {
       const updated = { ...session, queue: { ...session.queue, radioTracks: [radioTrack] } }
       const rows = buildTrackRows(updated as GuildSession, 1)
       expect(rows).toHaveLength(1)
+    })
+
+    it("disables the radio shuffle button while that track is being reshuffled", () => {
+      const session = createSession("g1", "v1")
+      const radioTrack = { title: "Radio Song", url: "u", requestedBy: "radio", duration: "3:00" }
+      const updated = {
+        ...session,
+        queue: { ...session.queue, radioTracks: [radioTrack] },
+        reshufflingRadioIndex: 0,
+      } as GuildSession
+      const row = buildTrackRows(updated, 1)[0]
+      const shuffle = row.components.find((c) => c.data.custom_id === `${BUTTON_PREFIXES.queueRadioShuffle}0`)
+      expect(shuffle?.data.disabled).toBe(true)
+    })
+
+    it("keeps the radio shuffle button enabled when no reshuffle is in progress", () => {
+      const session = createSession("g1", "v1")
+      const radioTrack = { title: "Radio Song", url: "u", requestedBy: "radio", duration: "3:00" }
+      const updated = { ...session, queue: { ...session.queue, radioTracks: [radioTrack] } } as GuildSession
+      const row = buildTrackRows(updated, 1)[0]
+      const shuffle = row.components.find((c) => c.data.custom_id === `${BUTTON_PREFIXES.queueRadioShuffle}0`)
+      expect(shuffle?.data.disabled).toBe(false)
     })
 
     it("returns empty for no tracks", () => {
@@ -78,6 +104,25 @@ describe("infra/ui/queue-components", () => {
       const session = { ...createSession("g1", "v1"), prefs: { ...createSession("g1", "v1").prefs, autoplay: true } }
       const row = buildPlaybackRow(session)
       expect(row).toBeDefined()
+    })
+
+    it("disables skip when there is no next track", () => {
+      const session = createSession("g1", "v1")
+      expect(skipButton(session)?.data.disabled).toBe(true)
+    })
+
+    it("enables skip when a radio track is queued", () => {
+      const session = createSession("g1", "v1")
+      const withRadio = {
+        ...session,
+        queue: { ...session.queue, radioTracks: [{ title: "Radio", url: "u", requestedBy: "radio", duration: "3:00" }] },
+      }
+      expect(skipButton(withRadio as GuildSession)?.data.disabled).toBe(false)
+    })
+
+    it("enables skip when a user track is queued", () => {
+      const session = sessionWithTracks(1)
+      expect(skipButton(session)?.data.disabled).toBe(false)
     })
   })
 })

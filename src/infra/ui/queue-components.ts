@@ -29,11 +29,13 @@ export function buildTrackRows(session: GuildSession, page: number): ActionRowBu
     const label = truncateLabel(titlePart, MAX_TRACK_LABEL - durPart.length) + durPart
 
     if (t.requestedBy === "radio") {
+      const isReshuffling = session.reshufflingRadioIndex === idx
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(`${BUTTON_PREFIXES.queueRadioShuffle}${idx}`)
           .setEmoji("\u{1F504}")
-          .setStyle(ButtonStyle.Success),
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(isReshuffling),
         new ButtonBuilder()
           .setCustomId(`${BUTTON_PREFIXES.queueTrack}${idx}`)
           .setLabel(label)
@@ -97,6 +99,7 @@ export function buildNavRow(page: number, totalPages: number): ActionRowBuilder<
 export function buildPlaybackRow(session: GuildSession): ActionRowBuilder<ButtonBuilder> {
   const isPaused = session.playback.isPaused
   const autoplayEnabled = session.prefs.autoplay
+  const hasNextTrack = session.queue.userTracks.length > 0 || session.queue.radioTracks.length > 0
 
   const autoplayBtn = new ButtonBuilder()
     .setCustomId(BUTTON_PREFIXES.queuePlaybackAutoplay)
@@ -112,7 +115,8 @@ export function buildPlaybackRow(session: GuildSession): ActionRowBuilder<Button
     new ButtonBuilder()
       .setCustomId(BUTTON_PREFIXES.queuePlaybackSkip)
       .setEmoji("\u23ED")
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!hasNextTrack),
     new ButtonBuilder()
       .setCustomId(BUTTON_PREFIXES.queuePlaybackShuffle)
       .setEmoji("\u{1F500}")

@@ -70,34 +70,56 @@ export const createRadioUseCases = (
       return err("invalid_index")
     }
 
+    if (session.reshufflingRadioIndex !== null) return ok(null)
+
     const searchTitle = session.radioBaseTitle ?? session.queue.current?.title
     if (!searchTitle) return ok(null)
 
-    const excludeIds = [
-      ...(session.queue.current?.id ? [session.queue.current.id] : []),
-      ...session.last5Ids,
-    ]
-
-    const result = await ports.recommend.findRelated(searchTitle, session.last5Tracks, {
-      shouldSwitch: session.sameArtistStreak >= ARTIST_ROTATION_LIMIT,
-      currentArtist: session.currentArtist,
-      artistHistory: session.artistHistory,
-      excludeIds,
-    })
-
-    if (!result) return ok(null)
-
-    const track: Track = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle }
-    const updated: GuildSession = {
-      ...session,
-      queue: Queue.replaceRadioTrack(session.queue, radioIndex, track),
-      radioBaseTitle: result.canonicalTitle ?? session.radioBaseTitle,
-    }
-    setSession(guildId, updated)
+    setSession(guildId, { ...session, reshufflingRadioIndex: radioIndex })
     onChange?.(guildId)
-    if (radioIndex === 0) await prefetchRadioUrl(guildId)
 
-    return ok(track)
+    try {
+      const excludeIds = [
+        ...(session.queue.current?.id ? [session.queue.current.id] : []),
+        ...session.last5Ids,
+      ]
+
+      const result = await ports.recommend.findRelated(searchTitle, session.last5Tracks, {
+        shouldSwitch: session.sameArtistStreak >= ARTIST_ROTATION_LIMIT,
+        currentArtist: session.currentArtist,
+        artistHistory: session.artistHistory,
+        excludeIds,
+      })
+
+      const latest = getSession(guildId)
+      if (!latest) return err("no_session")
+
+      if (!result) {
+        setSession(guildId, { ...latest, reshufflingRadioIndex: null })
+        onChange?.(guildId)
+        return ok(null)
+      }
+
+      const track: Track = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle }
+      const updated: GuildSession = {
+        ...latest,
+        queue: Queue.replaceRadioTrack(latest.queue, radioIndex, track),
+        radioBaseTitle: result.canonicalTitle ?? latest.radioBaseTitle,
+        reshufflingRadioIndex: null,
+      }
+      setSession(guildId, updated)
+      onChange?.(guildId)
+      if (radioIndex === 0) await prefetchRadioUrl(guildId)
+
+      return ok(track)
+    } catch (e: unknown) {
+      const latest = getSession(guildId)
+      if (latest) {
+        setSession(guildId, { ...latest, reshufflingRadioIndex: null })
+        onChange?.(guildId)
+      }
+      throw e
+    }
   }
 
   return { toggleAutoplay, reshuffleRadio } as const

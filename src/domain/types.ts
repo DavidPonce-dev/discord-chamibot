@@ -51,6 +51,7 @@ export type GuildSession = Readonly<{
   currentArtist: string | null
   radioBaseTitle: string | null
   radioNext: Track | null
+  reshufflingRadioIndex: number | null
   destroyed: boolean
 }>
 

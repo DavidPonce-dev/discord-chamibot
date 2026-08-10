@@ -178,5 +178,77 @@ describe("usecases/radio", () => {
       expect(session.queue.radioTracks[0].id).toBe("shuf")
       expect(session.prefetchedUrl?.trackUrl).toBe("https://youtube.com/watch?v=shuf")
     })
+
+    it("marks the track as reshuffling, ignores re-presses and refreshes UI on start", async () => {
+      let resolveGate: () => void = () => {}
+      const gate = new Promise<void>((resolve) => { resolveGate = resolve })
+      const findRelated = vi.fn()
+        .mockResolvedValueOnce({
+          track: { title: "First", url: "https://youtube.com/watch?v=first", duration: "3:00", id: "first" },
+          canonicalTitle: "Artist - First",
+        })
+        .mockImplementationOnce(async () => {
+          await gate
+          return {
+            track: { title: "Second", url: "https://youtube.com/watch?v=second", duration: "3:00", id: "second" },
+            canonicalTitle: "Artist - Second",
+          }
+        })
+      const ports = createMockPorts({ recommend: { findRelated } })
+      const music = createMusicUseCases(ports)
+      await music.play("test", "g1", "u1", "v1", {})
+      const onChange = vi.fn()
+      const radio = createRadioUseCases(
+        ports,
+        music.getSession,
+        (guildId, session) => music.setSession(guildId, session),
+        music.prefetchRadioUrl,
+        onChange,
+      )
+      await radio.toggleAutoplay("g1")
+
+      onChange.mockClear()
+      const p1 = radio.reshuffleRadio("g1", 0)
+      expect(music.getSession("g1")!.reshufflingRadioIndex).toBe(0)
+      expect(onChange).toHaveBeenCalledWith("g1")
+
+      const p2 = radio.reshuffleRadio("g1", 0)
+      expect(findRelated).toHaveBeenCalledTimes(2)
+
+      resolveGate()
+      const r1 = await p1
+      const r2 = await p2
+      expect(r1.ok).toBe(true)
+      expect(r2.ok).toBe(true)
+      const session = music.getSession("g1")!
+      expect(session.queue.radioTracks[0].id).toBe("second")
+      expect(session.reshufflingRadioIndex).toBeNull()
+      expect(findRelated).toHaveBeenCalledTimes(2)
+    })
+
+    it("clears the reshuffling flag when findRelated returns null", async () => {
+      const findRelated = vi.fn()
+        .mockResolvedValueOnce({
+          track: { title: "First", url: "https://youtube.com/watch?v=first", duration: "3:00", id: "first" },
+          canonicalTitle: "Artist - First",
+        })
+        .mockResolvedValueOnce(null)
+      const ports = createMockPorts({ recommend: { findRelated } })
+      const music = createMusicUseCases(ports)
+      await music.play("test", "g1", "u1", "v1", {})
+      const radio = createRadioUseCases(
+        ports,
+        music.getSession,
+        (guildId, session) => music.setSession(guildId, session),
+        music.prefetchRadioUrl,
+      )
+      await radio.toggleAutoplay("g1")
+
+      const result = await radio.reshuffleRadio("g1", 0)
+      expect(result.ok).toBe(true)
+      const session = music.getSession("g1")!
+      expect(session.queue.radioTracks[0].id).toBe("first")
+      expect(session.reshufflingRadioIndex).toBeNull()
+    })
   })
 })
