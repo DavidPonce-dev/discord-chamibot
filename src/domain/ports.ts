@@ -8,11 +8,11 @@ import type {
 import type { Result } from "../shared/result"
 
 export type AudioStreamPort = Readonly<{
-  createResource: (url: string, seek?: number) => Promise<Result<AudioResourceHandle, string>>
+  createResource: (guildId: string, url: string, seek?: number) => Promise<Result<AudioResourceHandle, string>>
   getAudioUrl: (url: string) => Promise<Result<string, string>>
-  createFromAudioUrl: (audioUrl: string, seek?: number) => Promise<Result<AudioResourceHandle, string>>
-  killProcess: () => void
-  consumeStreamFailure: () => boolean
+  createFromAudioUrl: (guildId: string, audioUrl: string, seek?: number) => Promise<Result<AudioResourceHandle, string>>
+  killProcess: (guildId: string) => void
+  consumeStreamFailure: (guildId: string) => boolean
 }>
 
 export type TrackSearchPort = Readonly<{
@@ -56,15 +56,16 @@ export type VoiceConnectionPort = Readonly<{
 }>
 
 export type AudioPlayerPort = Readonly<{
-  play: (resource: AudioResourceHandle) => void
-  stop: () => void
-  pause: () => void
-  unpause: () => void
-  isPaused: () => boolean
-  onIdle: (cb: () => void) => void
-  onError: (cb: (err: Error) => void) => void
-  getStatus: () => string
+  play: (guildId: string, resource: AudioResourceHandle) => void
+  stop: (guildId: string) => void
+  pause: (guildId: string) => void
+  unpause: (guildId: string) => void
+  isPaused: (guildId: string) => boolean
+  onIdle: (guildId: string, cb: (guildId: string) => void) => void
+  onError: (guildId: string, cb: (guildId: string, err: Error) => void) => void
+  getStatus: (guildId: string) => string
   subscribeToConnection: (guildId: string) => void
+  destroy: (guildId: string) => void
 }>
 
 export type NotificationPort = Readonly<{

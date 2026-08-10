@@ -48,6 +48,9 @@ export async function bootstrap(): Promise<void> {
     refreshTimeoutMs: 60_000,
   }, logger)
 
+  logger.info("bootstrap", "Reiniciando perfil de navegador (deploy limpio)")
+  await browser.resetProfile()
+
   const blacklist = createJsonBlacklist("data/blacklist.json")
   const audio = createYtDlpAudio(cookieStore, logger, () => browser.refresh())
   const search = createYouTubeSearch(cookieStore, logger)
@@ -82,7 +85,8 @@ export async function bootstrap(): Promise<void> {
   const music = createMusicUseCases(ports, { onTrackChange: (guildId) => trackChangeHandler(guildId) })
   const setSession = (guildId: string, session: GuildSession): void => { music.setSession(guildId, session) }
   const queueUC = createQueueUseCases(ports, music.getSession, setSession)
-  const radioUC = createRadioUseCases(ports, music.getSession, setSession, music.prefetchRadioUrl)
+  let radioChangeHandler: (guildId: string) => void = () => {}
+  const radioUC = createRadioUseCases(ports, music.getSession, setSession, music.prefetchRadioUrl, (guildId) => radioChangeHandler(guildId))
   const adminUC = createAdminUseCases(ports)
   const cookieUC = createCookieUseCases(ports)
   const searchUC = createSearchUseCases(ports)
@@ -95,6 +99,12 @@ export async function bootstrap(): Promise<void> {
   })
 
   trackChangeHandler = (guildId) => {
+    queueDisplay.updateQueueForGuild(guildId)
+    const session = music.getSession(guildId)
+    if (session?.queue.current) queueDisplay.startProgressUpdates(guildId)
+  }
+
+  radioChangeHandler = (guildId) => {
     queueDisplay.updateQueueForGuild(guildId)
     const session = music.getSession(guildId)
     if (session?.queue.current) queueDisplay.startProgressUpdates(guildId)

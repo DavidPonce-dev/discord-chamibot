@@ -34,6 +34,44 @@ describe("usecases/music", () => {
       expect(session).not.toBeNull()
       expect(session!.queue.userTracks.length).toBeGreaterThanOrEqual(1)
     })
+
+    it("keeps playback isolated across guilds", async () => {
+      const killProcess = vi.fn()
+      const createResource = vi.fn().mockResolvedValue({ ok: true as const, value: {} })
+      const playerPlay = vi.fn()
+      const ports = createMockPorts({
+        audio: { ...createMockPorts().audio, killProcess, createResource },
+        player: { ...createMockPorts().player, play: playerPlay },
+        search: {
+          ...createMockPorts().search,
+          resolveQuery: async (query) => ({
+            ok: true as const,
+            value: {
+              tracks: [
+                query === "two"
+                  ? { url: "u2", title: "Second", duration: "1:00", id: "b" }
+                  : { url: "u1", title: "First", duration: "1:00", id: "a" },
+              ],
+            },
+          }),
+        } as Ports["search"],
+      })
+      const music = createMusicUseCases(ports)
+      await music.play("one", "g1", "u1", "v1", {})
+      await music.play("two", "g2", "u2", "v2", {})
+
+      const g1 = music.getSession("g1")!
+      const g2 = music.getSession("g2")!
+      expect(g1.queue.current?.title).toBe("First")
+      expect(g2.queue.current?.title).toBe("Second")
+
+      expect(killProcess).toHaveBeenCalledWith("g1")
+      expect(killProcess).toHaveBeenCalledWith("g2")
+      expect(createResource).toHaveBeenNthCalledWith(1, "g1", "u1")
+      expect(createResource).toHaveBeenNthCalledWith(2, "g2", "u2")
+      expect(playerPlay).toHaveBeenNthCalledWith(1, "g1", expect.anything())
+      expect(playerPlay).toHaveBeenNthCalledWith(2, "g2", expect.anything())
+    })
   })
 
   describe("skip", () => {
@@ -122,8 +160,8 @@ describe("usecases/music", () => {
   })
 
   describe("idle handler", () => {
-    const captureIdle = (ports: Ports): (() => void) =>
-      (ports.player.onIdle as Mock).mock.calls[0][0]
+    const captureIdle = (ports: Ports): ((guildId: string) => void) =>
+      (ports.player.onIdle as Mock).mock.calls[0][1] as (guildId: string) => void
 
     it("advances to the next user track on idle", async () => {
       const ports = createMockPorts({
@@ -142,7 +180,7 @@ describe("usecases/music", () => {
       expect(session.queue.userTracks).toHaveLength(1)
 
       const onIdle = captureIdle(ports)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         const s = music.getSession("g1")!
         expect(s.queue.current?.title).toBe("T2")
@@ -164,10 +202,26 @@ describe("usecases/music", () => {
       music.setSession("g1", { ...session, prefs: { ...session.prefs, autoplay: true } })
 
       const onIdle = captureIdle(ports)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         const s = music.getSession("g1")!
         expect(s.queue.radioTracks.length).toBeGreaterThanOrEqual(1)
+      })
+    })
+
+    it("fires onTrackChange immediately when radio generation starts", async () => {
+      const ports = createMockPorts()
+      const onTrackChange = vi.fn()
+      const music = createMusicUseCases(ports, { onTrackChange })
+      await music.play("solo", "g1", "u1", "v1", {})
+      const session = music.getSession("g1")!
+      music.setSession("g1", { ...session, prefs: { ...session.prefs, autoplay: true } })
+      onTrackChange.mockClear()
+
+      const onIdle = captureIdle(ports)
+      onIdle("g1")
+      await vi.waitFor(() => {
+        expect(onTrackChange).toHaveBeenCalledWith("g1")
       })
     })
 
@@ -188,7 +242,7 @@ describe("usecases/music", () => {
       music.setSession("g1", { ...session, prefs: { ...session.prefs, autoplay: true } })
 
       const onIdle = captureIdle(ports)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         expect(getAudioUrl).toHaveBeenCalledWith("ur")
       })
@@ -202,7 +256,7 @@ describe("usecases/music", () => {
       music.setSession("g1", { ...music.getSession("g1")!, radioBaseTitle: "Stale - Base" })
 
       const onIdle = captureIdle(ports)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         const s = music.getSession("g1")!
         expect(s.radioBaseTitle).toBeNull()
@@ -231,13 +285,13 @@ describe("usecases/music", () => {
       })
 
       const onIdle = captureIdle(ports)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         const s = music.getSession("g1")!
         expect(s.queue.current?.title).toBe("T2")
       })
-      expect(createFromAudioUrl).toHaveBeenCalledWith("https://stream.example/audio")
-      expect(createResource).not.toHaveBeenCalledWith("u2")
+      expect(createFromAudioUrl).toHaveBeenCalledWith("g1", "https://stream.example/audio")
+      expect(createResource).not.toHaveBeenCalledWith("g1", "u2")
       expect(music.getSession("g1")!.prefetchedUrl).toBeNull()
     })
 
@@ -256,7 +310,7 @@ describe("usecases/music", () => {
       expect(music.getSession("g1")!.queue.current?.title).toBe("First")
 
       music.skip("g1")
-      captureIdle(ports)()
+      captureIdle(ports)("g1")
       await vi.waitFor(() => {
         expect(music.getSession("g1")!.queue.current?.title).toBe("Second")
       })
@@ -269,7 +323,7 @@ describe("usecases/music", () => {
       expect(music.getSession("g1")).not.toBeNull()
 
       const onIdle = captureIdle(ports)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         expect(music.getSession("g1")).toBeNull()
       })
@@ -282,7 +336,7 @@ describe("usecases/music", () => {
       await music.play("solo", "g1", "u1", "v1", {})
 
       const onIdle = captureIdle(ports)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         expect(deleteMessage).toHaveBeenCalledWith("g1")
       })
@@ -302,7 +356,7 @@ describe("usecases/music", () => {
       expect(session.queue.current?.title).toBe("Test Track")
 
       const onIdle = captureIdle(ports)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         expect(music.getSession("g1")!.playback.isPlaying).toBe(true)
       })
@@ -325,17 +379,17 @@ describe("usecases/music", () => {
       await music.play("solo", "g1", "u1", "v1", {})
 
       const onIdle = captureIdle(ports)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         expect(music.getSession("g1")!.playback.isPlaying).toBe(true)
       })
       expect(createResource).toHaveBeenCalledTimes(2)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         expect(music.getSession("g1")!.playback.isPlaying).toBe(true)
       })
       expect(createResource).toHaveBeenCalledTimes(3)
-      onIdle()
+      onIdle("g1")
       await vi.waitFor(() => {
         expect(music.getSession("g1")).toBeNull()
       })

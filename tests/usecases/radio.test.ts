@@ -81,6 +81,61 @@ describe("usecases/radio", () => {
       expect(session.queue.radioTracks).toHaveLength(0)
       expect(session.prefetchedUrl).toBeNull()
     })
+
+    it("fires onChange immediately when enabling autoplay", async () => {
+      let resolveRecommend: () => void = () => {}
+      const gate = new Promise<void>((resolve) => { resolveRecommend = resolve })
+      const ports = createMockPorts({
+        recommend: {
+          findRelated: async () => {
+            await gate
+            return {
+              track: { title: "Next", url: "https://youtube.com/watch?v=next", duration: "3:00", id: "next" },
+              canonicalTitle: "Artist - Next",
+            }
+          },
+        },
+      })
+      const music = createMusicUseCases(ports)
+      await music.play("test", "g1", "u1", "v1", {})
+      const onChange = vi.fn()
+      const radio = createRadioUseCases(
+        ports,
+        music.getSession,
+        (guildId, session) => music.setSession(guildId, session),
+        music.prefetchRadioUrl,
+        onChange,
+      )
+
+      const promise = radio.toggleAutoplay("g1")
+      expect(onChange).toHaveBeenCalledWith("g1")
+
+      resolveRecommend()
+      const result = await promise
+      expect(result.ok).toBe(true)
+      expect(music.getSession("g1")!.queue.radioTracks[0].id).toBe("next")
+      expect(onChange).toHaveBeenCalledTimes(2)
+    })
+
+    it("fires onChange when disabling autoplay", async () => {
+      const ports = createMockPorts()
+      const music = createMusicUseCases(ports)
+      await music.play("test", "g1", "u1", "v1", {})
+      const onChange = vi.fn()
+      const radio = createRadioUseCases(
+        ports,
+        music.getSession,
+        (guildId, session) => music.setSession(guildId, session),
+        music.prefetchRadioUrl,
+        onChange,
+      )
+
+      await radio.toggleAutoplay("g1")
+      onChange.mockClear()
+      await radio.toggleAutoplay("g1")
+      expect(onChange).toHaveBeenCalledWith("g1")
+      expect(music.getSession("g1")!.prefs.autoplay).toBe(false)
+    })
   })
 
   describe("reshuffleRadio", () => {

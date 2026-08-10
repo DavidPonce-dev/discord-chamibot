@@ -13,14 +13,14 @@ export const createYtDlpAudio = (
   logger: LoggerPort,
   refreshCookies?: () => Promise<CookieRefreshResult>,
 ): AudioStreamPort => {
-  let ffmpegProcess: ReturnType<typeof spawn> | null = null
+  const ffmpegProcesses = new Map<string, ReturnType<typeof spawn>>()
   let cachedCookieHeader: string | null = null
   let cookieCacheDirty = true
-  let streamFailed = false
+  const streamFailedByGuild = new Map<string, boolean>()
 
-  const consumeStreamFailure = (): boolean => {
-    const value = streamFailed
-    streamFailed = false
+  const consumeStreamFailure = (guildId: string): boolean => {
+    const value = streamFailedByGuild.get(guildId) ?? false
+    streamFailedByGuild.delete(guildId)
     return value
   }
 
@@ -75,9 +75,9 @@ export const createYtDlpAudio = (
     )
   }
 
-  const createFromAudioUrl = async (audioUrl: string, seekTo?: number): Promise<Result<AudioResource, string>> => {
-    killProcess()
-    streamFailed = false
+  const createFromAudioUrl = async (guildId: string, audioUrl: string, seekTo?: number): Promise<Result<AudioResource, string>> => {
+    killProcess(guildId)
+    streamFailedByGuild.delete(guildId)
 
     try {
       logger.debug("audio", "URL obtenida, iniciando FFmpeg stream", {
@@ -116,7 +116,7 @@ export const createYtDlpAudio = (
       )
 
       const ffmpeg = spawn("ffmpeg", ffmpegArgs)
-      ffmpegProcess = ffmpeg
+      ffmpegProcesses.set(guildId, ffmpeg)
 
       let bytesWritten = 0
       ffmpeg.stdout?.on("data", (data: Buffer) => {
@@ -126,8 +126,8 @@ export const createYtDlpAudio = (
       let ffmpegStderr = ""
       ffmpeg.stderr?.on("data", (data: Buffer) => {
         ffmpegStderr += data.toString()
-        if (!streamFailed && isCookieError(ffmpegStderr)) {
-          streamFailed = true
+        if (!streamFailedByGuild.get(guildId) && isCookieError(ffmpegStderr)) {
+          streamFailedByGuild.set(guildId, true)
           invalidateCookieCache()
         }
       })
@@ -142,11 +142,12 @@ export const createYtDlpAudio = (
           bytesWritten,
           stderr: ffmpegStderr.slice(0, 2000),
         })
+        ffmpegProcesses.delete(guildId)
         if (code && code !== 0) {
           const stderr = ffmpegStderr.slice(0, 2000)
           if (isCookieError(stderr)) {
             logger.warn("audio", "FFmpeg fallo por posible error de cookies, refrescando para el siguiente track")
-            streamFailed = true
+            streamFailedByGuild.set(guildId, true)
             invalidateCookieCache()
             refreshCookies?.().catch(() => {})
           }
@@ -167,13 +168,13 @@ export const createYtDlpAudio = (
     }
   }
 
-  const createResource = async (url: string, seekTo?: number): Promise<Result<AudioResource, string>> => {
+  const createResource = async (guildId: string, url: string, seekTo?: number): Promise<Result<AudioResource, string>> => {
     logger.debug("audio", `Obteniendo URL de audio${seekTo !== undefined ? ` (seek: ${seekTo}s)` : ""}`, { url: url.slice(0, 60) })
 
     try {
       const audioUrlResult = await getAudioUrl(url)
       if (!audioUrlResult.ok) return err(audioUrlResult.error)
-      return createFromAudioUrl(audioUrlResult.value, seekTo)
+      return createFromAudioUrl(guildId, audioUrlResult.value, seekTo)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.error("audio", "Error al crear recurso de audio", {
@@ -185,11 +186,12 @@ export const createYtDlpAudio = (
     }
   }
 
-  const killProcess = (): void => {
+  const killProcess = (guildId: string): void => {
+    const ffmpegProcess = ffmpegProcesses.get(guildId)
     if (ffmpegProcess && !ffmpegProcess.killed) {
       ffmpegProcess.kill("SIGKILL")
     }
-    ffmpegProcess = null
+    ffmpegProcesses.delete(guildId)
   }
 
   return { createResource, getAudioUrl, createFromAudioUrl, killProcess, consumeStreamFailure } as const

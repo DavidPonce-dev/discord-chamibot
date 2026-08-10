@@ -50,10 +50,9 @@ const toTrack = (video: ResolvedTrack, requestedBy: string): Track => {
 export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallbacks): MusicUseCases => {
   const sessions = new Map<string, GuildSession>()
   let deployMode = false
-  let activeGuildId: string | null = null
-  let handlingIdle = false
+  const handlingIdle = new Set<string>()
   const MAX_STREAM_RETRIES = 2
-  let streamRetries = 0
+  const streamRetries = new Map<string, number>()
 
   const onTrackChange = (guildId: string): void => {
     callbacks?.onTrackChange?.(guildId)
@@ -69,11 +68,11 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
   const destroySession = (guildId: string): void => {
     const session = sessions.get(guildId)
     if (session) {
-      ports.audio.killProcess()
-      ports.player.stop()
+      ports.audio.killProcess(guildId)
+      ports.player.destroy(guildId)
       ports.voice.destroy(guildId)
       sessions.delete(guildId)
-      if (activeGuildId === guildId) activeGuildId = null
+      streamRetries.delete(guildId)
       ports.notify.deleteMessage(guildId).catch(() => {})
     }
   }
@@ -95,20 +94,19 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
       return
     }
 
-    ports.audio.killProcess()
-    ports.player.stop()
+    ports.audio.killProcess(guildId)
+    ports.player.stop(guildId)
 
     const prefetched = session.prefetchedUrl?.trackUrl === track.url ? session.prefetchedUrl : null
     const resourceResult = prefetched
-      ? await ports.audio.createFromAudioUrl(prefetched.audioUrl)
-      : await ports.audio.createResource(track.url)
+      ? await ports.audio.createFromAudioUrl(guildId, prefetched.audioUrl)
+      : await ports.audio.createResource(guildId, track.url)
     if (!resourceResult.ok) {
       ports.logger.error("music", "Failed to create audio resource", { error: resourceResult.error })
       return
     }
 
-    activeGuildId = guildId
-    ports.player.play(resourceResult.value)
+    ports.player.play(guildId, resourceResult.value)
     const playing = Session.setPlaying({ ...session, queue: newQueue }, track)
     const updated = track.requestedBy !== "radio"
       ? { ...playing, radioBaseTitle: null, prefetchedUrl: null }
@@ -130,11 +128,11 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     const session = sessions.get(guildId)
     if (!session || session.playback.seeking || session.playback.isPaused) return
 
-    if (ports.audio.consumeStreamFailure() && session.queue.current?.url && streamRetries < MAX_STREAM_RETRIES) {
-      streamRetries += 1
+    if (ports.audio.consumeStreamFailure(guildId) && session.queue.current?.url && (streamRetries.get(guildId) ?? 0) < MAX_STREAM_RETRIES) {
+      streamRetries.set(guildId, (streamRetries.get(guildId) ?? 0) + 1)
       ports.logger.warn("music", "Stream fallo (posible 403), reintentando misma pista", {
         guildId,
-        retry: streamRetries,
+        retry: streamRetries.get(guildId),
         track: session.queue.current.title,
       })
       const current = session.queue.current
@@ -147,7 +145,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
       return
     }
 
-    streamRetries = 0
+    streamRetries.delete(guildId)
     const finished = session.queue.current
     const base = finished ? Session.onTrackFinished(session, finished, extractArtist) : session
     const queued = finished ? Queue.applyLoop(base.queue, finished) : base.queue
@@ -163,6 +161,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
         guildId,
         last5Count: after.last5Tracks.length,
       })
+      onTrackChange(guildId)
       populateRadio(guildId)
         .then(() => startPlayback(guildId))
         .catch((e: unknown) => ports.logger.error("radio", "Error populating radio queue", { error: String(e) }))
@@ -179,11 +178,11 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     }
   }
 
-  ports.player.onIdle(() => {
-    if (handlingIdle || !activeGuildId) return
-    handlingIdle = true
-    handleTrackFinished(activeGuildId).finally(() => { handlingIdle = false })
-  })
+  const handleIdle = (guildId: string): void => {
+    if (handlingIdle.has(guildId)) return
+    handlingIdle.add(guildId)
+    handleTrackFinished(guildId).finally(() => { handlingIdle.delete(guildId) })
+  }
 
   const populateRadio = async (guildId: string): Promise<void> => {
     const session = sessions.get(guildId)
@@ -239,6 +238,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
       const joined = await ports.voice.join(guildId, voiceChannelId, adapterCreator)
       if (!joined.ok) return err("voice_join_failed")
       ports.player.subscribeToConnection(guildId)
+      ports.player.onIdle(guildId, handleIdle)
       session = Session.createSession(guildId, voiceChannelId)
     }
 
@@ -257,8 +257,8 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
   const skip = (guildId: string): Result<void, "no_session"> => {
     const session = getSession(guildId)
     if (!session) return err("no_session")
-    ports.audio.killProcess()
-    ports.player.stop()
+    ports.audio.killProcess(guildId)
+    ports.player.stop(guildId)
     return ok(undefined)
   }
 
@@ -266,7 +266,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     const session = getSession(guildId)
     if (!session) return err("no_session")
     if (session.playback.isPaused) return err("already_paused")
-    ports.player.pause()
+    ports.player.pause(guildId)
     sessions.set(guildId, Session.setPaused(session))
     return ok(undefined)
   }
@@ -275,7 +275,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     const session = getSession(guildId)
     if (!session) return err("no_session")
     if (!session.playback.isPaused) return err("not_paused")
-    ports.player.unpause()
+    ports.player.unpause(guildId)
     sessions.set(guildId, Session.setResumed(session))
     return ok(undefined)
   }
@@ -297,18 +297,18 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
 
     const base = { ...session, prefetchedUrl: null }
     sessions.set(guildId, Session.setSeeking(base, true))
-    ports.audio.killProcess()
-    ports.player.stop()
+    ports.audio.killProcess(guildId)
+    ports.player.stop(guildId)
 
     await new Promise(resolve => setTimeout(resolve, 100))
 
-    const resource = await ports.audio.createResource(session.queue.current.url, seconds)
+    const resource = await ports.audio.createResource(guildId, session.queue.current.url, seconds)
     if (!resource.ok) {
       sessions.set(guildId, Session.setSeeking(base, false))
       return err("seek_failed")
     }
 
-    ports.player.play(resource.value)
+    ports.player.play(guildId, resource.value)
     sessions.set(guildId, Session.setPlaying(base, session.queue.current))
     return ok(undefined)
   }
