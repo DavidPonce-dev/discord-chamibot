@@ -174,9 +174,16 @@ export const createPlaywrightBrowser = (
     const display = ":99"
     const vncPort = process.env.VNC_PORT || "6080"
 
-    const xvfb = spawn("Xvfb", [display, "-screen", "0", "1280x720x24"], { stdio: "ignore", env: { ...process.env, DISPLAY: display } })
-    const x11vnc = spawn("x11vnc", ["-display", display, "-forever", "-nopw", "-listen", "0.0.0.0", "-rfbport", "5900", "-shared"], { stdio: "ignore", env: { ...process.env, DISPLAY: display } })
-    const websockify = spawn("websockify", ["--web", "/usr/share/novnc", vncPort, "localhost:5900"], { stdio: "ignore", env: { ...process.env, DISPLAY: display } })
+    const spawnVnc = (label: string, cmd: string, args: string[]): ReturnType<typeof spawn> => {
+      const child = spawn(cmd, args, { stdio: "ignore", env: { ...process.env, DISPLAY: display } })
+      child.on("error", (e: Error) => logger.error("vnc", `${label} failed to start`, { error: e.message }))
+      child.on("exit", (code, signal) => logger.warn("vnc", `${label} exited`, { code, signal }))
+      return child
+    }
+
+    const xvfb = spawnVnc("Xvfb", "Xvfb", [display, "-screen", "0", "1280x720x24"])
+    const x11vnc = spawnVnc("x11vnc", "x11vnc", ["-display", display, "-forever", "-nopw", "-listen", "0.0.0.0", "-rfbport", "5900", "-shared"])
+    const websockify = spawnVnc("websockify", "websockify", ["--web", "/usr/share/novnc", vncPort, "localhost:5900"])
 
     try {
       browser = await chromium.launchPersistentContext(config.browserProfile, {

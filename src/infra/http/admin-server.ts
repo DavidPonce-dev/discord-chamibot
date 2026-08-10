@@ -117,14 +117,31 @@ export const createAdminServer = (
     })
 
     server.on("upgrade", (req, socket, head) => {
-      if (!isAllowedOrigin(req, allowedOrigins)) { (socket as any).destroy(); return }
-      if (!isValidToken(req, adminToken)) { (socket as any).destroy(); return }
-      if (req.url?.startsWith("/vnc/") && vncProxy && vncState.active) {
-        req.url = req.url.replace(/^\/vnc\//, "/")
+      const origin = req.headers.origin ?? "(none)"
+      const vncUrl = req.url ?? ""
+
+      if (!isAllowedOrigin(req, allowedOrigins)) {
+        logger.warn("vnc", "VNC upgrade blocked: origin not allowed", { origin, url: vncUrl })
+        ;(socket as any).destroy()
+        return
+      }
+      if (!isValidToken(req, adminToken)) {
+        logger.warn("vnc", "VNC upgrade blocked: invalid token", { url: vncUrl })
+        ;(socket as any).destroy()
+        return
+      }
+      if (vncUrl.startsWith("/vnc/") && vncProxy && vncState.active) {
+        req.url = vncUrl.replace(/^\/vnc\//, "/")
         const vncTarget = `http://localhost:${process.env.VNC_PORT || "6080"}`
+        logger.debug("vnc", "Proxying VNC websocket", { origin, target: vncTarget, path: req.url })
         vncProxy.ws(req, socket as any, head, { target: vncTarget })
       } else {
-        (socket as any).destroy()
+        logger.warn("vnc", "VNC upgrade blocked: route or state invalid", {
+          url: vncUrl,
+          vncActive: vncState.active,
+          hasProxy: !!vncProxy,
+        })
+        ;(socket as any).destroy()
       }
     })
 
