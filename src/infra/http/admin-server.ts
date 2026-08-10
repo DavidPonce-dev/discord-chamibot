@@ -121,7 +121,8 @@ export const createAdminServer = (
       if (!isValidToken(req, adminToken)) { (socket as any).destroy(); return }
       if (req.url?.startsWith("/vnc/") && vncProxy && vncState.active) {
         req.url = req.url.replace(/^\/vnc\//, "/")
-        vncProxy.ws(req, socket as any, head, { target: "http://localhost:6080" })
+        const vncTarget = `http://localhost:${process.env.VNC_PORT || "6080"}`
+        vncProxy.ws(req, socket as any, head, { target: vncTarget })
       } else {
         (socket as any).destroy()
       }
