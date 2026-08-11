@@ -79,11 +79,6 @@ RUN node -e "const { chromium } = require('playwright'); console.log('Playwright
 # Create directories with proper ownership for non-root user
 RUN mkdir -p /cookies /profile /home/node/.cache && chown -R node:node /cookies /profile /home/node/.cache
 
-# Entrypoint wipes /cookies and /profile on every container start
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
 ENV NODE_OPTIONS=--no-deprecation
 USER node
-ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["npm", "run", "start"]
