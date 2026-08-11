@@ -139,6 +139,9 @@ export const isCookieError = (msg: string): boolean => {
     /rejected.*cookie/i,
     /account.*unavailable/i,
     /authentication.*required/i,
+    /page needs to be reloaded/i,
+    /page loads failed/i,
+    /bot check/i,
   ]
   return patterns.some(p => p.test(msg))
 }

@@ -55,24 +55,41 @@ export const createYtDlpAudio = (
   }
 
   const getAudioUrl = async (url: string): Promise<Result<string, string>> => {
-    return withCookieRetry(
-      async () => {
-        const args = buildYtDlpArgs(["--get-url", "--format", "bestaudio"], cookieStore)
-        args.push(url)
+    const attempt = async (): Promise<Result<string, string>> => {
+      const args = buildYtDlpArgs(["--get-url", "--format", "bestaudio"], cookieStore)
+      args.push(url)
 
-        const result = await spawnYtDlp(args)
-        if (result.code !== 0 || !result.stdout.trim()) {
-          const msg = result.stderr.slice(0, 200) || `code ${result.code}`
-          return err(msg)
-        }
-        return ok(result.stdout.trim())
-      },
-      async () => {
-        invalidateCookieCache()
-        if (refreshCookies) return refreshCookies()
-        return cookieStore.read() ? { success: true, timestamp: new Date().toISOString() } : { success: false, timestamp: new Date().toISOString() }
-      },
-    )
+      const result = await spawnYtDlp(args)
+      if (result.code !== 0 || !result.stdout.trim()) {
+        const msg = result.stderr.slice(0, 200) || `code ${result.code}`
+        return err(msg)
+      }
+      return ok(result.stdout.trim())
+    }
+
+    const refresh = async (): Promise<CookieRefreshResult> => {
+      invalidateCookieCache()
+      if (refreshCookies) return refreshCookies()
+      return cookieStore.read()
+        ? { success: true, timestamp: new Date().toISOString() }
+        : { success: false, timestamp: new Date().toISOString() }
+    }
+
+    let lastError = ""
+    for (let attemptCount = 1; attemptCount <= 3; attemptCount++) {
+      const result = await withCookieRetry(attempt, refresh)
+      if (result.ok) return result
+      lastError = result.error
+      if (attemptCount < 3) {
+        logger.warn("audio", "getAudioUrl fallo, reintentando", {
+          url: url.slice(0, 60),
+          attempt: attemptCount,
+          error: lastError.slice(0, 200),
+        })
+        await new Promise(resolve => setTimeout(resolve, 750 * attemptCount))
+      }
+    }
+    return err(lastError)
   }
 
   const createFromAudioUrl = async (guildId: string, audioUrl: string, seekTo?: number): Promise<Result<AudioResource, string>> => {

@@ -20,6 +20,14 @@ describe("domain/ports", () => {
       expect(isCookieError("Authentication required")).toBe(true)
     })
 
+    it("detecta page needs to be reloaded", () => {
+      expect(isCookieError("ERROR: [youtube] abc123: The page needs to be reloaded.")).toBe(true)
+    })
+
+    it("detecta bot check", () => {
+      expect(isCookieError("YouTube is running a bot check")).toBe(true)
+    })
+
     it("no detecta errores genericos", () => {
       expect(isCookieError("Network timeout")).toBe(false)
     })
