@@ -50,7 +50,8 @@ const FILLED = "\u2588"
 
 export function buildProgressBar(pos: number, total: number, width = 24): string {
   if (total <= 0) return `[${EMPTY.repeat(width)}] ${formatTime(pos)} / ?:??`
-  const filledCount = Math.round((pos / total) * width)
+  const ratio = Math.min(Math.max(pos / total, 0), 1)
+  const filledCount = Math.round(ratio * width)
   const bar = FILLED.repeat(filledCount) + EMPTY.repeat(width - filledCount)
   return `[${bar}] ${formatTime(pos)} / ${formatTime(total)}`
 }

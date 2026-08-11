@@ -142,5 +142,19 @@ describe("shared/format", () => {
       const bracketContent = bar.match(/\[(.+?)\]/)![1]
       expect(bracketContent.length).toBe(10)
     })
+
+    it("clamps position above total", () => {
+      const bar = buildProgressBar(130, 120)
+      const bracketContent = bar.match(/\[(.+?)\]/)![1]
+      expect(bracketContent).not.toContain("\u2591")
+      expect(bracketContent.length).toBe(24)
+    })
+
+    it("clamps negative position", () => {
+      const bar = buildProgressBar(-5, 120)
+      const bracketContent = bar.match(/\[(.+?)\]/)![1]
+      expect(bracketContent).not.toContain("\u2588")
+      expect(bracketContent.length).toBe(24)
+    })
   })
 })
