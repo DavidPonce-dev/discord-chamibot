@@ -1,5 +1,6 @@
 import { spawn } from "child_process"
 import fs from "fs"
+import play from "play-dl"
 import { createAudioResource, StreamType, type AudioResource } from "@discordjs/voice"
 import type { AudioStreamPort, CookieStorePort, LoggerPort } from "../../domain/ports"
 import type { CookieRefreshResult } from "../../domain/types"
@@ -185,13 +186,42 @@ export const createYtDlpAudio = (
     }
   }
 
+  const createFromPlayDl = async (guildId: string, url: string, seekTo?: number): Promise<Result<AudioResource, string>> => {
+    killProcess(guildId)
+    streamFailedByGuild.delete(guildId)
+
+    try {
+      const result = await play.stream(url, {
+        discordPlayerCompatibility: true,
+        ...(seekTo !== undefined ? { seek: seekTo } : {}),
+      })
+      logger.debug("audio", "Stream fallback via play-dl iniciado", {
+        url: url.slice(0, 60),
+        type: result.type,
+      })
+      return ok(createAudioResource(result.stream, { inputType: result.type }))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      logger.error("audio", "Fallback play-dl fallo", {
+        url: url.slice(0, 60),
+        error: msg,
+      })
+      return err(msg)
+    }
+  }
+
   const createResource = async (guildId: string, url: string, seekTo?: number): Promise<Result<AudioResource, string>> => {
     logger.debug("audio", `Obteniendo URL de audio${seekTo !== undefined ? ` (seek: ${seekTo}s)` : ""}`, { url: url.slice(0, 60) })
 
     try {
       const audioUrlResult = await getAudioUrl(url)
-      if (!audioUrlResult.ok) return err(audioUrlResult.error)
-      return createFromAudioUrl(guildId, audioUrlResult.value, seekTo)
+      if (audioUrlResult.ok) return createFromAudioUrl(guildId, audioUrlResult.value, seekTo)
+
+      logger.warn("audio", "yt-dlp no pudo obtener URL de audio, usando fallback play-dl", {
+        url: url.slice(0, 60),
+        error: audioUrlResult.error.slice(0, 200),
+      })
+      return createFromPlayDl(guildId, url, seekTo)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.error("audio", "Error al crear recurso de audio", {

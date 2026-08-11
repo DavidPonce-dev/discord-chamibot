@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
+import { Readable } from "stream"
 import { createYtDlpAudio } from "@/infra/youtube/audio"
 import type { CookieStorePort, LoggerPort } from "@/domain/ports"
 
@@ -8,7 +9,14 @@ vi.mock("@/infra/youtube/ytdlp", () => ({
   USER_AGENT: "test-agent",
 }))
 
+vi.mock("play-dl", () => ({
+  default: {
+    stream: vi.fn(),
+  },
+}))
+
 import { spawnYtDlp } from "@/infra/youtube/ytdlp"
+import play from "play-dl"
 
 const mockCookieStore = (filePath: string | null): CookieStorePort => ({
   read: () => null,
@@ -74,5 +82,19 @@ describe("infra/youtube/audio getAudioUrl", () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toContain("Network timeout")
     expect(spawnYtDlp).toHaveBeenCalledTimes(3)
+  })
+
+  it("falls back to play-dl stream when yt-dlp cannot resolve the audio URL", async () => {
+    vi.mocked(spawnYtDlp).mockResolvedValue({ code: -1, stdout: "", stderr: "ERROR: [youtube] abc123: The page needs to be reloaded.\n" })
+    vi.mocked(play.stream).mockResolvedValueOnce({
+      stream: Readable.from([]),
+      type: "ogg/opus",
+    } as never)
+
+    const audio = createYtDlpAudio(mockCookieStore(null), mockLogger)
+    const result = await audio.createResource("guild1", "https://youtube.com/watch?v=abc123")
+
+    expect(result.ok).toBe(true)
+    expect(play.stream).toHaveBeenCalledTimes(1)
   })
 })
