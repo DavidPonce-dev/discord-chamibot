@@ -105,29 +105,51 @@ export const createYouTubeSearch = (
       }
     }
 
-    const results = await searchYtDlp(query, 1, cookieStore)
-    if (!results.length) return err("Sin resultados")
+    const cleanQuery = query.replace(/^\p{Extended_Pictographic}+(?:\s+)?/u, "").trim() || query
 
-    const video = results[0]
-    const id = video.id
-    return ok({
-      tracks: [{
-        url: video.url ?? `https://youtube.com/watch?v=${id}`,
-        title: video.title ?? "Unknown",
-        duration: video.duration !== undefined ? formatTime(video.duration) : undefined,
-        id,
-        thumbnail: id ? youtubeThumbnail(id) : undefined,
-      }],
-    })
+    const results = await searchYtDlp(cleanQuery, 1, cookieStore)
+    if (results.length > 0) {
+      const video = results[0]
+      const id = video.id
+      return ok({
+        tracks: [{
+          url: video.url ?? `https://youtube.com/watch?v=${id}`,
+          title: video.title ?? "Unknown",
+          duration: video.duration !== undefined ? formatTime(video.duration) : undefined,
+          id,
+          thumbnail: id ? youtubeThumbnail(id) : undefined,
+        }],
+      })
+    }
+
+    try {
+      const playResults = await play.search(cleanQuery, { limit: 1, source: { youtube: "video" } })
+      const video = playResults[0]
+      if (!video) return err("Sin resultados")
+      const id = video.id
+      return ok({
+        tracks: [{
+          url: video.url ?? `https://youtube.com/watch?v=${id}`,
+          title: video.title ?? "Unknown",
+          duration: video.durationRaw,
+          id,
+          thumbnail: id ? youtubeThumbnail(id) : undefined,
+        }],
+      })
+    } catch {
+      return err("Sin resultados")
+    }
   }
 
   const autocomplete = async (query: string): Promise<readonly AutocompleteChoice[]> => {
-    if (!query.trim()) return []
+    const trimmed = query.trim()
+    if (!trimmed) return []
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return []
 
-    const suggestions = await suggestionsProvider.suggestions(query)
+    const suggestions = await suggestionsProvider.suggestions(trimmed)
     if (suggestions.length > 0) return suggestions
 
-    const results = await searchYtDlp(query, 10, cookieStore, {
+    const results = await searchYtDlp(trimmed, 10, cookieStore, {
       type: "video",
       timeoutMs: AUTOCOMPLETE_FALLBACK_TIMEOUT_MS,
     })
