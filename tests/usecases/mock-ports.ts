@@ -52,7 +52,6 @@ export const createMockPorts = (overrides: Partial<Ports> = {}): Ports => ({
     onError: () => {},
     getStatus: (): string => "idle",
     subscribeToConnection: () => {},
-    destroy: () => {},
   },
   notify: {
     sendQueueUpdate: async () => {},

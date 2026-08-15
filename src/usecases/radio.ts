@@ -15,7 +15,6 @@ export const createRadioUseCases = (
   getSession: (guildId: string) => GuildSession | null,
   setSession: (guildId: string, session: GuildSession) => void,
   prefetchRadioUrl: (guildId: string) => Promise<void>,
-  onChange?: (guildId: string) => void,
 ): RadioUseCases => {
   const toggleAutoplay = async (guildId: string): Promise<Result<boolean, "no_session">> => {
     const session = getSession(guildId)
@@ -38,22 +37,17 @@ export const createRadioUseCases = (
         userTracks: session.queue.userTracks.length,
         radioTracks: session.queue.radioTracks.length,
       })
-      setSession(guildId, updated)
-      onChange?.(guildId)
       if (updated.queue.radioTracks.length === 0) {
         updated = await recommendAndEnqueue(updated, ports.recommend, ports.logger)
-        setSession(guildId, updated)
-        onChange?.(guildId)
       }
     } else {
       ports.logger.info("radio", "Autoplay desactivado", {
         guildId,
         radioTracksCleared: session.queue.radioTracks.length,
       })
-      setSession(guildId, updated)
-      onChange?.(guildId)
     }
 
+    setSession(guildId, updated)
     if (newAutoplay) await prefetchRadioUrl(guildId)
     return ok(newAutoplay)
   }
@@ -76,7 +70,6 @@ export const createRadioUseCases = (
     if (!searchTitle) return ok(null)
 
     setSession(guildId, { ...session, reshufflingRadioIndex: radioIndex })
-    onChange?.(guildId)
 
     try {
       const excludeIds = [
@@ -96,7 +89,6 @@ export const createRadioUseCases = (
 
       if (!result) {
         setSession(guildId, { ...latest, reshufflingRadioIndex: null })
-        onChange?.(guildId)
         return ok(null)
       }
 
@@ -108,7 +100,6 @@ export const createRadioUseCases = (
         reshufflingRadioIndex: null,
       }
       setSession(guildId, updated)
-      onChange?.(guildId)
       if (radioIndex === 0) await prefetchRadioUrl(guildId)
 
       return ok(track)
@@ -116,7 +107,6 @@ export const createRadioUseCases = (
       const latest = getSession(guildId)
       if (latest) {
         setSession(guildId, { ...latest, reshufflingRadioIndex: null })
-        onChange?.(guildId)
       }
       throw e
     }

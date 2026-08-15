@@ -50,60 +50,43 @@ export const createDiscordVoice = (): VoiceConnectionPort => {
 }
 
 export const createDiscordPlayer = (): AudioPlayerPort => {
-  const players = new Map<string, ReturnType<typeof createAudioPlayer>>()
+  const player = createAudioPlayer()
 
-  const getPlayer = (guildId: string): ReturnType<typeof createAudioPlayer> => {
-    let player = players.get(guildId)
-    if (!player) {
-      player = createAudioPlayer()
-      players.set(guildId, player)
-    }
-    return player
+  const play = (resource: AudioResource): void => {
+    player.play(resource)
   }
 
-  const play = (guildId: string, resource: AudioResource): void => {
-    getPlayer(guildId).play(resource)
+  const stop = (): void => {
+    player.stop()
   }
 
-  const stop = (guildId: string): void => {
-    getPlayer(guildId).stop()
+  const pause = (): void => {
+    player.pause()
   }
 
-  const pause = (guildId: string): void => {
-    getPlayer(guildId).pause()
+  const unpause = (): void => {
+    player.unpause()
   }
 
-  const unpause = (guildId: string): void => {
-    getPlayer(guildId).unpause()
+  const isPaused = (): boolean =>
+    player.state.status === AudioPlayerStatus.Paused
+
+  const onIdle = (cb: () => void): void => {
+    player.on(AudioPlayerStatus.Idle, cb)
   }
 
-  const isPaused = (guildId: string): boolean =>
-    getPlayer(guildId).state.status === AudioPlayerStatus.Paused
-
-  const onIdle = (guildId: string, cb: (guildId: string) => void): void => {
-    getPlayer(guildId).on(AudioPlayerStatus.Idle, () => cb(guildId))
+  const onError = (cb: (err: Error) => void): void => {
+    player.on("error", (e: Error) => cb(e))
   }
 
-  const onError = (guildId: string, cb: (guildId: string, err: Error) => void): void => {
-    getPlayer(guildId).on("error", (e: Error) => cb(guildId, e))
-  }
-
-  const getStatus = (guildId: string): string => getPlayer(guildId).state.status
+  const getStatus = (): string => player.state.status
 
   const subscribeToConnection = (guildId: string): void => {
     const conn = connections.get(guildId)
     if (conn && conn.state.status !== VoiceConnectionStatus.Destroyed) {
-      conn.subscribe(getPlayer(guildId))
+      conn.subscribe(player)
     }
   }
 
-  const destroy = (guildId: string): void => {
-    const player = players.get(guildId)
-    if (player) {
-      player.stop()
-      players.delete(guildId)
-    }
-  }
-
-  return { play, stop, pause, unpause, isPaused, onIdle, onError, getStatus, subscribeToConnection, destroy } as const
+  return { play, stop, pause, unpause, isPaused, onIdle, onError, getStatus, subscribeToConnection } as const
 }
