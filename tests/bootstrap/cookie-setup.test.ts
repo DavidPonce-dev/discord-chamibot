@@ -26,52 +26,40 @@ const mockBrowser = (overrides: Partial<BrowserPort> = {}): BrowserPort => ({
 })
 
 describe("bootstrap/cookie-setup", () => {
-  it("returns null when no cookie path", async () => {
-    const store = mockCookieStore({ filePath: () => null })
-    const result = await initCookieSystem({
-      cookieStore: store,
-      browser: mockBrowser(),
-      cookieRefreshIntervalMs: 30000,
-      logger: mockLogger,
-    })
-    expect(result).toBeNull()
+  const VALID = { isValid: true, cookieCount: 10, cookieNames: ["SID"], hasPSID: true, hasSID: true, lastModified: new Date() }
+  const INVALID = { isValid: false, cookieCount: 0, cookieNames: [], hasPSID: false, hasSID: false, lastModified: null }
+
+  const init = (store: CookieStorePort, browser: BrowserPort) =>
+    initCookieSystem({ cookieStore: store, browser, cookieRefreshIntervalMs: 30000, logger: mockLogger })
+
+  it("starts the scheduler even when there is no cookie file yet", async () => {
+    const refresh = vi.fn().mockResolvedValue({ success: false, error: "not logged in", timestamp: "now" })
+    const scheduler = await init(mockCookieStore({ filePath: () => null }), mockBrowser({ refresh }))
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(scheduler).toBeDefined()
+    scheduler.stop()
   })
 
-  it("starts scheduler when cookies are valid", async () => {
-    const store = mockCookieStore({
-      validate: () => ({ isValid: true, cookieCount: 10, cookieNames: ["SID"], hasPSID: true, hasSID: true, lastModified: new Date() }),
-    })
-    const result = await initCookieSystem({
-      cookieStore: store,
-      browser: mockBrowser(),
-      cookieRefreshIntervalMs: 30000,
-      logger: mockLogger,
-    })
-    expect(result).not.toBeNull()
-    result!.stop()
+  it("does not refresh at startup when cookies are valid", async () => {
+    const refresh = vi.fn()
+    const scheduler = await init(mockCookieStore({ validate: () => VALID }), mockBrowser({ refresh }))
+    expect(refresh).not.toHaveBeenCalled()
+    scheduler.stop()
   })
 
-  it("attempts refresh when cookies invalid and starts scheduler on success", async () => {
-    const refresh = vi.fn().mockResolvedValue({ success: true, cookieCount: 5, timestamp: "now" })
-    const result = await initCookieSystem({
-      cookieStore: mockCookieStore(),
-      browser: mockBrowser({ refresh }),
-      cookieRefreshIntervalMs: 30000,
-      logger: mockLogger,
-    })
-    expect(refresh).toHaveBeenCalled()
-    expect(result).not.toBeNull()
-    result!.stop()
+  it("renews invalid cookies before the bot starts", async () => {
+    let valid = false
+    const refresh = vi.fn(async () => { valid = true; return { success: true, cookieCount: 5, timestamp: "now" } })
+    const scheduler = await init(mockCookieStore({ validate: () => (valid ? VALID : INVALID) }), mockBrowser({ refresh }))
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(valid).toBe(true)
+    scheduler.stop()
   })
 
-  it("returns null when cookies invalid and refresh fails", async () => {
+  it("keeps a running scheduler when the startup renewal fails (it retries later)", async () => {
     const refresh = vi.fn().mockResolvedValue({ success: false, error: "fail", timestamp: "now" })
-    const result = await initCookieSystem({
-      cookieStore: mockCookieStore(),
-      browser: mockBrowser({ refresh }),
-      cookieRefreshIntervalMs: 30000,
-      logger: mockLogger,
-    })
-    expect(result).toBeNull()
+    const scheduler = await init(mockCookieStore(), mockBrowser({ refresh }))
+    expect(scheduler).toBeDefined()
+    scheduler.stop()
   })
 })

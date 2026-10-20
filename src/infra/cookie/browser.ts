@@ -5,6 +5,7 @@ import { chromium, type BrowserContext, type Page } from "playwright"
 import type { BrowserPort, LoggerPort } from "../../domain/ports"
 import type { CookieRefreshResult, CookieRefresherConfig } from "../../domain/types"
 import { ok, err, type Result } from "../../shared/result"
+import { hasAuthCookies, parseCookieNames } from "../../domain/cookies"
 
 const BROWSER_INIT_TIMEOUT_MS = 30_000
 
@@ -105,15 +106,30 @@ export const createPlaywrightBrowser = (
     return lines.join("\n") + "\n"
   }
 
-  const extractAndWriteCookies = async (): Promise<number> => {
+  const fileHasAuthCookies = (): boolean => {
+    try {
+      return hasAuthCookies(parseCookieNames(fs.readFileSync(cookieFile, "utf-8")))
+    } catch {
+      return false
+    }
+  }
+
+  // Returns the number of cookies written and whether they include a Google session (SID/PSID)
+  const extractAndWriteCookies = async (
+    opts: { keepAuthenticatedFile?: boolean } = {},
+  ): Promise<{ count: number; authenticated: boolean }> => {
     const cookies = await browser!.cookies()
     const ytCookies = filterYouTubeCookies(cookies).map(c => ({
       ...c, path: c.path || "/", secure: c.secure || false, expires: c.expires || 0, httpOnly: c.httpOnly || false,
     }))
     if (ytCookies.length === 0) throw new Error("No YouTube cookies found")
-    const netscape = cookiesToNetscape(ytCookies)
-    fs.writeFileSync(cookieFile, netscape, { mode: 0o600 })
-    return ytCookies.length
+    const authenticated = hasAuthCookies(ytCookies.map(c => c.name))
+    // A logged-out profile yields anonymous cookies: never replace a working session with them
+    if (!authenticated && opts.keepAuthenticatedFile && fileHasAuthCookies()) {
+      return { count: 0, authenticated }
+    }
+    fs.writeFileSync(cookieFile, cookiesToNetscape(ytCookies), { mode: 0o600 })
+    return { count: ytCookies.length, authenticated }
   }
 
   // Concurrent callers (scheduler, cookie-error retries) share one refresh, so one of them
@@ -155,13 +171,17 @@ export const createPlaywrightBrowser = (
         })
       }
 
-      let isLoggedIn = false
-      try {
-        isLoggedIn = await page.evaluate(() => !!document.querySelector("yt-img-shadow#avatar"))
-      } catch {}
-
-      const count = await extractAndWriteCookies()
-      return { success: true, cookieCount: count, isLoggedIn, timestamp: new Date().toISOString() }
+      // Session cookies (SID/PSID) are the reliable login signal, not the page's avatar element
+      const { count, authenticated } = await extractAndWriteCookies({ keepAuthenticatedFile: true })
+      if (!authenticated) {
+        return {
+          success: false,
+          isLoggedIn: false,
+          error: "El perfil del navegador no tiene sesion de Google (sin SID/PSID): inicia sesion desde el panel de admin (VNC)",
+          timestamp: new Date().toISOString(),
+        }
+      }
+      return { success: true, cookieCount: count, isLoggedIn: true, timestamp: new Date().toISOString() }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       if (msg.includes("closed") || msg.includes("crashed")) browser = null
@@ -174,8 +194,8 @@ export const createPlaywrightBrowser = (
   const extract = async (): Promise<CookieRefreshResult> => {
     if (!browser) return { success: false, error: "Browser not running", timestamp: new Date().toISOString() }
     try {
-      const count = await extractAndWriteCookies()
-      return { success: true, cookieCount: count, timestamp: new Date().toISOString() }
+      const { count, authenticated } = await extractAndWriteCookies()
+      return { success: true, cookieCount: count, isLoggedIn: authenticated, timestamp: new Date().toISOString() }
     } catch (e: unknown) {
       return { success: false, error: e instanceof Error ? e.message : String(e), timestamp: new Date().toISOString() }
     }

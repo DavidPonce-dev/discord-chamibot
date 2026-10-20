@@ -2,6 +2,7 @@ import fs from "fs"
 import path from "path"
 import type { CookieStorePort, LoggerPort } from "../../domain/ports"
 import type { CookieValidation } from "../../domain/types"
+import { parseCookieNames, hasAuthCookies, isSidCookie, isPsidCookie } from "../../domain/cookies"
 
 const MIN_COOKIE_LENGTH = 10
 
@@ -40,18 +41,14 @@ export const createFileCookieStore = (
     const content = read()
     if (!content || content.length <= MIN_COOKIE_LENGTH) return result
 
-    const lines = content.split("\n").filter((l: string) => l.trim() && !l.startsWith("#"))
-    const cookieNames = lines.map((l: string) => l.split("\t")[5]).filter(Boolean)
-    const uniqueNames = [...new Set(cookieNames)]
-
-    const hasAuthCookies = uniqueNames.some((n: string) => n === "SID" || n === "HSID" || n === "SSID" || n.includes("PSID"))
+    const uniqueNames = parseCookieNames(content)
 
     return {
-      isValid: hasAuthCookies,
+      isValid: hasAuthCookies(uniqueNames),
       cookieCount: uniqueNames.length,
       cookieNames: uniqueNames,
-      hasPSID: uniqueNames.some((n: string) => n.includes("PSID")),
-      hasSID: uniqueNames.some((n: string) => n === "SID" || n === "HSID" || n === "SSID"),
+      hasPSID: uniqueNames.some(isPsidCookie),
+      hasSID: uniqueNames.some(isSidCookie),
       lastModified: fs.statSync(cookiePath).mtime,
     }
   }

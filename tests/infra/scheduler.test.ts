@@ -66,6 +66,74 @@ describe("infra/cookie/scheduler", () => {
     scheduler.stop()
   })
 
+  describe("session watchdog (SID/PSID)", () => {
+    const MIN = 60_000
+    const VALID = { isValid: true, cookieCount: 10, cookieNames: ["SID"], hasPSID: true, hasSID: true, lastModified: null }
+    const INVALID = { isValid: false, cookieCount: 0, cookieNames: [], hasPSID: false, hasSID: false, lastModified: null }
+    // Periodic refresh far away (12h) so only the watchdog acts in these tests
+    const create = (browser: BrowserPort, validate: () => typeof VALID | typeof INVALID) =>
+      createCookieScheduler(browser, 12 * 60 * MIN, mockLogger, { validate, checkIntervalMs: 10 * MIN, maxBackoffMs: 40 * MIN })
+
+    it("renews the cookies as soon as the session is lost, without anyone using the bot", async () => {
+      let valid = true
+      const refresh = vi.fn(async () => { valid = true; return { success: true, cookieCount: 5, timestamp: "now" } })
+      const scheduler = create(mockBrowser({ refresh }), () => (valid ? VALID : INVALID))
+      scheduler.start()
+
+      await vi.advanceTimersByTimeAsync(10 * MIN)
+      expect(refresh).not.toHaveBeenCalled()
+
+      valid = false
+      await vi.advanceTimersByTimeAsync(10 * MIN)
+      expect(refresh).toHaveBeenCalledTimes(1)
+      expect(valid).toBe(true)
+      scheduler.stop()
+    })
+
+    it("backs off between failed recoveries (logged-out profile) instead of relaunching every check", async () => {
+      const refresh = vi.fn().mockResolvedValue({ success: false, error: "not logged in", timestamp: "now" })
+      const scheduler = create(mockBrowser({ refresh }), () => INVALID)
+      scheduler.start()
+
+      await vi.advanceTimersByTimeAsync(10 * MIN) // attempt 1, next in 10 min
+      expect(refresh).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(10 * MIN) // attempt 2, next in 20 min
+      expect(refresh).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(10 * MIN) // waiting
+      expect(refresh).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(10 * MIN) // attempt 3, next in 40 min (max)
+      expect(refresh).toHaveBeenCalledTimes(3)
+      await vi.advanceTimersByTimeAsync(30 * MIN)
+      expect(refresh).toHaveBeenCalledTimes(3)
+      await vi.advanceTimersByTimeAsync(10 * MIN) // attempt 4, still capped at 40 min
+      expect(refresh).toHaveBeenCalledTimes(4)
+      scheduler.stop()
+    })
+
+    it("retries right away after resume (e.g. a manual VNC login)", async () => {
+      const refresh = vi.fn().mockResolvedValue({ success: false, error: "not logged in", timestamp: "now" })
+      const scheduler = create(mockBrowser({ refresh }), () => INVALID)
+      scheduler.start()
+      await vi.advanceTimersByTimeAsync(20 * MIN) // 2 attempts, backoff now 20 min
+      expect(refresh).toHaveBeenCalledTimes(2)
+
+      scheduler.pause()
+      scheduler.resume()
+      await vi.advanceTimersByTimeAsync(10 * MIN)
+      expect(refresh).toHaveBeenCalledTimes(3)
+      scheduler.stop()
+    })
+
+    it("does nothing while the cookies stay valid", async () => {
+      const refresh = vi.fn()
+      const scheduler = create(mockBrowser({ refresh }), () => VALID)
+      scheduler.start()
+      await vi.advanceTimersByTimeAsync(5 * 60 * MIN)
+      expect(refresh).not.toHaveBeenCalled()
+      scheduler.stop()
+    })
+  })
+
   it("does not touch the browser between refreshes", async () => {
     const browser = mockBrowser()
     const scheduler = createCookieScheduler(browser, 60 * 60 * 1000, mockLogger)

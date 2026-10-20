@@ -8,29 +8,23 @@ type CookieSetupDeps = Readonly<{
   logger: LoggerPort
 }>
 
-export const initCookieSystem = async (deps: CookieSetupDeps): Promise<CookieScheduler | null> => {
+// Always runs the scheduler, even without a cookie file or with invalid cookies: its session
+// watchdog keeps trying to renew them (with backoff) instead of giving up until a restart
+export const initCookieSystem = async (deps: CookieSetupDeps): Promise<CookieScheduler> => {
   const { cookieStore, browser, cookieRefreshIntervalMs, logger } = deps
-  const cookiePath = cookieStore.filePath()
 
-  if (!cookiePath) return null
+  const scheduler = createCookieScheduler(browser, cookieRefreshIntervalMs, logger, {
+    validate: () => cookieStore.validate(),
+  })
 
   const validation = cookieStore.validate()
   if (validation.isValid) {
-    logger.info("bot", "YouTube cookies configuradas", { path: cookiePath, count: validation.cookieCount })
-    const scheduler = createCookieScheduler(browser, cookieRefreshIntervalMs, logger)
-    scheduler.start()
-    return scheduler
+    logger.info("bot", "YouTube cookies configuradas", { path: cookieStore.filePath(), count: validation.cookieCount })
+  } else {
+    // Renew before the bot starts taking commands, so the first /p already has a session
+    await scheduler.checkNow()
   }
 
-  logger.warn("bot", "Cookies invalidas, intentando refrescar...")
-  const result = await browser.refresh()
-  if (result.success) {
-    logger.info("bot", "Cookies refrescadas", { count: result.cookieCount })
-    const scheduler = createCookieScheduler(browser, cookieRefreshIntervalMs, logger)
-    scheduler.start()
-    return scheduler
-  }
-
-  logger.warn("bot", "No se pudieron refrescar cookies. Usa el admin panel.")
-  return null
+  scheduler.start()
+  return scheduler
 }

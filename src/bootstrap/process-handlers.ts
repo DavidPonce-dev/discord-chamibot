@@ -3,7 +3,7 @@ import type { CookieScheduler } from "../infra/cookie/scheduler"
 
 type ShutdownDeps = Readonly<{
   adminServer: { stop: () => Promise<void> }
-  cookieScheduler: CookieScheduler | null
+  cookieScheduler: CookieScheduler
   logger: LoggerPort
 }>
 
@@ -12,7 +12,7 @@ export const setupProcessHandlers = (deps: ShutdownDeps): void => {
 
   const shutdown = async (): Promise<void> => {
     logger.info("process", "Shutting down...")
-    cookieScheduler?.stop()
+    cookieScheduler.stop()
     await adminServer.stop()
     process.exit(0)
   }
