@@ -2,7 +2,7 @@ import type { GuildSession, Track } from "../../domain/types"
 import { parseDuration, buildProgressBar, formatTime } from "../../shared/format"
 import { createBaseEmbed } from "./base-embed"
 import { getPosition } from "../../domain/session"
-import { displayTitle, trackNames } from "../../domain/track-parser"
+import { displayTitle, trackNames, trackThumbnail } from "../../domain/track-parser"
 import { RADIO_MARK } from "../../config/ui"
 
 const requesterLabel = (track: Track): string =>
@@ -52,8 +52,9 @@ export function buildQueueContent(session: GuildSession, _page: number): ReturnT
     embed.addFields(fields)
   }
 
-  if (current?.thumbnail) {
-    embed.setThumbnail(current.thumbnail)
+  const thumbnail = current ? trackThumbnail(current) : undefined
+  if (thumbnail) {
+    embed.setThumbnail(thumbnail)
   }
 
   return embed

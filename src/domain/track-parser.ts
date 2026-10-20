@@ -95,6 +95,25 @@ const parseTitleText = (title: string): ParsedTitle => {
   return { artist: "", song: cleanSegment(clean) || clean }
 }
 
+// The stored thumbnail, or one derived from the video id/URL: some resolution paths
+// (fallbacks, playlists) can leave the field empty while the URL still identifies the video
+export const trackThumbnail = (track: Readonly<{ thumbnail?: string; id?: string; url: string }>): string | undefined => {
+  if (track.thumbnail) return track.thumbnail
+  const id = track.id || extractVideoId(track.url) || extractShortVideoId(track.url)
+  return id ? youtubeThumbnail(id) : undefined
+}
+
+// youtu.be/<id> links carry the id in the path, not in "v="
+const extractShortVideoId = (url: string): string | undefined => {
+  try {
+    const parsed = new URL(url)
+    if (parsed.hostname !== "youtu.be") return undefined
+    return parsed.pathname.slice(1) || undefined
+  } catch {
+    return undefined
+  }
+}
+
 type NamedTrack = Readonly<{ title: string; canonicalTitle?: string; artist?: string; song?: string }>
 
 // Artist and song for display: prefer clean names (Last.fm canonical title, yt-dlp metadata)

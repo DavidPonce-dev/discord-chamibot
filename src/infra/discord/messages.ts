@@ -67,6 +67,10 @@ export const createDiscordNotifier = (
         })
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
+        if (!isMessageDeletedError(msg)) {
+          // A rejected edit leaves the message showing the previous state: make it visible
+          logger.warn("notify", "Discord rechazo la edicion del mensaje de cola", { guildId, error: msg.slice(0, 300) })
+        }
         if (isMessageDeletedError(msg)) {
           clearQueueMessage(guildId)
           try {
