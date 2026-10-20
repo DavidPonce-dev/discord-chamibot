@@ -4,6 +4,55 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.6.0 (2026-10-20)
+
+### Rendimiento
+- **`/p` con una sola llamada a yt-dlp**: la búsqueda pide el formato de audio (`-f bestaudio`) y obtiene metadatos y URL de stream a la vez. Una caché compartida de URLs de audio (`audio-url-cache`) la reutiliza al reproducir, en `/sk` y en la precarga. Medido: `/p` con texto 5,6 s → 4,2 s, `/p` con URL 6,5 s → 3,0 s, `/sk` 3,2 s → ~0 s.
+- **Precarga del siguiente tema** (de usuario o radio): elimina la pausa de ~3-4 s entre canciones.
+- **Radio más rápida** (3,0-3,5 s → 1,2-1,6 s por recomendación): búsqueda de YouTube propia vía HTTP (~1 s) en lugar de lanzar yt-dlp (~2,5 s), con yt-dlp como respaldo; candidatos buscados en paralelo por lotes; las sugerencias de Groq solo se buscan en YouTube si Last.fm no encuentra nada; la precarga ya no bloquea `/ap` ni el reshuffle.
+- **Chromium solo durante el refresco de cookies**: ya no queda abierto ni se relanza cada 5 minutos (~200-400 MB de RAM menos).
+- **Autocompletado**: sugerencias instantáneas de YouTube; el respaldo usa la búsqueda propia, que entra en el límite de 3 s de Discord.
+
+### Radio: recomendaciones coherentes
+- **Parseo de títulos reescrito** (`parseTitle`): el título de YouTube se parseaba mal en la mayoría de los casos (`Artista - Canción ft. X`, `Artista - Canción | Álbum`, `… | Official Video`), Last.fm no encontraba la canción y la radio caía a Groq o a búsquedas genéricas que ignoraban el estilo.
+- **`autocorrect` en Last.fm** y nuevo respaldo por **artistas similares de Last.fm** antes de Groq.
+- Los candidatos ya escuchados se descartan antes de elegir, sin gastar intentos.
+- La semilla de la radio usa el artista/canción identificados, no el título crudo.
+
+### Cookies de YouTube
+- **Renovación automática de la sesión**: un vigilante revisa cada 10 min si faltan SID/PSID y las renueva aunque nadie use el bot; si no puede (perfil sin sesión de Google), espera de forma creciente (hasta 3 h) y avisa en el log que hace falta login por VNC.
+- El scheduler arranca siempre, aunque al iniciar no exista el archivo de cookies o sean inválidas.
+- Un refresco con el perfil sin sesión ya no sobrescribe cookies válidas.
+- **`resume()` no reanudaba el refresco** tras el login por VNC: corregido.
+- El contenedor **ya no borra cookies ni el perfil del navegador al arrancar**: cada deploy cerraba la sesión de Google.
+- Ruta de archivo de cookies unificada, refresco reactivo ante 403 de FFmpeg y reintento de la misma pista si el stream muere por 403.
+
+### Interfaz
+- **Cola legible**: cada tema se muestra como "Artista - Canción" (hasta 80 caracteres, antes 50 cortaba el nombre) y los de radio con 📻.
+- **Campo "Siguiente"** en el embed: qué suena después, si es de la cola o de la radio, o si se está buscando recomendación.
+- **Artista/canción en "Reproduciendo"**: usa los nombres limpios (Last.fm, metadatos de yt-dlp) y el canal de YouTube como pista para títulos sin artista o invertidos. "Pedido por" muestra "📻 Radio".
+- **Miniatura**: si un tema no la trae, se deriva del id o la URL del video.
+- Botón ⏭ deshabilitado sin siguiente tema; reshuffle de radio deshabilitado mientras busca, y el aviso ahora cae en la fila correcta.
+- La barra de progreso refleja la posición tras `/sk` y no se desborda.
+- `/ap` responde con defer: activar la radio superaba el límite de 3 s de Discord.
+
+### Correcciones de reproducción
+- **Reproductor y FFmpeg por servidor**: varios servidores ya pueden sonar a la vez sin interferirse.
+- Listener de errores del reproductor: un error de stream ya no tumba el proceso.
+- Saltar estando en pausa, un recurso de audio que falla o un `/sk` fallido ya no dejan la reproducción trabada.
+- Las escrituras de sesión tras operaciones lentas (radio, precarga, autoplay) ya no pisan cambios concurrentes ni reviven sesiones detenidas.
+- Resolución de `/p` más robusta: reintentos ante errores transitorios y respaldo con play-dl.
+
+### Admin / Docker
+- `ADMIN_PORT` y `VNC_PORT` configurables en docker compose; acepta la ruta de noVNC `//vnc/websockify`; log de diagnóstico del websocket VNC.
+- Se registra en el log cuando Discord rechaza la edición del mensaje de la cola.
+- Eliminado el botón "Start Browser" del panel (no hacía nada).
+
+### Limpieza
+- ~350 líneas de código sin uso eliminadas (funciones, constantes, miembros de puertos y parámetros); constantes de timeouts en lugar de literales duplicados.
+
+---
+
 ## v1.5.4 (2026-08-10)
 
 ### Correcciones de radio
