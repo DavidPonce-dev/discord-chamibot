@@ -49,6 +49,54 @@ describe("infra/ui/queue-components", () => {
       expect(shuffle?.data.disabled).toBe(true)
     })
 
+    it("marks the right radio row as reshuffling when user tracks come first", () => {
+      // reshufflingRadioIndex is relative to radioTracks; the row index counts user tracks too
+      const session = createSession("g1", "v1")
+      const updated = {
+        ...session,
+        queue: {
+          ...session.queue,
+          userTracks: [makeTrack("User Song")],
+          radioTracks: [{ title: "Radio A", url: "a", requestedBy: "radio", duration: "3:00" }],
+        },
+        reshufflingRadioIndex: 0,
+      } as GuildSession
+      const [userRow, radioRow] = buildTrackRows(updated, 1)
+      const label = (row: typeof userRow) => row.components.find(c => c.data.custom_id?.startsWith(BUTTON_PREFIXES.queueTrack))?.data.label
+      expect(label(userRow)).toBe("1. User Song (3:00)")
+      expect(label(radioRow)).toContain("Buscando otra recomendación")
+      const shuffle = radioRow.components.find((c) => c.data.custom_id === `${BUTTON_PREFIXES.queueRadioShuffle}1`)
+      expect(shuffle?.data.disabled).toBe(true)
+    })
+
+    it("labels tracks with clean names, marks radio and fits Discord's 80-char limit", () => {
+      const session = createSession("g1", "v1")
+      const updated = {
+        ...session,
+        queue: {
+          ...session.queue,
+          userTracks: [makeTrack("Bad Bunny (ft. Chencho Corleone) - Me Porto Bonito (Official Video) | Un Verano Sin Ti")],
+          radioTracks: [{
+            title: "AIR - La femme d'argent (from Moon Safari - Official Audio)",
+            canonicalTitle: "Air - La Femme D'argent",
+            url: "u", requestedBy: "radio", duration: "7:07",
+          }],
+        },
+      } as GuildSession
+      const labels = buildTrackRows(updated, 1).map(row =>
+        row.components.find(c => c.data.custom_id?.startsWith(BUTTON_PREFIXES.queueTrack))?.data.label)
+      expect(labels).toEqual([
+        "1. Bad Bunny - Me Porto Bonito (3:00)",
+        "2. \u{1F4FB} Air - La Femme D'argent (7:07)",
+      ])
+
+      const long = { ...updated, queue: { ...updated.queue, userTracks: [makeTrack(`Artist - ${"x".repeat(120)}`)], radioTracks: [] } }
+      const longLabel = buildTrackRows(long as GuildSession, 1)[0].components
+        .find(c => c.data.custom_id?.startsWith(BUTTON_PREFIXES.queueTrack))?.data.label ?? ""
+      expect(longLabel.length).toBeLessThanOrEqual(80)
+      expect(longLabel.endsWith("(3:00)")).toBe(true)
+    })
+
     it("keeps the radio shuffle button enabled when no reshuffle is in progress", () => {
       const session = createSession("g1", "v1")
       const radioTrack = { title: "Radio Song", url: "u", requestedBy: "radio", duration: "3:00" }

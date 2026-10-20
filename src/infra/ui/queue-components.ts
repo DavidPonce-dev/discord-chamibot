@@ -4,14 +4,16 @@ import {
   ButtonStyle,
 } from "discord.js"
 import type { GuildSession } from "../../domain/types"
-import { BUTTON_PREFIXES, TRACKS_PER_PAGE } from "../../config/ui"
+import { BUTTON_PREFIXES, TRACKS_PER_PAGE, RADIO_MARK } from "../../config/ui"
 import { paginate } from "../../shared/format"
+import { displayTitle } from "../../domain/track-parser"
 
-const MAX_TRACK_LABEL = 50
+// Discord's limit for button labels
+const MAX_TRACK_LABEL = 80
 
 function truncateLabel(text: string, max: number): string {
   if (text.length <= max) return text
-  return text.slice(0, max - 3) + "..."
+  return text.slice(0, max - 1) + "…"
 }
 
 export function buildTrackRows(session: GuildSession, page: number): ActionRowBuilder<ButtonBuilder>[] {
@@ -23,13 +25,15 @@ export function buildTrackRows(session: GuildSession, page: number): ActionRowBu
   pageItems.forEach((t, i) => {
     const idx = startIdx + i
     const pos = idx + 1
-    const dur = t.duration ?? ""
-    const titlePart = `${pos}. ${t.title}`
-    const durPart = dur ? ` (${dur})` : ""
+    const isRadio = t.requestedBy === "radio"
+    // reshufflingRadioIndex is relative to radioTracks, idx to the whole queue
+    const isReshuffling = isRadio && session.reshufflingRadioIndex === idx - session.queue.userTracks.length
+    const name = isReshuffling ? "Buscando otra recomendación…" : displayTitle(t)
+    const durPart = t.duration && !isReshuffling ? ` (${t.duration})` : ""
+    const titlePart = `${pos}. ${isRadio ? `${RADIO_MARK} ` : ""}${name}`
     const label = truncateLabel(titlePart, MAX_TRACK_LABEL - durPart.length) + durPart
 
-    if (t.requestedBy === "radio") {
-      const isReshuffling = session.reshufflingRadioIndex === idx
+    if (isRadio) {
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(`${BUTTON_PREFIXES.queueRadioShuffle}${idx}`)

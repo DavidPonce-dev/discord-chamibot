@@ -1,7 +1,22 @@
-import type { GuildSession } from "../../domain/types"
+import type { GuildSession, Track } from "../../domain/types"
 import { parseDuration, buildProgressBar, formatTime } from "../../shared/format"
 import { createBaseEmbed } from "./base-embed"
 import { getPosition } from "../../domain/session"
+import { displayTitle, trackNames } from "../../domain/track-parser"
+import { RADIO_MARK } from "../../config/ui"
+
+const requesterLabel = (track: Track): string =>
+  track.requestedBy === "radio" ? `${RADIO_MARK} Radio` : track.requestedBy
+
+// What plays after the current track, mirroring Queue.dequeue: user queue first, then radio
+export const describeNext = (session: GuildSession): string => {
+  const next = session.queue.userTracks[0]
+  if (next) return `${displayTitle(next)} — pedido por ${next.requestedBy}`
+  if (!session.prefs.autoplay) return "Nada en cola"
+  const radioNext = session.queue.radioTracks[0]
+  if (radioNext) return `${RADIO_MARK} ${displayTitle(radioNext)}`
+  return `${RADIO_MARK} Buscando recomendación…`
+}
 
 export function buildQueueContent(session: GuildSession, _page: number): ReturnType<typeof createBaseEmbed> {
   const current = session.queue.current
@@ -9,14 +24,11 @@ export function buildQueueContent(session: GuildSession, _page: number): ReturnT
   const fields: { name: string; value: string; inline: boolean }[] = []
 
   if (current) {
-    const artist = current.artist
-    const song = current.song ?? current.title
+    const { artist, song } = trackNames(current)
 
+    fields.push({ name: "\u{1F3B5} Cancion", value: `***${song}***`, inline: false })
     if (artist) {
-      fields.push({ name: "\u{1F3B5} Cancion", value: `***${song}***`, inline: false })
       fields.push({ name: "\u{1F3A4} Artista", value: `**${artist}**`, inline: false })
-    } else {
-      fields.push({ name: "\u{1F3B5} Cancion", value: `***${current.title}***`, inline: false })
     }
 
     if (current.album) {
@@ -28,9 +40,10 @@ export function buildQueueContent(session: GuildSession, _page: number): ReturnT
     fields.push({ name: "\u200b", value: buildProgressBar(pos, total), inline: false })
 
     fields.push(
-      { name: "Pedido por", value: current.requestedBy, inline: true },
+      { name: "Pedido por", value: requesterLabel(current), inline: true },
       { name: "Duracion", value: current.duration ?? "Desconocida", inline: true },
       { name: "Transcurrido", value: formatTime(pos), inline: true },
+      { name: "⏭ Siguiente", value: describeNext(session), inline: false },
     )
   }
 

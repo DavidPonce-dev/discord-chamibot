@@ -4,7 +4,7 @@ import type { Result } from "../shared/result"
 import { ok, err } from "../shared/result"
 import * as Queue from "../domain/queue"
 import * as Session from "../domain/session"
-import { youtubeThumbnail, extractArtist, extractSong } from "../domain/track-parser"
+import { youtubeThumbnail, extractArtist, parseTitle } from "../domain/track-parser"
 import { recommendAndEnqueue } from "../domain/radio"
 import { SEEK_SETTLE_DELAY_MS } from "../config/timeouts"
 
@@ -33,7 +33,10 @@ const toTrack = (video: ResolvedTrack, requestedBy: string): Track => {
   const canonicalTitle = video.track && video.artist
     ? `${video.artist} - ${video.track}`
     : video.track ?? undefined
-  const titleForExtraction = canonicalTitle ?? video.title
+  // Exact metadata when YouTube provides it; otherwise parse the title, using the channel as a hint
+  const { artist, song } = video.track && video.artist
+    ? { artist: video.artist, song: video.track }
+    : parseTitle(canonicalTitle ?? video.title, video.channel)
   return {
     title: video.title,
     url: video.url,
@@ -42,8 +45,8 @@ const toTrack = (video: ResolvedTrack, requestedBy: string): Track => {
     id: video.id,
     thumbnail: video.id ? youtubeThumbnail(video.id) : video.thumbnail,
     canonicalTitle,
-    artist: extractArtist(titleForExtraction) || undefined,
-    song: extractSong(titleForExtraction),
+    artist: artist || undefined,
+    song,
     album: video.album,
   }
 }

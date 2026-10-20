@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { createRadioEngine, recommendAndEnqueue } from "@/domain/radio"
+import { createRadioEngine, recommendAndEnqueue, toRadioTrack } from "@/domain/radio"
 import type { Ports } from "@/domain/ports"
 import { createSession } from "@/domain/session"
 import { ok } from "@/shared/result"
@@ -365,5 +365,15 @@ describe("domain/radio - RadioEngine", () => {
     const engine = createRadioEngine(ports)
     const result = await engine.findRelated("Artist - Song", [])
     expect(result).not.toBeNull()
+  })
+})
+
+describe("domain/radio - toRadioTrack", () => {
+  it("keeps the clean artist/song from the recommendation", () => {
+    const track = toRadioTrack({
+      track: { title: "AIR - La femme d'argent (from Moon Safari - Official Audio)", url: "u", id: "x" },
+      canonicalTitle: "Air - La Femme D'argent",
+    })
+    expect(track).toMatchObject({ requestedBy: "radio", artist: "Air", song: "La Femme D'argent", canonicalTitle: "Air - La Femme D'argent" })
   })
 })

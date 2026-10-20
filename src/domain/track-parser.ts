@@ -16,9 +16,52 @@ const stripFeaturing = (s: string): string => s.replace(FEATURING, "").trim()
 
 const cleanSegment = (s: string): string => stripFeaturing(s).replace(TRAILING_NOISE, "").trim()
 
+// Channels that upload other artists' music: their name is not the artist
+const NON_ARTIST_CHANNEL = /lyric|letra|karaoke|\bmusic\b|records|hits|\bmix\b|\btv\b|playlist|vibes/i
+
+const normalize = (s: string): string => s.toLowerCase().normalize("NFD").replace(/[^\p{L}\p{N}]/gu, "")
+
+// "Bad Bunny - Topic", "BadBunnyVEVO", "Bad Bunny Official" -> "Bad Bunny"
+export const artistFromChannel = (channel: string | undefined): string => {
+  if (!channel || NON_ARTIST_CHANNEL.test(channel)) return ""
+  return channel
+    .replace(/\s*-\s*topic$/i, "")
+    .replace(/vevo$/i, "")
+    .replace(/\s*(?:official|oficial)(?:\s*(?:channel|canal|page))?$/i, "")
+    .trim()
+}
+
+// Use the uploader's channel to fix what the title alone can't: reversed "Song - Artist" titles
+// and titles without an artist ("Blinding Lights" uploaded by The Weeknd)
+const applyChannelHint = (parsed: ParsedTitle, channel: string | undefined): ParsedTitle => {
+  const channelArtist = artistFromChannel(channel)
+  if (!channelArtist) return parsed
+  const ch = normalize(channelArtist)
+  if (!ch) return parsed
+
+  if (parsed.artist) {
+    // "La Bachata - MTZ Manuel Turizo" by Manuel Turizo: the channel is in the song slot
+    const artistMatches = normalize(parsed.artist).includes(ch)
+    const songMatches = normalize(parsed.song).includes(ch)
+    return !artistMatches && songMatches ? { artist: channelArtist, song: parsed.artist } : parsed
+  }
+  // "The Weeknd Blinding Lights" by TheWeekndVEVO: the song starts with the artist. Compare
+  // normalized text (channel names often drop spaces/accents) and keep the title's spelling
+  for (let i = 1; i < parsed.song.length; i++) {
+    if (normalize(parsed.song.slice(0, i)) !== ch) continue
+    const rest = parsed.song.slice(i).replace(/^[\s:,-]+/, "")
+    if (rest) return { artist: parsed.song.slice(0, i).trim(), song: rest }
+  }
+  return { artist: channelArtist, song: parsed.song }
+}
+
 // Best-effort split of a YouTube title into artist and song (artist is "" when unknown).
 // The result feeds Last.fm lookups, which need clean names to find similar tracks.
-export const parseTitle = (title: string): ParsedTitle => {
+// `channel` (uploader name), when known, disambiguates reversed or artist-less titles.
+export const parseTitle = (title: string, channel?: string): ParsedTitle =>
+  applyChannelHint(parseTitleText(title), channel)
+
+const parseTitleText = (title: string): ParsedTitle => {
   const jpOpen = title.indexOf("「")
   const jpClose = title.indexOf("」")
   if (jpOpen > 0 && jpClose > jpOpen) {
@@ -27,7 +70,11 @@ export const parseTitle = (title: string): ParsedTitle => {
 
   const clean = title.replace(/\[.*?\]|\(.*?\)/g, " ").replace(/\s+/g, " ").trim()
 
-  const segments = clean.split(SEGMENT_SEPARATOR).map(s => s.trim()).filter(Boolean)
+  // Removing "(Video Oficial)" can leave doubled separators ("Song - - Artist"): drop the leftovers
+  const segments = clean
+    .split(SEGMENT_SEPARATOR)
+    .map(s => s.replace(/^[\s\-–—|│]+|[\s\-–—|│]+$/g, ""))
+    .filter(Boolean)
   if (segments.length >= 2) {
     const artist = stripFeaturing(segments[0])
     const song = cleanSegment(segments[1])
@@ -46,6 +93,21 @@ export const parseTitle = (title: string): ParsedTitle => {
   if (withoutFeaturing && withoutFeaturing !== clean) return { artist: withoutFeaturing, song: clean }
 
   return { artist: "", song: cleanSegment(clean) || clean }
+}
+
+type NamedTrack = Readonly<{ title: string; canonicalTitle?: string; artist?: string; song?: string }>
+
+// Artist and song for display: prefer clean names (Last.fm canonical title, yt-dlp metadata)
+// over parsing the raw YouTube upload title
+export const trackNames = (track: NamedTrack): ParsedTitle =>
+  track.artist && track.song
+    ? { artist: track.artist, song: track.song }
+    : parseTitle(track.canonicalTitle ?? track.title)
+
+// "Artist - Song", or just the song when the artist is unknown
+export const displayTitle = (track: NamedTrack): string => {
+  const { artist, song } = trackNames(track)
+  return artist ? `${artist} - ${song}` : song
 }
 
 export const extractArtist = (title: string): string => parseTitle(title).artist

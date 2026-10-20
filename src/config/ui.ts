@@ -22,3 +22,6 @@ export const EMBED_COLORS = {
 } as const
 
 export const TRACKS_PER_PAGE = 3
+
+// Marks radio (autoplay) tracks in the queue UI
+export const RADIO_MARK = "\u{1F4FB}"

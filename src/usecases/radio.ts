@@ -3,7 +3,8 @@ import type { GuildSession, Track } from "../domain/types"
 import { ok, err, type Result } from "../shared/result"
 import * as Queue from "../domain/queue"
 import { ARTIST_ROTATION_LIMIT } from "../config/radio"
-import { recommendAndEnqueue } from "../domain/radio"
+import { recommendAndEnqueue, toRadioTrack } from "../domain/radio"
+import { displayTitle } from "../domain/track-parser"
 
 export type RadioUseCases = Readonly<{
   toggleAutoplay: (guildId: string) => Promise<Result<boolean, "no_session">>
@@ -88,7 +89,8 @@ export const createRadioUseCases = (
 
     if (session.reshufflingRadioIndex !== null) return ok(null)
 
-    const searchTitle = session.radioBaseTitle ?? session.queue.current?.title
+    const current = session.queue.current
+    const searchTitle = session.radioBaseTitle ?? (current ? displayTitle(current) : undefined)
     if (!searchTitle) return ok(null)
 
     setSession(guildId, { ...session, reshufflingRadioIndex: radioIndex })
@@ -116,7 +118,7 @@ export const createRadioUseCases = (
         return ok(null)
       }
 
-      const track: Track = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle }
+      const track = toRadioTrack(result)
       const updated: GuildSession = {
         ...latest,
         queue: Queue.replaceRadioTrack(latest.queue, radioIndex, track),

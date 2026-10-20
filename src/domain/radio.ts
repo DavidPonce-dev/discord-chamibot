@@ -1,7 +1,7 @@
 import type { Ports, MusicRecommendPort, LoggerPort } from "./ports"
 import type { RadioResult, VideoSearchResult, GuildSession, Track, GroqCandidate } from "./types"
 import * as Queue from "./queue"
-import { parseTitle, youtubeThumbnail } from "./track-parser"
+import { parseTitle, displayTitle, youtubeThumbnail } from "./track-parser"
 import { parseDurationSec } from "../shared/format"
 import { MAX_AUTOPLAY_SEC, MAX_RETRIES, ARTIST_ROTATION_LIMIT } from "../config/radio"
 
@@ -203,12 +203,27 @@ const resolveGroqCandidates = async (
   return result
 }
 
+// Keep the clean artist/song (from Last.fm or Groq via canonicalTitle) so the UI doesn't fall back
+// to the raw YouTube upload title
+export const toRadioTrack = (result: RadioResult): Track => {
+  const { artist, song } = parseTitle(result.canonicalTitle ?? result.track.title)
+  return {
+    ...result.track,
+    requestedBy: "radio",
+    canonicalTitle: result.canonicalTitle,
+    artist: artist || undefined,
+    song,
+  }
+}
+
 export const recommendAndEnqueue = async (
   session: GuildSession,
   recommend: MusicRecommendPort,
   logger: LoggerPort,
 ): Promise<GuildSession> => {
-  const searchTitle = session.radioBaseTitle ?? session.queue.current?.title ?? session.last5Tracks[0]
+  // Seed with the identified "Artist - Song" (channel-aware) rather than the raw upload title
+  const current = session.queue.current
+  const searchTitle = session.radioBaseTitle ?? (current ? displayTitle(current) : undefined) ?? session.last5Tracks[0]
   if (!searchTitle) {
     logger.warn("radio", "No hay titulo base para recomendar", {
       radioBaseTitle: session.radioBaseTitle ?? null,
@@ -235,7 +250,7 @@ export const recommendAndEnqueue = async (
     return session
   }
 
-  const track: Track = { ...result.track, requestedBy: "radio", canonicalTitle: result.canonicalTitle }
+  const track = toRadioTrack(result)
   logger.info("radio", "Tema de radio encolado", {
     title: result.track.title,
     id: result.track.id ?? null,
