@@ -6,14 +6,17 @@ import type { AudioStreamPort, CookieStorePort, LoggerPort } from "../../domain/
 import type { CookieRefreshResult } from "../../domain/types"
 import { isCookieError, withCookieRetry } from "../../domain/ports"
 import { ok, err, type Result } from "../../shared/result"
-import { buildYtDlpArgs, spawnYtDlp, USER_AGENT } from "./ytdlp"
+import { buildYtDlpArgs, spawnYtDlp, USER_AGENT, AUDIO_FORMAT } from "./ytdlp"
+import { createAudioUrlCache, type AudioUrlCache } from "./audio-url-cache"
 import { formatTime } from "../../shared/format"
 
 export const createYtDlpAudio = (
   cookieStore: CookieStorePort,
   logger: LoggerPort,
   refreshCookies?: () => Promise<CookieRefreshResult>,
+  audioCache: AudioUrlCache = createAudioUrlCache(),
 ): AudioStreamPort => {
+  const inFlight = new Map<string, Promise<Result<string, string>>>()
   const ffmpegProcesses = new Map<string, ReturnType<typeof spawn>>()
   let cachedCookieHeader: string | null = null
   let cookieCacheDirty = true
@@ -55,9 +58,27 @@ export const createYtDlpAudio = (
     cookieCacheDirty = true
   }
 
-  const getAudioUrl = async (url: string): Promise<Result<string, string>> => {
+  const getAudioUrl = (url: string): Promise<Result<string, string>> => {
+    const cached = audioCache.get(url)
+    if (cached) return Promise.resolve(ok(cached))
+
+    // Share one yt-dlp call between concurrent requests (e.g. prefetch + playback start)
+    const pending = inFlight.get(url)
+    if (pending) return pending
+
+    const request = fetchAudioUrl(url)
+      .then((result) => {
+        if (result.ok) audioCache.set(url, result.value)
+        return result
+      })
+      .finally(() => { inFlight.delete(url) })
+    inFlight.set(url, request)
+    return request
+  }
+
+  const fetchAudioUrl = async (url: string): Promise<Result<string, string>> => {
     const attempt = async (): Promise<Result<string, string>> => {
-      const args = buildYtDlpArgs(["--get-url", "--format", "bestaudio"], cookieStore)
+      const args = buildYtDlpArgs(["--get-url", "--format", AUDIO_FORMAT], cookieStore)
       args.push(url)
 
       const result = await spawnYtDlp(args)
@@ -147,6 +168,7 @@ export const createYtDlpAudio = (
         if (!streamFailedByGuild.get(guildId) && isCookieError(ffmpegStderr)) {
           streamFailedByGuild.set(guildId, true)
           invalidateCookieCache()
+          audioCache.invalidateAudioUrl(audioUrl)
         }
       })
 
@@ -160,8 +182,11 @@ export const createYtDlpAudio = (
           bytesWritten,
           stderr: ffmpegStderr.slice(0, 2000),
         })
-        ffmpegProcesses.delete(guildId)
+        // A killed process can close after its replacement started: don't drop the new one
+        if (ffmpegProcesses.get(guildId) === ffmpeg) ffmpegProcesses.delete(guildId)
         if (code && code !== 0) {
+          // Don't reuse a stream URL that just failed (expired, 403, ...)
+          audioCache.invalidateAudioUrl(audioUrl)
           const stderr = ffmpegStderr.slice(0, 2000)
           if (isCookieError(stderr)) {
             logger.warn("audio", "FFmpeg fallo por posible error de cookies, refrescando para el siguiente track")

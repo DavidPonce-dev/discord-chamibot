@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { createYouTubeSearch } from "@/infra/youtube/search"
+import { createAudioUrlCache } from "@/infra/youtube/audio-url-cache"
 import type { CookieStorePort, LoggerPort } from "@/domain/ports"
 
 vi.mock("@/infra/youtube/ytdlp", () => ({
   searchYtDlp: vi.fn(),
   buildYtDlpArgs: vi.fn(),
   spawnYtDlp: vi.fn(),
+  AUDIO_FORMAT: "bestaudio",
 }))
 
 vi.mock("play-dl", () => ({
@@ -36,13 +38,13 @@ const mockLogger: LoggerPort = {
 }
 
 afterEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
   vi.unstubAllGlobals()
 })
 
 describe("infra/youtube/search", () => {
   it("strips leading emoji and falls back to play-dl when yt-dlp search is empty", async () => {
-    vi.mocked(searchYtDlp).mockResolvedValueOnce([])
+    vi.mocked(searchYtDlp).mockResolvedValue([])
     vi.mocked(play.search).mockResolvedValueOnce([
       { id: "vid1", url: "https://youtube.com/watch?v=vid1", title: "Fallback Song", durationRaw: "3:30" },
     ] as never)
@@ -50,6 +52,7 @@ describe("infra/youtube/search", () => {
     const search = createYouTubeSearch(mockCookieStore(null), mockLogger)
     const result = await search.resolveQuery("\u{1F50E} discipline king crimson")
 
+    expect(searchYtDlp).toHaveBeenCalledWith("discipline king crimson", 1, expect.anything(), expect.objectContaining({ format: "bestaudio" }))
     expect(searchYtDlp).toHaveBeenCalledWith("discipline king crimson", 1, expect.anything())
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.value.tracks[0].title).toBe("Fallback Song")
@@ -63,6 +66,7 @@ describe("infra/youtube/search", () => {
     const search = createYouTubeSearch(mockCookieStore(null), mockLogger)
     const result = await search.resolveQuery("queen")
 
+    expect(searchYtDlp).toHaveBeenCalledTimes(1)
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.value.tracks[0].title).toBe("Song One")
@@ -70,8 +74,21 @@ describe("infra/youtube/search", () => {
     }
   })
 
+  it("stores the stream URL from the search in the audio cache", async () => {
+    const audioUrl = "https://rr1---sn-x.googlevideo.com/videoplayback?expire=9999999999"
+    vi.mocked(searchYtDlp).mockResolvedValueOnce([
+      { id: "a1", url: "https://www.youtube.com/watch?v=a1", title: "Song One", duration: 240, audioUrl },
+    ] as never)
+    const cache = createAudioUrlCache()
+
+    const search = createYouTubeSearch(mockCookieStore(null), mockLogger, cache)
+    await search.resolveQuery("queen")
+
+    expect(cache.get("https://youtube.com/watch?v=a1")).toBe(audioUrl)
+  })
+
   it("returns 'Sin resultados' when both sources fail", async () => {
-    vi.mocked(searchYtDlp).mockResolvedValueOnce([])
+    vi.mocked(searchYtDlp).mockResolvedValue([])
     vi.mocked(play.search).mockRejectedValueOnce(new Error("network"))
 
     const search = createYouTubeSearch(mockCookieStore(null), mockLogger)

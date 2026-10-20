@@ -116,7 +116,27 @@ export const createPlaywrightBrowser = (
     return ytCookies.length
   }
 
-  const refresh = async (): Promise<CookieRefreshResult> => {
+  // Concurrent callers (scheduler, cookie-error retries) share one refresh, so one of them
+  // can't close the browser while another is still using it
+  let inFlightRefresh: Promise<CookieRefreshResult> | null = null
+
+  const refresh = (): Promise<CookieRefreshResult> => {
+    if (inFlightRefresh) return inFlightRefresh
+    inFlightRefresh = (async () => {
+      // Only keep Chromium (~200-400MB) running while refreshing; a browser that was already
+      // open (e.g. the VNC login session) is left as is
+      const launchedHere = !browser
+      try {
+        return await refreshWithBrowser()
+      } finally {
+        if (launchedHere) await closeBrowser()
+        inFlightRefresh = null
+      }
+    })()
+    return inFlightRefresh
+  }
+
+  const refreshWithBrowser = async (): Promise<CookieRefreshResult> => {
     if (!browser) {
       const initResult = await initBrowser()
       if (!initResult.ok) return { success: false, error: initResult.error, timestamp: new Date().toISOString() }
@@ -147,7 +167,7 @@ export const createPlaywrightBrowser = (
       if (msg.includes("closed") || msg.includes("crashed")) browser = null
       return { success: false, error: msg, timestamp: new Date().toISOString() }
     } finally {
-      page?.close().catch(() => {})
+      await page?.close().catch(() => {})
     }
   }
 

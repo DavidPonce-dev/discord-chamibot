@@ -72,6 +72,25 @@ describe("infra/youtube/ytdlp", () => {
       expect(entries[0].url).toContain("playlist")
     })
 
+    it("separates the stream URL from the page URL in full (non-flat) output", () => {
+      const out = JSON.stringify({
+        id: "abc",
+        title: "T",
+        duration: 10,
+        url: "https://rr1---sn-x.googlevideo.com/videoplayback?expire=1",
+        webpage_url: "https://www.youtube.com/watch?v=abc",
+      })
+      const entries = parseYtDlpSearchOutput(out)
+      expect(entries[0].url).toBe("https://www.youtube.com/watch?v=abc")
+      expect(entries[0].audioUrl).toBe("https://rr1---sn-x.googlevideo.com/videoplayback?expire=1")
+    })
+
+    it("never uses a stream URL as the page URL", () => {
+      const out = JSON.stringify({ id: "abc", title: "T", url: "https://rr1---sn-x.googlevideo.com/videoplayback" })
+      const entries = parseYtDlpSearchOutput(out)
+      expect(entries[0].url).toBe("https://www.youtube.com/watch?v=abc")
+    })
+
     it("maps track/artist/album enrichment fields", () => {
       const out = JSON.stringify({ id: "x", title: "T", duration: 10, track: "Song", artist: "Artist", album: "Album" })
       const entries = parseYtDlpSearchOutput(out)

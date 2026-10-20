@@ -1,5 +1,5 @@
 import type { Ports, MusicRecommendPort, LoggerPort } from "./ports"
-import type { RadioResult, VideoSearchResult, GuildSession, Track } from "./types"
+import type { RadioResult, VideoSearchResult, GuildSession, Track, GroqCandidate } from "./types"
 import * as Queue from "./queue"
 import { extractArtist, extractSong, youtubeThumbnail } from "./track-parser"
 import { parseDurationSec } from "../shared/format"
@@ -42,6 +42,38 @@ const resolveToYouTube = async (
   }
 }
 
+// Each YouTube search spawns a yt-dlp process (~2.5s): run candidates in parallel batches
+// and return the first success in priority order, without waiting for slower ones
+const firstInBatches = async <T, R>(
+  items: readonly T[],
+  fn: (item: T) => Promise<R | null>,
+  batchSize = MAX_RETRIES,
+): Promise<R | null> => {
+  for (let i = 0; i < items.length; i += batchSize) {
+    const pending = items.slice(i, i + batchSize).map(item => fn(item).catch(() => null))
+    for (const p of pending) {
+      const result = await p
+      if (result) return result
+    }
+  }
+  return null
+}
+
+const wasRecentlyPlayed = (cand: { artist: string; name: string }, last5Titles: Last5Set): boolean => {
+  const fullTitle = `${cand.artist} ${cand.name}`.toLowerCase()
+  const songLower = cand.name.toLowerCase()
+  return [...last5Titles].some(t => t.includes(fullTitle) || t.includes(songLower))
+}
+
+const shuffled = <T>(items: readonly T[]): T[] => {
+  const arr = [...items]
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
 const buildExcludeSets = (
   last5History: readonly string[],
   extraIds?: readonly string[],
@@ -71,24 +103,12 @@ const tryLastFmRecommendation = async (
   const candidates = await ports.lastfm.getSimilarTracks(artist, track, 15)
   if (candidates.length === 0) return null
 
-  const sorted = [...candidates].sort((a, b) => b.match - a.match)
-  const pool = sorted.slice(0, 10)
-  const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, MAX_RETRIES)
+  const pool = [...candidates].sort((a, b) => b.match - a.match).slice(0, 10)
+  const picks = shuffled(pool)
+    .slice(0, MAX_RETRIES)
+    .filter(cand => !wasRecentlyPlayed(cand, last5Titles))
 
-  for (const cand of shuffled) {
-    const fullTitle = `${cand.artist} ${cand.name}`.toLowerCase()
-    const songLower = cand.name.toLowerCase()
-
-    const alreadyPlayed = [...last5Titles].some(
-      t => t.includes(fullTitle) || t.includes(songLower),
-    )
-    if (alreadyPlayed) continue
-
-    const result = await resolveToYouTube(ports.search, cand.artist, cand.name, excludeIds)
-    if (result) return result
-  }
-
-  return null
+  return firstInBatches(picks, cand => resolveToYouTube(ports.search, cand.artist, cand.name, excludeIds))
 }
 
 const tryArtistSwitch = async (
@@ -102,36 +122,29 @@ const tryArtistSwitch = async (
 
   const sorted = [...similarArtists].sort((a, b) => b.match - a.match)
 
-  for (const similar of sorted) {
-    const topTracks = await ports.lastfm.getArtistTopTracks(similar.name, 10)
-    if (topTracks.length === 0) continue
+  // Last.fm lookups are cheap HTTP calls: fetch every artist's top tracks at once
+  const topTracksPerArtist = await Promise.all(
+    sorted.map(similar => ports.lastfm.getArtistTopTracks(similar.name, 10)),
+  )
 
-    const candidates = [...topTracks].sort(() => Math.random() - 0.5)
-    const picks = candidates.slice(0, MAX_RETRIES)
+  // Up to MAX_RETRIES random picks per artist, ordered by artist similarity then pick round
+  const picksPerArtist = topTracksPerArtist.map(tracks =>
+    shuffled(tracks).slice(0, MAX_RETRIES).filter(cand => !wasRecentlyPlayed(cand, last5Titles)),
+  )
+  const candidates = Array.from({ length: MAX_RETRIES }, (_, round) =>
+    picksPerArtist.flatMap(picks => (picks[round] ? [picks[round]] : [])),
+  ).flat()
 
-    for (const cand of picks) {
-      const fullTitle = `${cand.artist} ${cand.name}`.toLowerCase()
-      const songLower = cand.name.toLowerCase()
-
-      const alreadyPlayed = [...last5Titles].some(
-        t => t.includes(fullTitle) || t.includes(songLower),
-      )
-      if (alreadyPlayed) continue
-
-      const result = await resolveToYouTube(ports.search, cand.artist, cand.name, excludeIds)
-      if (result) {
-        ports.logger.info("radio", "Artista rotado exitosamente", {
-          from: currentArtist,
-          to: similar.name,
-          track: result.track.title,
-          id: result.track.id,
-        })
-        return result
-      }
-    }
+  const result = await firstInBatches(candidates, cand => resolveToYouTube(ports.search, cand.artist, cand.name, excludeIds))
+  if (result) {
+    ports.logger.info("radio", "Artista rotado exitosamente", {
+      from: currentArtist,
+      track: result.track.title,
+      canonicalTitle: result.canonicalTitle,
+      id: result.track.id,
+    })
   }
-
-  return null
+  return result
 }
 
 const discoverArtistViaLastFm = async (
@@ -147,14 +160,14 @@ const discoverArtistViaLastFm = async (
   return tryLastFmRecommendation(ports, best.artist, best.name, excludeIds, last5Titles)
 }
 
-const tryGroqFallback = async (
+// LLM suggestions only (HTTP, no yt-dlp): cheap enough to request while Last.fm is being tried
+const getGroqCandidates = async (
   ports: Ports,
   artist: string,
   song: string,
-  excludeIds: ExcludeIds,
   last5Titles: Last5Set,
   artistHistory: readonly string[],
-): Promise<RadioResult | null> => {
+): Promise<readonly GroqCandidate[]> => {
   let genreTags: string[] = []
   if (artist && song) {
     const tags = await ports.lastfm.getTrackTopTags(artist, song)
@@ -164,7 +177,7 @@ const tryGroqFallback = async (
       .map(t => t.name)
   }
 
-  const groqCandidates = await ports.groq.recommend(
+  return ports.groq.recommend(
     artist || song,
     song,
     last5Titles,
@@ -172,21 +185,22 @@ const tryGroqFallback = async (
     artistHistory,
     genreTags,
   )
+}
 
-  for (const cand of groqCandidates) {
-    const result = await resolveToYouTube(ports.search, cand.artist, cand.name, excludeIds)
-    if (result) {
-      ports.logger.info("radio", "Recomendacion Groq encontrada", {
-        title: result.track.title,
-        id: result.track.id,
-        artist: cand.artist,
-        song: cand.name,
-      })
-      return result
-    }
+const resolveGroqCandidates = async (
+  ports: Ports,
+  candidates: readonly GroqCandidate[],
+  excludeIds: ExcludeIds,
+): Promise<RadioResult | null> => {
+  const result = await firstInBatches(candidates, cand => resolveToYouTube(ports.search, cand.artist, cand.name, excludeIds))
+  if (result) {
+    ports.logger.info("radio", "Recomendacion Groq encontrada", {
+      title: result.track.title,
+      id: result.track.id,
+      canonicalTitle: result.canonicalTitle,
+    })
   }
-
-  return null
+  return result
 }
 
 export const recommendAndEnqueue = async (
@@ -280,15 +294,14 @@ export const createRadioEngine = (ports: Ports) => {
       if (switchResult) return switchResult
     }
 
-    // PARALLEL: Last.fm + Groq at the same time (optimization)
-    const lastfmPromise: Promise<RadioResult | null> = artist
-      ? tryLastFmRecommendation(ports, artist, songOnly, excludeIds, last5Titles)
-      : discoverArtistViaLastFm(ports, songOnly, excludeIds, last5Titles)
+    // Ask Groq for suggestions while Last.fm is tried, but only search them on YouTube
+    // (yt-dlp processes) if Last.fm comes up empty
+    const groqCandidatesPromise = getGroqCandidates(ports, artist || songOnly, songOnly, last5Titles, artistHistory)
+      .catch((): readonly GroqCandidate[] => [])
 
-    const groqPromise: Promise<RadioResult | null> =
-      tryGroqFallback(ports, artist || songOnly, songOnly, excludeIds, last5Titles, artistHistory)
-
-    const [lastfmResult, groqResult] = await Promise.all([lastfmPromise, groqPromise])
+    const lastfmResult = artist
+      ? await tryLastFmRecommendation(ports, artist, songOnly, excludeIds, last5Titles)
+      : await discoverArtistViaLastFm(ports, songOnly, excludeIds, last5Titles)
 
     if (lastfmResult) {
       ports.logger.info("radio", "Recomendacion Last.fm encontrada", {
@@ -299,6 +312,7 @@ export const createRadioEngine = (ports: Ports) => {
       return lastfmResult
     }
 
+    const groqResult = await resolveGroqCandidates(ports, await groqCandidatesPromise, excludeIds)
     if (groqResult) return groqResult
 
     // Fallback: broad YouTube search

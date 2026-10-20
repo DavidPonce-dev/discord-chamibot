@@ -6,6 +6,9 @@ import { YTDL_SEARCH_TIMEOUT_MS } from "../../config/timeouts"
 export const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
+// Format used for playback: metadata and stream URL can come from a single yt-dlp call
+export const AUDIO_FORMAT = "bestaudio"
+
 export interface YtDlpResult {
   readonly stdout: string
   readonly stderr: string
@@ -62,7 +65,10 @@ export type YtDlpSearchEntry = Readonly<{
   track?: string
   artist?: string
   album?: string
+  audioUrl?: string
 }>
+
+const isGoogleVideoUrl = (url: string): boolean => /^https:\/\/[^/]*googlevideo\.com\//.test(url)
 
 export function parseYtDlpSearchOutput(stdout: string): YtDlpSearchEntry[] {
   const entries: YtDlpSearchEntry[] = []
@@ -71,7 +77,11 @@ export function parseYtDlpSearchOutput(stdout: string): YtDlpSearchEntry[] {
     try {
       const d = JSON.parse(line) as Record<string, unknown>
       const id = typeof d.id === "string" ? d.id : ""
-      const url = typeof d.url === "string" ? d.url : id ? `https://www.youtube.com/watch?v=${id}` : ""
+      // With a format selected (non-flat), "url" is the stream URL and "webpage_url" the video page
+      const rawUrl = typeof d.url === "string" ? d.url : ""
+      const audioUrl = isGoogleVideoUrl(rawUrl) ? rawUrl : undefined
+      const webpageUrl = typeof d.webpage_url === "string" ? d.webpage_url : ""
+      const url = webpageUrl || (audioUrl ? "" : rawUrl) || (id ? `https://www.youtube.com/watch?v=${id}` : "")
       if (!id && !url) continue
       entries.push({
         id: id || undefined,
@@ -82,6 +92,7 @@ export function parseYtDlpSearchOutput(stdout: string): YtDlpSearchEntry[] {
         track: typeof d.track === "string" ? d.track : undefined,
         artist: typeof d.artist === "string" ? d.artist : typeof d.album_artist === "string" ? d.album_artist : undefined,
         album: typeof d.album === "string" ? d.album : undefined,
+        audioUrl,
       })
     } catch {
       // skip malformed line
@@ -96,14 +107,17 @@ export async function searchYtDlp(
   query: string,
   limit: number,
   cookieStore: CookieStorePort,
-  opts: { type?: YtDlpSearchType; flat?: boolean; timeoutMs?: number } = {},
+  opts: { type?: YtDlpSearchType; flat?: boolean; timeoutMs?: number; format?: string } = {},
 ): Promise<YtDlpSearchEntry[]> {
-  const { type = "video", flat = true, timeoutMs = YTDL_SEARCH_TIMEOUT_MS } = opts
+  const { type = "video", format, timeoutMs = YTDL_SEARCH_TIMEOUT_MS } = opts
+  // Selecting a format requires full extraction, which flat mode skips
+  const flat = format ? false : opts.flat ?? true
   const q = query.trim()
   if (!q || limit <= 0) return []
 
   const extra: string[] = []
   if (flat) extra.push("--flat-playlist")
+  if (format) extra.push("-f", format)
   if (type === "playlist") extra.push("--extractor-args", "youtube:search_type=playlist")
 
   const args = buildYtDlpArgs(["--dump-json"], cookieStore, extra)

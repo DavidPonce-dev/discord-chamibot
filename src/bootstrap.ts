@@ -13,6 +13,7 @@ import { createSearchUseCases } from "./usecases/search"
 
 import { createYtDlpAudio } from "./infra/youtube/audio"
 import { createYouTubeSearch } from "./infra/youtube/search"
+import { createAudioUrlCache } from "./infra/youtube/audio-url-cache"
 import { createLastFmAdapter } from "./infra/recommendation/lastfm"
 import { createGroqAdapter } from "./infra/recommendation/groq"
 import { createRadioService } from "./infra/recommendation/radio-service"
@@ -52,8 +53,9 @@ export async function bootstrap(): Promise<void> {
   await browser.resetProfile()
 
   const blacklist = createJsonBlacklist("data/blacklist.json")
-  const audio = createYtDlpAudio(cookieStore, logger, () => browser.refresh())
-  const search = createYouTubeSearch(cookieStore, logger)
+  const audioUrlCache = createAudioUrlCache()
+  const audio = createYtDlpAudio(cookieStore, logger, () => browser.refresh(), audioUrlCache)
+  const search = createYouTubeSearch(cookieStore, logger, audioUrlCache)
 
   const lastfm = createLastFmAdapter(config.lastfm.apiKey)
   const groq = createGroqAdapter(config.groq.apiKey)
@@ -86,7 +88,7 @@ export async function bootstrap(): Promise<void> {
   const setSession = (guildId: string, session: GuildSession): void => { music.setSession(guildId, session) }
   const queueUC = createQueueUseCases(ports, music.getSession, setSession)
   let radioChangeHandler: (guildId: string) => void = () => {}
-  const radioUC = createRadioUseCases(ports, music.getSession, setSession, music.prefetchRadioUrl, (guildId) => radioChangeHandler(guildId))
+  const radioUC = createRadioUseCases(ports, music.getSession, setSession, music.prefetchNext, (guildId) => radioChangeHandler(guildId))
   const adminUC = createAdminUseCases(ports)
   const cookieUC = createCookieUseCases(ports)
   const searchUC = createSearchUseCases(ports)

@@ -233,6 +233,54 @@ describe("domain/radio - RadioEngine", () => {
     )
   })
 
+  it("does not search Groq candidates on YouTube when Last.fm succeeds", async () => {
+    const searchVideos = vi.fn(async (query: string) => [
+      { title: query, url: `https://youtube.com/watch?v=${encodeURIComponent(query)}`, id: query, durationRaw: "3:00" },
+    ])
+    const ports = createMockPorts({
+      lastfm: {
+        getSimilarTracks: async () => [{ name: "LF Song", artist: "LF Artist", match: 1, url: "" }],
+        getSimilarArtists: async () => [],
+        getArtistTopTracks: async () => [],
+        searchTrack: async () => [],
+        getTrackTopTags: async () => [],
+      },
+      groq: { recommend: async () => [{ name: "Groq Song", artist: "Groq Artist" }], parseTitle: async () => null },
+      search: { resolveQuery: async () => ok({ tracks: [] }), autocomplete: async () => [], searchVideos },
+    })
+    const result = await createRadioEngine(ports).findRelated("Artist - Song", [])
+    expect(result?.canonicalTitle).toBe("LF Artist - LF Song")
+    expect(searchVideos).toHaveBeenCalledTimes(1)
+    expect(searchVideos).not.toHaveBeenCalledWith(expect.stringContaining("Groq"), expect.anything())
+  })
+
+  it("searches candidates in parallel and keeps priority order", async () => {
+    let active = 0
+    let maxActive = 0
+    const searchVideos = vi.fn(async (query: string) => {
+      active++
+      maxActive = Math.max(maxActive, active)
+      await new Promise(r => setTimeout(r, query.includes("First") ? 20 : 5))
+      active--
+      return [{ title: query, url: `https://youtube.com/watch?v=${query.length}`, id: query, durationRaw: "3:00" }]
+    })
+    const ports = createMockPorts({
+      groq: {
+        recommend: async () => [
+          { name: "First", artist: "A" },
+          { name: "Second", artist: "B" },
+          { name: "Third", artist: "C" },
+        ],
+        parseTitle: async () => null,
+      },
+      search: { resolveQuery: async () => ok({ tracks: [] }), autocomplete: async () => [], searchVideos },
+    })
+    const result = await createRadioEngine(ports).findRelated("Artist - Song", [])
+    expect(maxActive).toBe(3)
+    // "First" is slowest but highest priority, so it still wins
+    expect(result?.canonicalTitle).toBe("A - First")
+  })
+
   it("falls back to broad YouTube search", async () => {
     const ports = createMockPorts({
       groq: { recommend: async () => [], parseTitle: async () => ({ artist: "Artist", song: "Song" }) },

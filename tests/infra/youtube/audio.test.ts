@@ -7,6 +7,7 @@ vi.mock("@/infra/youtube/ytdlp", () => ({
   buildYtDlpArgs: vi.fn((base: string[]) => [...base]),
   spawnYtDlp: vi.fn(),
   USER_AGENT: "test-agent",
+  AUDIO_FORMAT: "bestaudio",
 }))
 
 vi.mock("play-dl", () => ({

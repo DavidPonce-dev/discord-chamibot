@@ -159,9 +159,10 @@ describe("usecases/music", () => {
     })
   })
 
+  const captureIdle = (ports: Ports): ((guildId: string) => void) =>
+    (ports.player.onIdle as Mock).mock.calls[0][1] as (guildId: string) => void
+
   describe("idle handler", () => {
-    const captureIdle = (ports: Ports): ((guildId: string) => void) =>
-      (ports.player.onIdle as Mock).mock.calls[0][1] as (guildId: string) => void
 
     it("advances to the next user track on idle", async () => {
       const ports = createMockPorts({
@@ -393,6 +394,188 @@ describe("usecases/music", () => {
       await vi.waitFor(() => {
         expect(music.getSession("g1")).toBeNull()
       })
+    })
+    it("skip while paused advances to the next track", async () => {
+      const ports = createMockPorts({
+        search: {
+          ...createMockPorts().search,
+          resolveQuery: async () => ({ ok: true as const, value: { tracks: [
+            { url: "u1", title: "T1", duration: "1:00", id: "a" },
+            { url: "u2", title: "T2", duration: "1:00", id: "b" },
+          ] } }),
+        } as Ports["search"],
+      })
+      const music = createMusicUseCases(ports)
+      await music.play("multi", "g1", "u1", "v1", {})
+      music.pause("g1")
+      music.skip("g1")
+      captureIdle(ports)("g1")
+      await vi.waitFor(() => {
+        const s = music.getSession("g1")!
+        expect(s.queue.current?.title).toBe("T2")
+        expect(s.playback.isPaused).toBe(false)
+      })
+    })
+  })
+
+  describe("prefetch", () => {
+    it("prefetches the next user track and plays it from the prefetched URL", async () => {
+      const getAudioUrl = vi.fn().mockResolvedValue({ ok: true as const, value: "https://stream/next" })
+      const createFromAudioUrl = vi.fn().mockResolvedValue({ ok: true as const, value: {} })
+      const ports = createMockPorts({
+        search: {
+          ...createMockPorts().search,
+          resolveQuery: async () => ({ ok: true as const, value: { tracks: [
+            { url: "u1", title: "T1", duration: "1:00", id: "a" },
+            { url: "u2", title: "T2", duration: "1:00", id: "b" },
+          ] } }),
+        } as Ports["search"],
+        audio: { ...createMockPorts().audio, getAudioUrl, createFromAudioUrl },
+      } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("multi", "g1", "u1", "v1", {})
+
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")!.prefetchedUrl).toEqual({ trackUrl: "u2", audioUrl: "https://stream/next" })
+      })
+      expect(getAudioUrl).toHaveBeenCalledWith("u2")
+
+      captureIdle(ports)("g1")
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")!.queue.current?.title).toBe("T2")
+      })
+      expect(createFromAudioUrl).toHaveBeenCalledWith("g1", "https://stream/next")
+    })
+
+    it("prefetches a track added while another is playing", async () => {
+      const getAudioUrl = vi.fn().mockResolvedValue({ ok: true as const, value: "https://stream/added" })
+      const ports = createMockPorts({ audio: { ...createMockPorts().audio, getAudioUrl } } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("first", "g1", "u1", "v1", {})
+      await music.play("second", "g1", "u2", "v1", {})
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")!.prefetchedUrl?.audioUrl).toBe("https://stream/added")
+      })
+    })
+  })
+
+  describe("failure handling", () => {
+    const twoTracks = {
+      ...createMockPorts().search,
+      resolveQuery: async () => ({ ok: true as const, value: { tracks: [
+        { url: "u1", title: "T1", duration: "1:00", id: "a" },
+        { url: "u2", title: "T2", duration: "1:00", id: "b" },
+      ] } }),
+    } as Ports["search"]
+
+    it("registers a player error listener when joining a guild", async () => {
+      const onError = vi.fn()
+      const ports = createMockPorts({ player: { ...createMockPorts().player, onError } })
+      const music = createMusicUseCases(ports)
+      await music.play("test", "g1", "u1", "v1", {})
+      expect(onError).toHaveBeenCalledWith("g1", expect.any(Function))
+    })
+
+    it("skips a track whose audio resource fails", async () => {
+      const createResource = vi.fn()
+        .mockResolvedValueOnce({ ok: false as const, error: "broken" })
+        .mockResolvedValue({ ok: true as const, value: {} })
+      const ports = createMockPorts({
+        search: twoTracks,
+        audio: { ...createMockPorts().audio, createResource },
+      } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("multi", "g1", "u1", "v1", {})
+      const s = music.getSession("g1")!
+      expect(s.queue.current?.title).toBe("T2")
+      expect(s.queue.userTracks).toHaveLength(0)
+      expect(s.playback.isPlaying).toBe(true)
+    })
+
+    it("advances to the next track when seek fails", async () => {
+      const createResource = vi.fn()
+        .mockResolvedValueOnce({ ok: true as const, value: {} })
+        .mockResolvedValueOnce({ ok: false as const, error: "seek broken" })
+        .mockResolvedValue({ ok: true as const, value: {} })
+      const ports = createMockPorts({
+        search: twoTracks,
+        audio: { ...createMockPorts().audio, createResource },
+      } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("multi", "g1", "u1", "v1", {})
+      const result = await music.seek("g1", 30)
+      expect(result.ok).toBe(false)
+      const s = music.getSession("g1")!
+      expect(s.queue.current?.title).toBe("T2")
+      expect(s.playback.isPlaying).toBe(true)
+      expect(s.playback.seeking).toBe(false)
+    })
+
+    it("reflects the seek position in playbackStart", async () => {
+      const music = createMusicUseCases(createMockPorts())
+      await music.play("test", "g1", "u1", "v1", {})
+      const before = Date.now()
+      await music.seek("g1", 60)
+      const start = music.getSession("g1")!.playback.playbackStart!
+      expect(start).toBeLessThanOrEqual(before - 59_000)
+    })
+
+    it("does not resurrect a session destroyed while populating radio", async () => {
+      let release: () => void = () => {}
+      const gate = new Promise<void>((resolve) => { release = resolve })
+      const ports = createMockPorts({
+        recommend: {
+          findRelated: async () => {
+            await gate
+            return { track: { title: "R", url: "ur", duration: "3:00", id: "r1" }, canonicalTitle: "A - R" }
+          },
+        },
+      } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("solo", "g1", "u1", "v1", {})
+      music.setSession("g1", { ...music.getSession("g1")!, prefs: { autoplay: true, lastfmUsername: null } })
+
+      captureIdle(ports)("g1")
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")!.playback.isPlaying).toBe(false)
+      })
+      music.stop("g1")
+      release()
+      await new Promise(r => setTimeout(r, 10))
+      expect(music.getSession("g1")).toBeNull()
+    })
+
+    it("keeps tracks added while radio is being populated", async () => {
+      let release: () => void = () => {}
+      const gate = new Promise<void>((resolve) => { release = resolve })
+      let calls = 0
+      const ports = createMockPorts({
+        recommend: {
+          // Only the first (stale) recommendation is held, so it finishes last
+          findRelated: async () => {
+            if (++calls === 1) await gate
+            return { track: { title: "R", url: "ur", duration: "3:00", id: "r1" }, canonicalTitle: "A - R" }
+          },
+        },
+      } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("solo", "g1", "u1", "v1", {})
+      music.setSession("g1", { ...music.getSession("g1")!, prefs: { autoplay: true, lastfmUsername: null } })
+
+      // Track finishes and radio population starts in the background
+      music.skip("g1")
+      captureIdle(ports)("g1")
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")!.playback.isPlaying).toBe(false)
+      })
+      await music.play("another", "g1", "u2", "v1", {})
+      expect(music.getSession("g1")!.queue.current?.requestedBy).toBe("u2")
+
+      release()
+      await new Promise(r => setTimeout(r, 10))
+      const s = music.getSession("g1")!
+      expect(s.queue.current?.requestedBy).toBe("u2")
+      expect(s.playback.isPlaying).toBe(true)
     })
   })
 })

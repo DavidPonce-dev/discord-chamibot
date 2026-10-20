@@ -14,14 +14,14 @@ export const createRadioUseCases = (
   ports: Ports,
   getSession: (guildId: string) => GuildSession | null,
   setSession: (guildId: string, session: GuildSession) => void,
-  prefetchRadioUrl: (guildId: string) => Promise<void>,
+  prefetchNext: (guildId: string) => Promise<void>,
   onChange?: (guildId: string) => void,
 ): RadioUseCases => {
   const toggleAutoplay = async (guildId: string): Promise<Result<boolean, "no_session">> => {
     const session = getSession(guildId)
     if (!session) return err("no_session")
     const newAutoplay = !session.prefs.autoplay
-    let updated: GuildSession = {
+    const toggled: GuildSession = {
       ...session,
       prefs: { ...session.prefs, autoplay: newAutoplay },
       queue: newAutoplay
@@ -30,32 +30,42 @@ export const createRadioUseCases = (
       radioNext: newAutoplay ? session.radioNext : null,
       radioBaseTitle: newAutoplay ? session.radioBaseTitle : null,
     }
+    setSession(guildId, toggled)
+    onChange?.(guildId)
 
-    if (newAutoplay) {
-      ports.logger.info("radio", "Autoplay activado", {
-        guildId,
-        current: session.queue.current?.title ?? null,
-        userTracks: session.queue.userTracks.length,
-        radioTracks: session.queue.radioTracks.length,
-      })
-      setSession(guildId, updated)
-      onChange?.(guildId)
-      if (updated.queue.radioTracks.length === 0) {
-        updated = await recommendAndEnqueue(updated, ports.recommend, ports.logger)
-        setSession(guildId, updated)
-        onChange?.(guildId)
-      }
-    } else {
+    if (!newAutoplay) {
       ports.logger.info("radio", "Autoplay desactivado", {
         guildId,
         radioTracksCleared: session.queue.radioTracks.length,
       })
-      setSession(guildId, updated)
-      onChange?.(guildId)
+      return ok(false)
     }
 
-    if (newAutoplay) await prefetchRadioUrl(guildId)
-    return ok(newAutoplay)
+    ports.logger.info("radio", "Autoplay activado", {
+      guildId,
+      current: session.queue.current?.title ?? null,
+      userTracks: session.queue.userTracks.length,
+      radioTracks: session.queue.radioTracks.length,
+    })
+
+    if (toggled.queue.radioTracks.length === 0) {
+      const recommended = await recommendAndEnqueue(toggled, ports.recommend, ports.logger)
+
+      // Re-read: the session may have been destroyed or changed while recommending
+      const latest = getSession(guildId)
+      if (!latest) return err("no_session")
+      if (latest.prefs.autoplay && latest.queue.radioTracks.length === 0 && recommended.queue.radioTracks.length > 0) {
+        setSession(guildId, {
+          ...latest,
+          queue: { ...latest.queue, radioTracks: recommended.queue.radioTracks },
+          radioBaseTitle: recommended.radioBaseTitle,
+        })
+        onChange?.(guildId)
+      }
+    }
+
+    await prefetchNext(guildId)
+    return ok(true)
   }
 
   const reshuffleRadio = async (
@@ -109,7 +119,7 @@ export const createRadioUseCases = (
       }
       setSession(guildId, updated)
       onChange?.(guildId)
-      if (radioIndex === 0) await prefetchRadioUrl(guildId)
+      if (radioIndex === 0) await prefetchNext(guildId)
 
       return ok(track)
     } catch (e: unknown) {

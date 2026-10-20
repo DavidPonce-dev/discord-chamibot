@@ -67,13 +67,13 @@ describe("infra/cookie/scheduler", () => {
     scheduler.stop()
   })
 
-  it("health check re-initializes browser when not active", async () => {
+  it("does not keep the browser alive between refreshes", async () => {
     const init = vi.fn().mockResolvedValue({ ok: true })
     const isActive = vi.fn().mockReturnValue(false)
-    const scheduler = createCookieScheduler(mockBrowser({ init, isActive }), 60000, mockLogger)
+    const scheduler = createCookieScheduler(mockBrowser({ init, isActive }), 60 * 60 * 1000, mockLogger)
     scheduler.start()
-    await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
-    expect(init).toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
+    expect(init).not.toHaveBeenCalled()
     scheduler.stop()
   })
 })

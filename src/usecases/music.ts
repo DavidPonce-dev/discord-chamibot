@@ -23,7 +23,7 @@ export type MusicUseCases = Readonly<{
   startPlayback: (guildId: string) => Promise<void>
   setSession: (guildId: string, session: GuildSession) => void
   destroySession: (guildId: string) => void
-  prefetchRadioUrl: (guildId: string) => Promise<void>
+  prefetchNext: (guildId: string) => Promise<void>
   isDeployMode: () => boolean
   setDeployMode: (mode: boolean) => void
 }>
@@ -51,6 +51,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
   const sessions = new Map<string, GuildSession>()
   let deployMode = false
   const handlingIdle = new Set<string>()
+  const starting = new Set<string>()
   const MAX_STREAM_RETRIES = 2
   const streamRetries = new Map<string, number>()
 
@@ -79,7 +80,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
 
   const startPlayback = async (guildId: string): Promise<void> => {
     const session = sessions.get(guildId)
-    if (!session || session.playback.isPlaying) return
+    if (!session || session.playback.isPlaying || starting.has(guildId)) return
 
     const { track, queue: newQueue } = Queue.dequeue(session.queue, session.prefs.autoplay)
     if (!track?.url) {
@@ -97,24 +98,47 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     ports.audio.killProcess(guildId)
     ports.player.stop(guildId)
 
+    // Commit the dequeue before awaiting so concurrent changes (e.g. /p) are not overwritten
+    sessions.set(guildId, { ...session, queue: newQueue })
     const prefetched = session.prefetchedUrl?.trackUrl === track.url ? session.prefetchedUrl : null
-    const resourceResult = prefetched
-      ? await ports.audio.createFromAudioUrl(guildId, prefetched.audioUrl)
-      : await ports.audio.createResource(guildId, track.url)
+    starting.add(guildId)
+    let resourceResult: Awaited<ReturnType<typeof ports.audio.createResource>>
+    try {
+      resourceResult = prefetched
+        ? await ports.audio.createFromAudioUrl(guildId, prefetched.audioUrl)
+        : await ports.audio.createResource(guildId, track.url)
+    } finally {
+      starting.delete(guildId)
+    }
+
+    const latest = sessions.get(guildId)
+    if (!latest) {
+      // Session destroyed while the resource was being created
+      if (resourceResult.ok) ports.audio.killProcess(guildId)
+      return
+    }
+
     if (!resourceResult.ok) {
-      ports.logger.error("music", "Failed to create audio resource", { error: resourceResult.error })
+      ports.logger.error("music", "Failed to create audio resource, saltando pista", {
+        guildId,
+        track: track.title,
+        error: resourceResult.error,
+      })
+      sessions.set(guildId, { ...latest, prefetchedUrl: null })
+      await startPlayback(guildId)
       return
     }
 
     ports.player.play(guildId, resourceResult.value)
-    const playing = Session.setPlaying({ ...session, queue: newQueue }, track)
+    const playing = Session.setPlaying(latest, track)
     const updated = track.requestedBy !== "radio"
       ? { ...playing, radioBaseTitle: null, prefetchedUrl: null }
       : { ...playing, prefetchedUrl: null }
     sessions.set(guildId, updated)
     onTrackChange(guildId)
+    prefetchNextInBackground(guildId)
 
-    if (newQueue.userTracks.length === 0 && newQueue.radioTracks.length === 0 && session.prefs.autoplay) {
+    if (updated.queue.userTracks.length === 0 && updated.queue.radioTracks.length === 0 && updated.prefs.autoplay) {
       ports.logger.debug("music", "startPlayback: cola agotada, poblando radio", { guildId })
       populateRadio(guildId)
         .then(() => onTrackChange(guildId))
@@ -184,6 +208,12 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     handleTrackFinished(guildId).finally(() => { handlingIdle.delete(guildId) })
   }
 
+  // Without a listener, an "error" event from the player would crash the process.
+  // The player goes Idle after an error, so the idle handler advances the queue.
+  const handlePlayerError = (guildId: string, e: Error): void => {
+    ports.logger.error("music", "Error en el reproductor de audio", { guildId, error: e.message })
+  }
+
   const populateRadio = async (guildId: string): Promise<void> => {
     const session = sessions.get(guildId)
     if (!session || !session.prefs.autoplay || session.queue.radioTracks.length > 0) return
@@ -194,30 +224,53 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
       last5Count: session.last5Tracks.length,
     })
 
-    const updated = await recommendAndEnqueue(session, ports.recommend, ports.logger)
-    sessions.set(guildId, updated)
-    await prefetchRadioUrl(guildId)
+    const recommended = await recommendAndEnqueue(session, ports.recommend, ports.logger)
+
+    // Re-read: the session may have been destroyed or changed while recommending
+    const latest = sessions.get(guildId)
+    if (!latest || !latest.prefs.autoplay || latest.queue.radioTracks.length > 0) return
+    if (recommended.queue.radioTracks.length === 0) return
+    sessions.set(guildId, {
+      ...latest,
+      queue: { ...latest.queue, radioTracks: recommended.queue.radioTracks },
+      radioBaseTitle: recommended.radioBaseTitle,
+    })
+    await prefetchNext(guildId)
   }
 
-  const prefetchRadioUrl = async (guildId: string): Promise<void> => {
+  // The track startPlayback will dequeue next (same order as Queue.dequeue)
+  const peekNext = (s: GuildSession): Track | undefined =>
+    s.queue.userTracks[0] ?? (s.prefs.autoplay ? s.queue.radioTracks[0] : undefined)
+
+  // Resolve the next track's stream URL ahead of time so there is no gap between tracks
+  const prefetchNext = async (guildId: string): Promise<void> => {
     const session = sessions.get(guildId)
     if (!session) return
-    const nextRadio = session.queue.radioTracks[0]
-    if (!nextRadio?.url) return
-    if (session.prefetchedUrl?.trackUrl === nextRadio.url) return
+    const next = peekNext(session)
+    if (!next?.url) return
+    if (session.prefetchedUrl?.trackUrl === next.url) return
 
-    const result = await ports.audio.getAudioUrl(nextRadio.url)
+    const result = await ports.audio.getAudioUrl(next.url)
     if (!result.ok) {
-      ports.logger.debug("audio", "Prefetch de URL de radio fallo", {
+      ports.logger.debug("audio", "Prefetch de URL fallo", {
         guildId,
-        track: nextRadio.title,
+        track: next.title,
         error: result.error,
       })
       return
     }
+
+    const latest = sessions.get(guildId)
+    if (!latest || peekNext(latest)?.url !== next.url) return
     sessions.set(guildId, {
-      ...session,
-      prefetchedUrl: { trackUrl: nextRadio.url, audioUrl: result.value },
+      ...latest,
+      prefetchedUrl: { trackUrl: next.url, audioUrl: result.value },
+    })
+  }
+
+  const prefetchNextInBackground = (guildId: string): void => {
+    prefetchNext(guildId).catch((e: unknown) => {
+      ports.logger.debug("audio", "Error en prefetch", { guildId, error: String(e) })
     })
   }
 
@@ -239,6 +292,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
       if (!joined.ok) return err("voice_join_failed")
       ports.player.subscribeToConnection(guildId)
       ports.player.onIdle(guildId, handleIdle)
+      ports.player.onError(guildId, handlePlayerError)
       session = Session.createSession(guildId, voiceChannelId)
     }
 
@@ -250,6 +304,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     sessions.set(guildId, { ...session, queue: newQueue, prefetchedUrl: null })
 
     if (!session.playback.isPlaying) await startPlayback(guildId)
+    else prefetchNextInBackground(guildId)
 
     return ok(tracks)
   }
@@ -257,6 +312,8 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
   const skip = (guildId: string): Result<void, "no_session"> => {
     const session = getSession(guildId)
     if (!session) return err("no_session")
+    // The idle handler ignores paused sessions, so clear the pause before stopping
+    if (session.playback.isPaused) sessions.set(guildId, Session.setResumed(session))
     ports.audio.killProcess(guildId)
     ports.player.stop(guildId)
     return ok(undefined)
@@ -302,14 +359,29 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
 
     await new Promise(resolve => setTimeout(resolve, 100))
 
-    const resource = await ports.audio.createResource(guildId, session.queue.current.url, seconds)
+    const current = session.queue.current
+    const resource = await ports.audio.createResource(guildId, current.url, seconds)
+
+    const latest = sessions.get(guildId)
+    if (!latest) {
+      if (resource.ok) ports.audio.killProcess(guildId)
+      return err("no_session")
+    }
+
     if (!resource.ok) {
-      sessions.set(guildId, Session.setSeeking(base, false))
+      // The player is already stopped and its idle event was ignored while seeking:
+      // advance as if the track had finished instead of leaving silence
+      sessions.set(guildId, Session.setResumed(Session.setSeeking(latest, false)))
+      await handleTrackFinished(guildId)
       return err("seek_failed")
     }
 
     ports.player.play(guildId, resource.value)
-    sessions.set(guildId, Session.setPlaying(base, session.queue.current))
+    const playing = Session.setPlaying({ ...latest, prefetchedUrl: null }, current)
+    sessions.set(guildId, {
+      ...playing,
+      playback: { ...playing.playback, playbackStart: Date.now() - seconds * 1000 },
+    })
     return ok(undefined)
   }
 
@@ -325,7 +397,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     startPlayback,
     setSession,
     destroySession,
-    prefetchRadioUrl,
+    prefetchNext,
     isDeployMode: () => deployMode,
     setDeployMode: (mode: boolean) => { deployMode = mode },
   } as const

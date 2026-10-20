@@ -3,7 +3,8 @@ import type { TrackSearchPort, CookieStorePort, LoggerPort } from "../../domain/
 import { withCookieRetry } from "../../domain/ports"
 import { ok, err, type Result } from "../../shared/result"
 import type { ResolveResult, ResolvedTrack, AutocompleteChoice, VideoSearchResult } from "../../domain/types"
-import { buildYtDlpArgs, spawnYtDlp, searchYtDlp } from "./ytdlp"
+import { buildYtDlpArgs, spawnYtDlp, searchYtDlp, AUDIO_FORMAT } from "./ytdlp"
+import { isDirectAudioUrl, type AudioUrlCache } from "./audio-url-cache"
 import { formatTime } from "../../shared/format"
 import { sanitizeYouTubeUrl, extractVideoId, youtubeThumbnail } from "../../domain/track-parser"
 import { YTDL_RESOLVE_TIMEOUT_MS, AUTOCOMPLETE_FALLBACK_TIMEOUT_MS } from "../../config/timeouts"
@@ -12,10 +13,12 @@ import { createSuggestionProvider } from "./suggestions"
 const resolveWithYtDlp = async (
   url: string,
   cookieStore: CookieStorePort,
+  audioCache?: AudioUrlCache,
 ): Promise<Result<ResolvedTrack, string>> => {
   return withCookieRetry(
     async () => {
-      const args = buildYtDlpArgs(["--dump-json"], cookieStore)
+      // Selecting the audio format returns the stream URL too, saving a second yt-dlp call at playback
+      const args = buildYtDlpArgs(["--dump-json", "-f", AUDIO_FORMAT], cookieStore)
       args.push(url)
 
       try {
@@ -30,6 +33,7 @@ const resolveWithYtDlp = async (
         const duration = data.duration ?? 0
         const id = data.id ?? extractVideoId(url) ?? ""
         const durationStr = formatTime(duration)
+        if (typeof data.url === "string" && isDirectAudioUrl(data.url)) audioCache?.set(url, data.url)
         return ok({
           url,
           title,
@@ -52,6 +56,7 @@ const resolveWithYtDlp = async (
 export const createYouTubeSearch = (
   cookieStore: CookieStorePort,
   _logger: LoggerPort,
+  audioCache?: AudioUrlCache,
 ): TrackSearchPort => {
   const suggestionsProvider = createSuggestionProvider()
   const resolveQuery = async (query: string): Promise<Result<ResolveResult, string>> => {
@@ -81,7 +86,7 @@ export const createYouTubeSearch = (
         const cleanUrl = sanitizeYouTubeUrl(query)
         const id = extractVideoId(cleanUrl)
 
-        const ytDlpResult = await resolveWithYtDlp(cleanUrl, cookieStore)
+        const ytDlpResult = await resolveWithYtDlp(cleanUrl, cookieStore, audioCache)
         if (ytDlpResult.ok) {
           return ok({ tracks: [ytDlpResult.value] })
         }
@@ -107,10 +112,17 @@ export const createYouTubeSearch = (
 
     const cleanQuery = query.replace(/^\p{Extended_Pictographic}+(?:\s+)?/u, "").trim() || query
 
-    const results = await searchYtDlp(cleanQuery, 1, cookieStore)
+    // Full extraction with the audio format: one call yields metadata + stream URL.
+    // Fall back to a flat search if it fails (e.g. the top result has no audio format).
+    let results = await searchYtDlp(cleanQuery, 1, cookieStore, {
+      format: AUDIO_FORMAT,
+      timeoutMs: YTDL_RESOLVE_TIMEOUT_MS,
+    })
+    if (results.length === 0) results = await searchYtDlp(cleanQuery, 1, cookieStore)
     if (results.length > 0) {
       const video = results[0]
       const id = video.id
+      if (video.url && video.audioUrl) audioCache?.set(video.url, video.audioUrl)
       return ok({
         tracks: [{
           url: video.url ?? `https://youtube.com/watch?v=${id}`,

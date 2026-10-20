@@ -9,7 +9,7 @@ describe("usecases/radio", () => {
     const music = createMusicUseCases(ports)
     await music.play("test", "g1", "u1", "v1", {})
     const setSession = (guildId: string, session: Parameters<typeof music.setSession>[1]) => music.setSession(guildId, session)
-    const radio = createRadioUseCases(ports, music.getSession, setSession, music.prefetchRadioUrl)
+    const radio = createRadioUseCases(ports, music.getSession, setSession, music.prefetchNext)
     return { music, radio }
   }
 
@@ -17,7 +17,7 @@ describe("usecases/radio", () => {
     it("returns error with no session", async () => {
       const ports = createMockPorts()
       const music = createMusicUseCases(ports)
-      const radio = createRadioUseCases(ports, music.getSession, () => {}, music.prefetchRadioUrl)
+      const radio = createRadioUseCases(ports, music.getSession, () => {}, music.prefetchNext)
       const result = await radio.toggleAutoplay("g1")
       expect(result.ok).toBe(false)
     })
@@ -55,7 +55,7 @@ describe("usecases/radio", () => {
       const music = createMusicUseCases(ports)
       await music.play("test", "g1", "u1", "v1", {})
       const setSession = (guildId: string, session: Parameters<typeof music.setSession>[1]) => music.setSession(guildId, session)
-      const radio = createRadioUseCases(ports, music.getSession, setSession, music.prefetchRadioUrl)
+      const radio = createRadioUseCases(ports, music.getSession, setSession, music.prefetchNext)
 
       const result = await radio.toggleAutoplay("g1")
       expect(result.ok).toBe(true)
@@ -103,7 +103,7 @@ describe("usecases/radio", () => {
         ports,
         music.getSession,
         (guildId, session) => music.setSession(guildId, session),
-        music.prefetchRadioUrl,
+        music.prefetchNext,
         onChange,
       )
 
@@ -126,7 +126,7 @@ describe("usecases/radio", () => {
         ports,
         music.getSession,
         (guildId, session) => music.setSession(guildId, session),
-        music.prefetchRadioUrl,
+        music.prefetchNext,
         onChange,
       )
 
@@ -142,7 +142,7 @@ describe("usecases/radio", () => {
     it("returns error with no session", async () => {
       const ports = createMockPorts()
       const music = createMusicUseCases(ports)
-      const radio = createRadioUseCases(ports, music.getSession, () => {}, music.prefetchRadioUrl)
+      const radio = createRadioUseCases(ports, music.getSession, () => {}, music.prefetchNext)
       const result = await radio.reshuffleRadio("g1", 0)
       expect(result.ok).toBe(false)
     })
@@ -162,7 +162,7 @@ describe("usecases/radio", () => {
       const music = createMusicUseCases(ports)
       await music.play("test", "g1", "u1", "v1", {})
       const setSession = (guildId: string, session: Parameters<typeof music.setSession>[1]) => music.setSession(guildId, session)
-      const radio = createRadioUseCases(ports, music.getSession, setSession, music.prefetchRadioUrl)
+      const radio = createRadioUseCases(ports, music.getSession, setSession, music.prefetchNext)
       await radio.toggleAutoplay("g1")
 
       const result = await radio.reshuffleRadio("g1", 0)
@@ -202,7 +202,7 @@ describe("usecases/radio", () => {
         ports,
         music.getSession,
         (guildId, session) => music.setSession(guildId, session),
-        music.prefetchRadioUrl,
+        music.prefetchNext,
         onChange,
       )
       await radio.toggleAutoplay("g1")
@@ -240,7 +240,7 @@ describe("usecases/radio", () => {
         ports,
         music.getSession,
         (guildId, session) => music.setSession(guildId, session),
-        music.prefetchRadioUrl,
+        music.prefetchNext,
       )
       await radio.toggleAutoplay("g1")
 

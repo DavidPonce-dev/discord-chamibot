@@ -1,14 +1,11 @@
 import type { BrowserPort, LoggerPort } from "../../domain/ports"
 
-const BROWSER_HEALTH_CHECK_MS = 5 * 60 * 1000
-
 export const createCookieScheduler = (
   browser: BrowserPort,
   intervalMs: number,
   logger: LoggerPort,
 ) => {
   let timer: NodeJS.Timeout | null = null
-  let healthTimer: NodeJS.Timeout | null = null
   let isRunning = false
   let isRefreshing = false
 
@@ -31,28 +28,18 @@ export const createCookieScheduler = (
     }
   }
 
-  const runHealthCheck = async (): Promise<void> => {
-    if (!browser.isActive()) {
-      logger.info("cookies", "Health check: browser not running, re-initializing")
-      await browser.init()
-      return
-    }
-  }
-
+  // The browser is launched on demand by each refresh and closed afterwards,
+  // so there is no need to keep it alive between refreshes
   const start = (): void => {
     if (isRunning) return
     isRunning = true
 
     timer = setInterval(() => { runRefresh() }, intervalMs)
     timer.unref()
-
-    healthTimer = setInterval(() => { runHealthCheck() }, BROWSER_HEALTH_CHECK_MS)
-    healthTimer.unref()
   }
 
   const pause = (): void => {
     if (timer) { clearInterval(timer); timer = null }
-    if (healthTimer) { clearInterval(healthTimer); healthTimer = null }
   }
 
   const resume = (): void => {

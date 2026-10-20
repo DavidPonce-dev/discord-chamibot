@@ -7,7 +7,7 @@ import type { SearchUseCases } from "../../usecases/search"
 import type { LoggerPort } from "../../domain/ports"
 import type { GuildSession } from "../../domain/types"
 import { buildHelpEmbed } from "../ui/help-embed"
-import { replyTemporaryEmbed, replyTemporary, silentReply } from "../../shared/messages"
+import { replyTemporaryEmbed, replyTemporary, editTemporary, silentReply } from "../../shared/messages"
 
 type UseCaseBundle = Readonly<{
   music: MusicUseCases
@@ -207,17 +207,19 @@ export const createCommandHandlers = (bundle: UseCaseBundle): Record<string, Com
     },
 
     ap: async (interaction, guildId) => {
-      const session = music.getSession(guildId)
-      if (session) {
-        const result = await radio.toggleAutoplay(guildId)
-        if (result.ok) {
-          await replyTemporary(interaction, `Autoplay: ${result.value ? "Activado" : "Desactivado"}`)
-          updateUI(guildId)
-          return
-        }
+      if (!music.getSession(guildId)) {
+        await interaction.reply({ content: "No hay sesion activa", ephemeral: true })
+        return
       }
-      // No session - toggle pref for future sessions
-      await replyTemporary(interaction, "Autoplay: preferencia guardada para proxima sesion")
+      // Enabling autoplay generates a recommendation (several seconds): defer to stay within Discord's 3s limit
+      await interaction.deferReply()
+      const result = await radio.toggleAutoplay(guildId)
+      if (!result.ok) {
+        await editTemporary(interaction, "No hay sesion activa")
+        return
+      }
+      await editTemporary(interaction, `Autoplay: ${result.value ? "Activado" : "Desactivado"}`)
+      updateUI(guildId)
     },
 
     h: async (interaction) => {
