@@ -17,6 +17,13 @@ export const createRadioUseCases = (
   prefetchNext: (guildId: string) => Promise<void>,
   onChange?: (guildId: string) => void,
 ): RadioUseCases => {
+  // The stream URL is only needed when the current track ends: never make the user wait for it
+  const prefetchInBackground = (guildId: string): void => {
+    prefetchNext(guildId).catch((e: unknown) => {
+      ports.logger.debug("radio", "Error en prefetch", { guildId, error: String(e) })
+    })
+  }
+
   const toggleAutoplay = async (guildId: string): Promise<Result<boolean, "no_session">> => {
     const session = getSession(guildId)
     if (!session) return err("no_session")
@@ -27,7 +34,6 @@ export const createRadioUseCases = (
       queue: newAutoplay
         ? session.queue
         : Queue.clearRadio(session.queue),
-      radioNext: newAutoplay ? session.radioNext : null,
       radioBaseTitle: newAutoplay ? session.radioBaseTitle : null,
     }
     setSession(guildId, toggled)
@@ -64,7 +70,7 @@ export const createRadioUseCases = (
       }
     }
 
-    await prefetchNext(guildId)
+    prefetchInBackground(guildId)
     return ok(true)
   }
 
@@ -119,7 +125,7 @@ export const createRadioUseCases = (
       }
       setSession(guildId, updated)
       onChange?.(guildId)
-      if (radioIndex === 0) await prefetchNext(guildId)
+      if (radioIndex === 0) prefetchInBackground(guildId)
 
       return ok(track)
     } catch (e: unknown) {

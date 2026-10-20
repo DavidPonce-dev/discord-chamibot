@@ -50,7 +50,6 @@ export type GuildSession = Readonly<{
   sameArtistStreak: number
   currentArtist: string | null
   radioBaseTitle: string | null
-  radioNext: Track | null
   reshufflingRadioIndex: number | null
   destroyed: boolean
 }>
@@ -81,7 +80,6 @@ export type ResolvedTrack = Readonly<{
 export type ResolveResult = Readonly<{
   tracks: readonly ResolvedTrack[]
   playlistTitle?: string
-  type?: "single" | "album" | "playlist"
 }>
 
 export type VideoSearchResult = Readonly<{
@@ -192,5 +190,4 @@ export type CookieRefresherConfig = Readonly<{
   cookieDir: string
   cookieFile: string
   browserProfile: string
-  refreshTimeoutMs: number
 }>

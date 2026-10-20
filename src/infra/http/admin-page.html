@@ -404,12 +404,6 @@
       <div id="browser-status" style="margin-bottom: 1rem; color: #888">
         Unknown
       </div>
-      <button class="btn success" onclick="startBrowser()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <polygon points="5,3 19,12 5,21" />
-        </svg>
-        Start Browser
-      </button>
       <button class="btn warning" onclick="closeBrowserAction()">
         <svg
           width="14"
@@ -673,21 +667,6 @@
           );
         } catch (e) {
           log("Status check failed: " + e.message);
-        }
-      }
-      async function startBrowser() {
-        log("Starting headless browser...");
-        try {
-          const r = await apiFetch("/browser/start", { method: "POST" });
-          const d = await r.json();
-          if (d.error) {
-            log("Error: " + d.error);
-            return;
-          }
-          log("Browser started");
-          checkStatus();
-        } catch (e) {
-          log("Start browser failed: " + e.message);
         }
       }
       async function closeBrowserAction() {

@@ -9,7 +9,7 @@ describe("usecases/queue", () => {
     const music = createMusicUseCases(ports)
     await music.play("test", "g1", "u1", "v1", {})
     const setSession = (guildId: string, session: Parameters<typeof music.setSession>[1]) => music.setSession(guildId, session)
-    const queue = createQueueUseCases(ports, music.getSession, setSession)
+    const queue = createQueueUseCases(music.getSession, setSession)
     return { music, queue }
   }
 
@@ -17,7 +17,7 @@ describe("usecases/queue", () => {
     it("returns error with no session", () => {
       const ports = createMockPorts()
       const music = createMusicUseCases(ports)
-      const queue = createQueueUseCases(ports, music.getSession, () => {})
+      const queue = createQueueUseCases(music.getSession, () => {})
       const result = queue.getQueue("g1", 1)
       expect(result.ok).toBe(false)
     })
@@ -37,7 +37,7 @@ describe("usecases/queue", () => {
     it("returns error with no session", () => {
       const ports = createMockPorts()
       const music = createMusicUseCases(ports)
-      const queue = createQueueUseCases(ports, music.getSession, () => {})
+      const queue = createQueueUseCases(music.getSession, () => {})
       expect(queue.shuffleQueue("g1").ok).toBe(false)
     })
   })
@@ -54,14 +54,14 @@ describe("usecases/queue", () => {
     it("moveUp returns invalid for no session", () => {
       const ports = createMockPorts()
       const music = createMusicUseCases(ports)
-      const queue = createQueueUseCases(ports, music.getSession, () => {})
+      const queue = createQueueUseCases(music.getSession, () => {})
       expect(queue.moveUp("g1", 0).ok).toBe(false)
     })
 
     it("moveDown returns invalid for no session", () => {
       const ports = createMockPorts()
       const music = createMusicUseCases(ports)
-      const queue = createQueueUseCases(ports, music.getSession, () => {})
+      const queue = createQueueUseCases(music.getSession, () => {})
       expect(queue.moveDown("g1", 0).ok).toBe(false)
     })
   })
@@ -70,7 +70,7 @@ describe("usecases/queue", () => {
     it("returns error with no session", () => {
       const ports = createMockPorts()
       const music = createMusicUseCases(ports)
-      const queue = createQueueUseCases(ports, music.getSession, () => {})
+      const queue = createQueueUseCases(music.getSession, () => {})
       expect(queue.toggleLoop("g1").ok).toBe(false)
     })
 

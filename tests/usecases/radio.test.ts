@@ -65,10 +65,36 @@ describe("usecases/radio", () => {
       expect(session.queue.radioTracks).toHaveLength(1)
       expect(session.queue.radioTracks[0].id).toBe("next")
       expect(session.radioBaseTitle).toBe("Artist - Next Song")
-      expect(session.prefetchedUrl).toEqual({
-        trackUrl: "https://youtube.com/watch?v=next",
-        audioUrl: "https://audio.example/stream",
+      // Prefetch runs in the background
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")!.prefetchedUrl).toEqual({
+          trackUrl: "https://youtube.com/watch?v=next",
+          audioUrl: "https://audio.example/stream",
+        })
       })
+    })
+
+    it("does not wait for the stream URL prefetch before returning", async () => {
+      const ports = createMockPorts({
+        recommend: {
+          findRelated: async () => ({
+            track: { title: "Next", url: "https://youtube.com/watch?v=next", duration: "3:00", id: "next" },
+            canonicalTitle: "Artist - Next",
+          }),
+        },
+      })
+      const music = createMusicUseCases(ports)
+      await music.play("test", "g1", "u1", "v1", {})
+      const radio = createRadioUseCases(
+        ports,
+        music.getSession,
+        (guildId, session) => music.setSession(guildId, session),
+        () => new Promise<void>(() => {}),
+      )
+
+      const result = await radio.toggleAutoplay("g1")
+      expect(result.ok).toBe(true)
+      expect(music.getSession("g1")!.queue.radioTracks).toHaveLength(1)
     })
 
     it("does not enqueue a radio track when findRelated returns null", async () => {
@@ -176,7 +202,9 @@ describe("usecases/radio", () => {
 
       const session = music.getSession("g1")!
       expect(session.queue.radioTracks[0].id).toBe("shuf")
-      expect(session.prefetchedUrl?.trackUrl).toBe("https://youtube.com/watch?v=shuf")
+      await vi.waitFor(() => {
+        expect(music.getSession("g1")!.prefetchedUrl?.trackUrl).toBe("https://youtube.com/watch?v=shuf")
+      })
     })
 
     it("marks the track as reshuffling, ignores re-presses and refreshes UI on start", async () => {

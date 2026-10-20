@@ -25,7 +25,6 @@ export const createSession = (guildId: string, voiceChannelId: string): GuildSes
   sameArtistStreak: 0,
   currentArtist: null,
   radioBaseTitle: null,
-  radioNext: null,
   reshufflingRadioIndex: null,
   destroyed: false,
 })

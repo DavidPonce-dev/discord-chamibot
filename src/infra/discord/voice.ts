@@ -37,16 +37,7 @@ export const createDiscordVoice = (): VoiceConnectionPort => {
     }
   }
 
-  const isConnected = (guildId: string): boolean => {
-    const conn = connections.get(guildId)
-    if (!conn) return false
-    const status = conn.state.status
-    return status === VoiceConnectionStatus.Ready ||
-      status === VoiceConnectionStatus.Connecting ||
-      status === VoiceConnectionStatus.Signalling
-  }
-
-  return { join, destroy, isConnected } as const
+  return { join, destroy } as const
 }
 
 export const createDiscordPlayer = (): AudioPlayerPort => {
@@ -77,9 +68,6 @@ export const createDiscordPlayer = (): AudioPlayerPort => {
     getPlayer(guildId).unpause()
   }
 
-  const isPaused = (guildId: string): boolean =>
-    getPlayer(guildId).state.status === AudioPlayerStatus.Paused
-
   const onIdle = (guildId: string, cb: (guildId: string) => void): void => {
     getPlayer(guildId).on(AudioPlayerStatus.Idle, () => cb(guildId))
   }
@@ -87,8 +75,6 @@ export const createDiscordPlayer = (): AudioPlayerPort => {
   const onError = (guildId: string, cb: (guildId: string, err: Error) => void): void => {
     getPlayer(guildId).on("error", (e: Error) => cb(guildId, e))
   }
-
-  const getStatus = (guildId: string): string => getPlayer(guildId).state.status
 
   const subscribeToConnection = (guildId: string): void => {
     const conn = connections.get(guildId)
@@ -105,5 +91,5 @@ export const createDiscordPlayer = (): AudioPlayerPort => {
     }
   }
 
-  return { play, stop, pause, unpause, isPaused, onIdle, onError, getStatus, subscribeToConnection, destroy } as const
+  return { play, stop, pause, unpause, onIdle, onError, subscribeToConnection, destroy } as const
 }

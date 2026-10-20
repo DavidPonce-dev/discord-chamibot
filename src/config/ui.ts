@@ -1,11 +1,3 @@
-import type { LoopMode } from "../domain/types"
-
-export const LOOP_LABELS = {
-  none: "❌ Desactivado",
-  one: "🔂 Repetir uno",
-  all: "🔁 Repetir todo",
-} as const satisfies Record<LoopMode, string>
-
 export const BUTTON_PREFIXES = {
   queueUp: "q_up_",
   queueDown: "q_down_",

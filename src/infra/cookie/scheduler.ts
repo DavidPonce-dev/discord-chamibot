@@ -9,20 +9,18 @@ export const createCookieScheduler = (
   let isRunning = false
   let isRefreshing = false
 
-  const runRefresh = async (): Promise<boolean> => {
-    if (isRefreshing) return false
+  const runRefresh = async (): Promise<void> => {
+    if (isRefreshing) return
     isRefreshing = true
     try {
       const result = await browser.refresh()
       if (result.success) {
         logger.info("cookies", "Scheduled refresh completed", { cookieCount: result.cookieCount })
-        return true
+        return
       }
       logger.error("cookies", "Scheduled refresh failed", { error: result.error })
-      return false
     } catch (e: unknown) {
       logger.error("cookies", "Error during scheduled refresh", { error: String(e) })
-      return false
     } finally {
       isRefreshing = false
     }
@@ -30,21 +28,25 @@ export const createCookieScheduler = (
 
   // The browser is launched on demand by each refresh and closed afterwards,
   // so there is no need to keep it alive between refreshes
+  const schedule = (): void => {
+    if (timer) return
+    timer = setInterval(() => { runRefresh() }, intervalMs)
+    timer.unref()
+  }
+
   const start = (): void => {
     if (isRunning) return
     isRunning = true
-
-    timer = setInterval(() => { runRefresh() }, intervalMs)
-    timer.unref()
+    schedule()
   }
 
   const pause = (): void => {
     if (timer) { clearInterval(timer); timer = null }
   }
 
+  // Resume only a started scheduler (pause during the VNC login keeps isRunning true)
   const resume = (): void => {
-    if (!isRunning) return
-    start()
+    if (isRunning) schedule()
   }
 
   const stop = (): void => {
@@ -53,9 +55,7 @@ export const createCookieScheduler = (
     pause()
   }
 
-  const refreshNow = (): Promise<boolean> => runRefresh()
-
-  return { start, pause, resume, stop, refreshNow, get running() { return isRunning } } as const
+  return { start, pause, resume, stop } as const
 }
 
 export type CookieScheduler = ReturnType<typeof createCookieScheduler>

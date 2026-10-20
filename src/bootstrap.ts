@@ -46,7 +46,6 @@ export async function bootstrap(): Promise<void> {
     cookieDir: config.youtube.cookieDir,
     cookieFile: cookieFilePath,
     browserProfile: config.youtube.browserProfile,
-    refreshTimeoutMs: 60_000,
   }, logger)
 
   logger.info("bootstrap", "Reiniciando perfil de navegador (deploy limpio)")
@@ -55,7 +54,7 @@ export async function bootstrap(): Promise<void> {
   const blacklist = createJsonBlacklist("data/blacklist.json")
   const audioUrlCache = createAudioUrlCache()
   const audio = createYtDlpAudio(cookieStore, logger, () => browser.refresh(), audioUrlCache)
-  const search = createYouTubeSearch(cookieStore, logger, audioUrlCache)
+  const search = createYouTubeSearch(cookieStore, audioUrlCache)
 
   const lastfm = createLastFmAdapter(config.lastfm.apiKey)
   const groq = createGroqAdapter(config.groq.apiKey)
@@ -86,7 +85,7 @@ export async function bootstrap(): Promise<void> {
   let trackChangeHandler: (guildId: string) => void = () => {}
   const music = createMusicUseCases(ports, { onTrackChange: (guildId) => trackChangeHandler(guildId) })
   const setSession = (guildId: string, session: GuildSession): void => { music.setSession(guildId, session) }
-  const queueUC = createQueueUseCases(ports, music.getSession, setSession)
+  const queueUC = createQueueUseCases(music.getSession, setSession)
   let radioChangeHandler: (guildId: string) => void = () => {}
   const radioUC = createRadioUseCases(ports, music.getSession, setSession, music.prefetchNext, (guildId) => radioChangeHandler(guildId))
   const adminUC = createAdminUseCases(ports)

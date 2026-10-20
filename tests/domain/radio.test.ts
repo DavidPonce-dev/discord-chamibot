@@ -29,11 +29,11 @@ const createMockPorts = (overrides: Partial<Ports> = {}): Ports => ({
     recommend: async () => [],
     parseTitle: async () => null,
   },
-  voice: { join: async () => ok(undefined), destroy: () => {}, isConnected: () => true },
-  player: { play: () => {}, stop: () => {}, pause: () => {}, unpause: () => {}, isPaused: () => false, onIdle: () => {}, onError: () => {}, getStatus: () => "idle" },
+  voice: { join: async () => ok(undefined), destroy: () => {} },
+  player: { play: () => {}, stop: () => {}, pause: () => {}, unpause: () => {}, onIdle: () => {}, onError: () => {} },
   notify: { sendQueueUpdate: async () => {}, editMessage: async () => {}, deleteMessage: async () => {} },
-  cookieStore: { read: () => null, write: () => {}, validate: () => ({ isValid: false, cookieCount: 0, cookieNames: [], hasPSID: false, hasSID: false, lastModified: null }), delete: () => {}, filePath: () => null },
-  browser: { init: async () => ok(undefined), close: async () => {}, refresh: async () => ({ success: true, timestamp: "" }), extract: async () => ({ success: true, timestamp: "" }), setupLogin: async () => ok({ url: "", instructions: "" }), isActive: () => false, resetProfile: async () => {} },
+  cookieStore: { read: () => null, validate: () => ({ isValid: false, cookieCount: 0, cookieNames: [], hasPSID: false, hasSID: false, lastModified: null }), delete: () => {}, filePath: () => null },
+  browser: { close: async () => {}, refresh: async () => ({ success: true, timestamp: "" }), extract: async () => ({ success: true, timestamp: "" }), setupLogin: async () => ok({ url: "", instructions: "" }), isActive: () => false, resetProfile: async () => {} },
   blacklist: { getAll: () => [], add: () => {}, remove: () => false, isBlacklisted: () => false },
   guilds: { list: () => [], leave: async () => ok(undefined), voiceChannelName: () => null },
   logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, event: () => {} },
@@ -279,6 +279,33 @@ describe("domain/radio - RadioEngine", () => {
     expect(maxActive).toBe(3)
     // "First" is slowest but highest priority, so it still wins
     expect(result?.canonicalTitle).toBe("A - First")
+  })
+
+  it("skips recently played candidates before picking, so they don't use up the attempts", async () => {
+    // 3 played songs ranked first + 1 unplayed: picking before filtering could leave nothing
+    const searchVideos = vi.fn(async (query: string) => [
+      { title: query, url: `https://youtube.com/watch?v=${query.length}`, id: query, durationRaw: "3:00" },
+    ])
+    const ports = createMockPorts({
+      lastfm: {
+        getSimilarTracks: async () => [
+          { name: "Played One", artist: "X", match: 1, url: "" },
+          { name: "Played Two", artist: "X", match: 0.99, url: "" },
+          { name: "Played Three", artist: "X", match: 0.98, url: "" },
+          { name: "Fresh", artist: "Y", match: 0.5, url: "" },
+        ],
+        getSimilarArtists: async () => [],
+        getArtistTopTracks: async () => [],
+        searchTrack: async () => [],
+        getTrackTopTags: async () => [],
+      },
+      search: { resolveQuery: async () => ok({ tracks: [] }), autocomplete: async () => [], searchVideos },
+    })
+    const engine = createRadioEngine(ports)
+    for (let i = 0; i < 10; i++) {
+      const result = await engine.findRelated("Artist - Song", ["x - played one", "x - played two", "x - played three"])
+      expect(result?.canonicalTitle).toBe("Y - Fresh")
+    }
   })
 
   it("falls back to broad YouTube search", async () => {

@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { createYouTubeSearch } from "@/infra/youtube/search"
 import { createAudioUrlCache } from "@/infra/youtube/audio-url-cache"
-import type { CookieStorePort, LoggerPort } from "@/domain/ports"
+import type { CookieStorePort } from "@/domain/ports"
 
 vi.mock("@/infra/youtube/ytdlp", () => ({
   searchYtDlp: vi.fn(),
   buildYtDlpArgs: vi.fn(),
   spawnYtDlp: vi.fn(),
   AUDIO_FORMAT: "bestaudio",
+  USER_AGENT: "test-agent",
 }))
 
 vi.mock("play-dl", () => ({
@@ -23,19 +24,10 @@ import play from "play-dl"
 
 const mockCookieStore = (filePath: string | null): CookieStorePort => ({
   read: () => null,
-  write: () => {},
   validate: () => ({ isValid: false, cookieCount: 0, cookieNames: [], hasPSID: false, hasSID: false, lastModified: null }),
   delete: () => {},
   filePath: () => filePath,
 })
-
-const mockLogger: LoggerPort = {
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  debug: () => {},
-  event: () => {},
-}
 
 afterEach(() => {
   vi.resetAllMocks()
@@ -49,7 +41,7 @@ describe("infra/youtube/search", () => {
       { id: "vid1", url: "https://youtube.com/watch?v=vid1", title: "Fallback Song", durationRaw: "3:30" },
     ] as never)
 
-    const search = createYouTubeSearch(mockCookieStore(null), mockLogger)
+    const search = createYouTubeSearch(mockCookieStore(null))
     const result = await search.resolveQuery("\u{1F50E} discipline king crimson")
 
     expect(searchYtDlp).toHaveBeenCalledWith("discipline king crimson", 1, expect.anything(), expect.objectContaining({ format: "bestaudio" }))
@@ -63,7 +55,7 @@ describe("infra/youtube/search", () => {
       { id: "a1", url: "https://youtube.com/watch?v=a1", title: "Song One", duration: 240 },
     ] as never)
 
-    const search = createYouTubeSearch(mockCookieStore(null), mockLogger)
+    const search = createYouTubeSearch(mockCookieStore(null))
     const result = await search.resolveQuery("queen")
 
     expect(searchYtDlp).toHaveBeenCalledTimes(1)
@@ -81,7 +73,7 @@ describe("infra/youtube/search", () => {
     ] as never)
     const cache = createAudioUrlCache()
 
-    const search = createYouTubeSearch(mockCookieStore(null), mockLogger, cache)
+    const search = createYouTubeSearch(mockCookieStore(null), cache)
     await search.resolveQuery("queen")
 
     expect(cache.get("https://youtube.com/watch?v=a1")).toBe(audioUrl)
@@ -91,18 +83,43 @@ describe("infra/youtube/search", () => {
     vi.mocked(searchYtDlp).mockResolvedValue([])
     vi.mocked(play.search).mockRejectedValueOnce(new Error("network"))
 
-    const search = createYouTubeSearch(mockCookieStore(null), mockLogger)
+    const search = createYouTubeSearch(mockCookieStore(null))
     const result = await search.resolveQuery("queen")
 
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("Sin resultados")
   })
 
+  it("searchVideos uses the in-process web search without spawning yt-dlp", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      `<script>var ytInitialData = ${JSON.stringify({ items: [{ videoRenderer: { videoId: "w1", title: { runs: [{ text: "Web Song" }] }, lengthText: { simpleText: "3:00" } } }] })};</script>`,
+      { status: 200 },
+    )))
+
+    const search = createYouTubeSearch(mockCookieStore(null))
+    const results = await search.searchVideos("daft punk", 15)
+
+    expect(results[0]).toMatchObject({ id: "w1", title: "Web Song", durationRaw: "3:00" })
+    expect(searchYtDlp).not.toHaveBeenCalled()
+  })
+
+  it("searchVideos falls back to yt-dlp when the web search finds nothing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html>consent</html>", { status: 200 })))
+    vi.mocked(searchYtDlp).mockResolvedValueOnce([
+      { id: "y1", url: "https://youtube.com/watch?v=y1", title: "Ytdlp Song", duration: 180 },
+    ] as never)
+
+    const search = createYouTubeSearch(mockCookieStore(null))
+    const results = await search.searchVideos("daft punk", 15)
+
+    expect(results[0]).toMatchObject({ id: "y1", durationRaw: "3:00" })
+  })
+
   it("returns empty immediately for URL queries in autocomplete", async () => {
     const fetch = vi.fn()
     vi.stubGlobal("fetch", fetch)
 
-    const search = createYouTubeSearch(mockCookieStore(null), mockLogger)
+    const search = createYouTubeSearch(mockCookieStore(null))
     const result = await search.autocomplete("https://youtube.com/watch?v=abc")
 
     expect(result).toEqual([])
@@ -114,7 +131,7 @@ describe("infra/youtube/search", () => {
       new Response(JSON.stringify(["queen", ["queen songs", "queen live"]]), { status: 200 }),
     ))
 
-    const search = createYouTubeSearch(mockCookieStore(null), mockLogger)
+    const search = createYouTubeSearch(mockCookieStore(null))
     const result = await search.autocomplete("queen")
 
     expect(result).toHaveLength(2)

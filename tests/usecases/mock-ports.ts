@@ -40,17 +40,14 @@ export const createMockPorts = (overrides: Partial<Ports> = {}): Ports => ({
   voice: {
     join: async (): Promise<Result<void, string>> => ok(undefined),
     destroy: () => {},
-    isConnected: (): boolean => true,
   },
   player: {
     play: () => {},
     stop: () => {},
     pause: () => {},
     unpause: () => {},
-    isPaused: (): boolean => false,
     onIdle: vi.fn(),
     onError: () => {},
-    getStatus: (): string => "idle",
     subscribeToConnection: () => {},
     destroy: () => {},
   },
@@ -61,7 +58,6 @@ export const createMockPorts = (overrides: Partial<Ports> = {}): Ports => ({
   },
   cookieStore: {
     read: (): string | null => null,
-    write: () => {},
     validate: (): CookieValidation => ({
       isValid: false, cookieCount: 0, cookieNames: [], hasPSID: false, hasSID: false, lastModified: null,
     }),
@@ -69,7 +65,6 @@ export const createMockPorts = (overrides: Partial<Ports> = {}): Ports => ({
     filePath: (): string | null => null,
   },
   browser: {
-    init: async (): Promise<Result<void, string>> => ok(undefined),
     close: async () => {},
     refresh: async (): Promise<CookieRefreshResult> => ({ success: true, timestamp: new Date().toISOString() }),
     extract: async (): Promise<CookieRefreshResult> => ({ success: true, timestamp: new Date().toISOString() }),

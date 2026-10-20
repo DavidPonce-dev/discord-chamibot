@@ -7,7 +7,7 @@ import type {
 } from "discord.js"
 import type { NotificationPort, LoggerPort } from "../../domain/ports"
 import type { QueuePayload } from "../../domain/types"
-import { createMessageQueue, type MessageQueue } from "../../shared/message-queue"
+import { createMessageQueue } from "../../shared/message-queue"
 
 type QueueMessageStore = {
   get: (guildId: string) => Message | undefined
@@ -47,7 +47,7 @@ export const createDiscordNotifier = (
   clearQueueMessage: (guildId: string) => void,
   clearQueueChannel: (guildId: string) => void,
   logger: LoggerPort,
-): NotificationPort & { messageQueue: MessageQueue } => {
+): NotificationPort => {
   const messageQueue = createMessageQueue()
 
   const DELETED_MESSAGE_CODES = [10008, 50001, 10004]
@@ -107,5 +107,5 @@ export const createDiscordNotifier = (
     clearQueueChannel(guildId)
   }
 
-  return { sendQueueUpdate, editMessage, deleteMessage, messageQueue } as const
+  return { sendQueueUpdate, editMessage, deleteMessage } as const
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { extractArtist, extractSong, youtubeThumbnail, classifyPlaylist, sanitizeYouTubeUrl, extractVideoId } from "@/domain/track-parser"
+import { extractArtist, extractSong, youtubeThumbnail, sanitizeYouTubeUrl, extractVideoId } from "@/domain/track-parser"
 
 describe("domain/track-parser", () => {
   describe("youtubeThumbnail", () => {
@@ -37,21 +37,6 @@ describe("domain/track-parser", () => {
 
     it("extrae cancion con brackets japoneses", () => {
       expect(extractSong("Babymetal「Gimme Chocolate」")).toBe("Gimme Chocolate")
-    })
-  })
-
-  describe("classifyPlaylist", () => {
-    it("clasifica como album por keywords", () => {
-      expect(classifyPlaylist("Official Album Deluxe Edition", 15)).toBe("album")
-    })
-
-    it("clasifica como playlist por keywords", () => {
-      expect(classifyPlaylist("Best Hits Playlist 2024", 30)).toBe("playlist")
-    })
-
-    it("clasifica por cantidad de videos", () => {
-      expect(classifyPlaylist("Random Title", 5)).toBe("album")
-      expect(classifyPlaylist("Random Title", 50)).toBe("playlist")
     })
   })
 

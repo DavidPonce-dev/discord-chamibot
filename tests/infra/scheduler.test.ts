@@ -9,7 +9,6 @@ describe("infra/cookie/scheduler", () => {
   afterEach(() => { vi.useRealTimers() })
 
   const mockBrowser = (overrides: Partial<BrowserPort> = {}): BrowserPort => ({
-    init: vi.fn().mockResolvedValue({ ok: true }),
     close: vi.fn().mockResolvedValue(undefined),
     refresh: vi.fn().mockResolvedValue({ success: true, cookieCount: 5, timestamp: "now" }),
     extract: vi.fn().mockResolvedValue({ success: true, timestamp: "now" }),
@@ -19,13 +18,17 @@ describe("infra/cookie/scheduler", () => {
     ...overrides,
   })
 
-  it("starts and stops", () => {
-    const scheduler = createCookieScheduler(mockBrowser(), 60000, mockLogger)
-    expect(scheduler.running).toBe(false)
+  it("does not refresh before start or after stop", async () => {
+    const refresh = vi.fn().mockResolvedValue({ success: true, cookieCount: 5, timestamp: "now" })
+    const scheduler = createCookieScheduler(mockBrowser({ refresh }), 1000, mockLogger)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(refresh).not.toHaveBeenCalled()
     scheduler.start()
-    expect(scheduler.running).toBe(true)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(refresh).toHaveBeenCalledTimes(1)
     scheduler.stop()
-    expect(scheduler.running).toBe(false)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(refresh).toHaveBeenCalledTimes(1)
   })
 
   it("runs refresh on interval", async () => {
@@ -50,30 +53,26 @@ describe("infra/cookie/scheduler", () => {
     scheduler.stop()
   })
 
-  it("refreshNow triggers immediate refresh", async () => {
-    const refresh = vi.fn().mockResolvedValue({ success: true, cookieCount: 3, timestamp: "now" })
-    const scheduler = createCookieScheduler(mockBrowser({ refresh }), 60000, mockLogger)
-    const result = await scheduler.refreshNow()
-    expect(result).toBe(true)
-    expect(refresh).toHaveBeenCalled()
-  })
-
-  it("pause and resume", () => {
-    const scheduler = createCookieScheduler(mockBrowser(), 1000, mockLogger)
+  it("pause stops refreshes and resume restarts them", async () => {
+    const refresh = vi.fn().mockResolvedValue({ success: true, cookieCount: 5, timestamp: "now" })
+    const scheduler = createCookieScheduler(mockBrowser({ refresh }), 1000, mockLogger)
     scheduler.start()
     scheduler.pause()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(refresh).not.toHaveBeenCalled()
     scheduler.resume()
-    expect(scheduler.running).toBe(true)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(refresh).toHaveBeenCalledTimes(1)
     scheduler.stop()
   })
 
-  it("does not keep the browser alive between refreshes", async () => {
-    const init = vi.fn().mockResolvedValue({ ok: true })
-    const isActive = vi.fn().mockReturnValue(false)
-    const scheduler = createCookieScheduler(mockBrowser({ init, isActive }), 60 * 60 * 1000, mockLogger)
+  it("does not touch the browser between refreshes", async () => {
+    const browser = mockBrowser()
+    const scheduler = createCookieScheduler(browser, 60 * 60 * 1000, mockLogger)
     scheduler.start()
     await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
-    expect(init).not.toHaveBeenCalled()
+    expect(browser.refresh).not.toHaveBeenCalled()
+    expect(browser.isActive).not.toHaveBeenCalled()
     scheduler.stop()
   })
 })

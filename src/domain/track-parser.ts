@@ -5,9 +5,6 @@ const SEPARATORS = [
   { pattern: /\s?:\s/ },
 ] as const
 
-const ALBUM_KEYWORDS = /\b(album|full\s*album|ep\b|lp\b|discography|complete\s*album|official\s*album|deluxe\s*edition|remastered|edición\s*completa|album\s*completo)\b/i
-const PLAYLIST_KEYWORDS = /\b(playlist|mix|compilation|best\s*of|top\s*\d+|hits|radio|chill|lofi|lo-fi|vibes|party|workout|study|sleep|focus|gym|drive|road\s*trip|karaoke|instrumental|cover|live\s*session|podcast)\b/i
-
 export const youtubeThumbnail = (id: string): string =>
   `https://img.youtube.com/vi/${id}/hqdefault.jpg`
 
@@ -53,17 +50,6 @@ export const extractSong = (title: string): string => {
   }
 
   return clean
-}
-
-export const classifyPlaylist = (title: string, videoCount: number): "album" | "playlist" => {
-  const isAlbum = ALBUM_KEYWORDS.test(title)
-  const isPlaylist = PLAYLIST_KEYWORDS.test(title)
-
-  if (isAlbum && !isPlaylist) return "album"
-  if (isPlaylist && !isAlbum) return "playlist"
-  if (isAlbum && isPlaylist) return videoCount <= 25 ? "album" : "playlist"
-  if (videoCount >= 2 && videoCount <= 25) return "album"
-  return "playlist"
 }
 
 export const sanitizeYouTubeUrl = (url: string): string => {

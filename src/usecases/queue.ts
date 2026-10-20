@@ -1,4 +1,3 @@
-import type { Ports } from "../domain/ports"
 import type { GuildSession, Track, LoopMode } from "../domain/types"
 import { ok, err, type Result } from "../shared/result"
 import * as Queue from "../domain/queue"
@@ -20,7 +19,6 @@ export type QueueUseCases = Readonly<{
 }>
 
 export const createQueueUseCases = (
-  _ports: Ports,
   getSession: (guildId: string) => GuildSession | null,
   setSession: (guildId: string, session: GuildSession) => void,
 ): QueueUseCases => {

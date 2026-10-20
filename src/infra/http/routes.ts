@@ -24,7 +24,6 @@ export const createRoutes = (
   cookieScheduler: { pause: () => void; resume: () => void } | null,
 ): {
   vncState: { active: boolean }
-  setupState: { busy: boolean }
   handlers: Record<string, RouteHandler>
 } => {
   const { music, admin, cookie } = deps
@@ -102,11 +101,6 @@ export const createRoutes = (
       json(res, 200, { message: "Profile reset" })
     },
 
-    "POST /api/browser/start": async (_req, res) => {
-      if (cookie.isBrowserActive()) { json(res, 409, { error: "Browser already running" }); return }
-      json(res, 200, { message: "Browser start requested" })
-    },
-
     "POST /api/browser/close": async (_req, res) => {
       const extractResult = await cookie.extract()
       await cookie.close()
@@ -164,5 +158,5 @@ export const createRoutes = (
     },
   }
 
-  return { vncState, setupState, handlers }
+  return { vncState, handlers }
 }

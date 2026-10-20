@@ -52,7 +52,6 @@ export type MusicRecommendPort = Readonly<{
 export type VoiceConnectionPort = Readonly<{
   join: (guildId: string, channelId: string, adapterCreator: unknown) => Promise<Result<void, string>>
   destroy: (guildId: string) => void
-  isConnected: (guildId: string) => boolean
 }>
 
 export type AudioPlayerPort = Readonly<{
@@ -60,10 +59,8 @@ export type AudioPlayerPort = Readonly<{
   stop: (guildId: string) => void
   pause: (guildId: string) => void
   unpause: (guildId: string) => void
-  isPaused: (guildId: string) => boolean
   onIdle: (guildId: string, cb: (guildId: string) => void) => void
   onError: (guildId: string, cb: (guildId: string, err: Error) => void) => void
-  getStatus: (guildId: string) => string
   subscribeToConnection: (guildId: string) => void
   destroy: (guildId: string) => void
 }>
@@ -76,14 +73,12 @@ export type NotificationPort = Readonly<{
 
 export type CookieStorePort = Readonly<{
   read: () => string | null
-  write: (content: string) => void
   validate: () => CookieValidation
   delete: () => void
   filePath: () => string | null
 }>
 
 export type BrowserPort = Readonly<{
-  init: () => Promise<Result<void, string>>
   close: () => Promise<void>
   refresh: () => Promise<CookieRefreshResult>
   extract: () => Promise<CookieRefreshResult>

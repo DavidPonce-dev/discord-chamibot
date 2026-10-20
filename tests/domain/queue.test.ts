@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   emptyQueue, addTrack, addNext, addMultiple, dequeue, removeTrack,
-  moveUp, moveDown, shuffle, toggleLoop, applyLoop, clear, getAllTracks,
+  moveUp, moveDown, shuffle, toggleLoop, applyLoop, getAllTracks,
   getSize, isEmpty, addRadioTrack, clearRadio, replaceRadioTrack,
 } from "@/domain/queue"
 import type { Track } from "@/domain/types"
@@ -172,15 +172,6 @@ describe("domain/queue", () => {
       const q = emptyQueue()
       const result = applyLoop(q, makeTrack())
       expect(result.userTracks).toHaveLength(0)
-    })
-  })
-
-  describe("clear", () => {
-    it("vacia ambas colas", () => {
-      const q = addMultiple({ ...emptyQueue(), radioTracks: [makeTrack({ requestedBy: "radio" })] }, [makeTrack()])
-      const result = clear(q)
-      expect(result.userTracks).toHaveLength(0)
-      expect(result.radioTracks).toHaveLength(0)
     })
   })
 

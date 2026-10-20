@@ -25,14 +25,6 @@ export const createFileCookieStore = (
     return null
   }
 
-  const write = (content: string): void => {
-    try {
-      fs.writeFileSync(cookiePath, content, { mode: 0o600 })
-    } catch (e: unknown) {
-      logger.error("cookie", "Failed to write cookie file", { error: String(e) })
-    }
-  }
-
   const validate = (): CookieValidation => {
     const result: CookieValidation = {
       isValid: false,
@@ -78,5 +70,5 @@ export const createFileCookieStore = (
   const filePath = (): string | null =>
     fs.existsSync(cookiePath) ? cookiePath : null
 
-  return { read, write, validate, delete: deleteCookie, filePath } as const
+  return { read, validate, delete: deleteCookie, filePath } as const
 }

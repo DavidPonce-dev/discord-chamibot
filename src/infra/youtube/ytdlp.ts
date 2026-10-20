@@ -1,7 +1,7 @@
 import { spawn } from "child_process"
 import fs from "fs"
 import type { CookieStorePort } from "../../domain/ports"
-import { YTDL_SEARCH_TIMEOUT_MS } from "../../config/timeouts"
+import { YTDL_SEARCH_TIMEOUT_MS, YTDL_TIMEOUT_MS } from "../../config/timeouts"
 
 export const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
@@ -24,7 +24,7 @@ export function buildYtDlpArgs(baseArgs: string[], cookieStore: CookieStorePort,
   return args
 }
 
-export function spawnYtDlp(args: string[], timeoutMs = 30000): Promise<YtDlpResult> {
+export function spawnYtDlp(args: string[], timeoutMs = YTDL_TIMEOUT_MS): Promise<YtDlpResult> {
   return new Promise((resolve) => {
     const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] })
     const stdoutChunks: Buffer[] = []

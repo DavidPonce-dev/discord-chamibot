@@ -1,10 +1,11 @@
 import play from "play-dl"
-import type { TrackSearchPort, CookieStorePort, LoggerPort } from "../../domain/ports"
+import type { TrackSearchPort, CookieStorePort } from "../../domain/ports"
 import { withCookieRetry } from "../../domain/ports"
 import { ok, err, type Result } from "../../shared/result"
 import type { ResolveResult, ResolvedTrack, AutocompleteChoice, VideoSearchResult } from "../../domain/types"
 import { buildYtDlpArgs, spawnYtDlp, searchYtDlp, AUDIO_FORMAT } from "./ytdlp"
 import { isDirectAudioUrl, type AudioUrlCache } from "./audio-url-cache"
+import { searchYouTubeWeb } from "./web-search"
 import { formatTime } from "../../shared/format"
 import { sanitizeYouTubeUrl, extractVideoId, youtubeThumbnail } from "../../domain/track-parser"
 import { YTDL_RESOLVE_TIMEOUT_MS, AUTOCOMPLETE_FALLBACK_TIMEOUT_MS } from "../../config/timeouts"
@@ -55,7 +56,6 @@ const resolveWithYtDlp = async (
 
 export const createYouTubeSearch = (
   cookieStore: CookieStorePort,
-  _logger: LoggerPort,
   audioCache?: AudioUrlCache,
 ): TrackSearchPort => {
   const suggestionsProvider = createSuggestionProvider()
@@ -161,10 +161,8 @@ export const createYouTubeSearch = (
     const suggestions = await suggestionsProvider.suggestions(trimmed)
     if (suggestions.length > 0) return suggestions
 
-    const results = await searchYtDlp(trimmed, 10, cookieStore, {
-      type: "video",
-      timeoutMs: AUTOCOMPLETE_FALLBACK_TIMEOUT_MS,
-    })
+    // Discord drops autocomplete responses after 3s: yt-dlp (~2.5s) rarely made it in time
+    const results = await searchYouTubeWeb(trimmed, 10, AUTOCOMPLETE_FALLBACK_TIMEOUT_MS)
     return results.slice(0, 10).map((v): AutocompleteChoice => {
       const name = `\u{1F3B5} ${v.title ?? "Unknown"}`
       return {
@@ -175,6 +173,10 @@ export const createYouTubeSearch = (
   }
 
   const searchVideos = async (query: string, limit = 15): Promise<readonly VideoSearchResult[]> => {
+    // Used by the radio for every candidate: try the in-process search first (~1s vs ~2.5s)
+    const webResults = await searchYouTubeWeb(query, limit)
+    if (webResults.length > 0) return webResults
+
     const results = await searchYtDlp(query, limit, cookieStore, { type: "video" })
     return results.map((r): VideoSearchResult => ({
       title: r.title,

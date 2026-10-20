@@ -6,6 +6,7 @@ import * as Queue from "../domain/queue"
 import * as Session from "../domain/session"
 import { youtubeThumbnail, extractArtist, extractSong } from "../domain/track-parser"
 import { recommendAndEnqueue } from "../domain/radio"
+import { SEEK_SETTLE_DELAY_MS } from "../config/timeouts"
 
 type MusicUseCasesCallbacks = Readonly<{
   onTrackChange?: (guildId: string) => void
@@ -235,7 +236,9 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
       queue: { ...latest.queue, radioTracks: recommended.queue.radioTracks },
       radioBaseTitle: recommended.radioBaseTitle,
     })
-    await prefetchNext(guildId)
+    // Don't hold the UI update (or playback start) on the prefetch: if playback starts first,
+    // getAudioUrl shares the in-flight request instead of spawning yt-dlp again
+    prefetchNextInBackground(guildId)
   }
 
   // The track startPlayback will dequeue next (same order as Queue.dequeue)
@@ -357,7 +360,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     ports.audio.killProcess(guildId)
     ports.player.stop(guildId)
 
-    await new Promise(resolve => setTimeout(resolve, 100))
+    await new Promise(resolve => setTimeout(resolve, SEEK_SETTLE_DELAY_MS))
 
     const current = session.queue.current
     const resource = await ports.audio.createResource(guildId, current.url, seconds)

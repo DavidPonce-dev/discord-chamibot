@@ -33,18 +33,6 @@ export async function editTemporary(
   return msg
 }
 
-export async function silentExecute(
-  interaction: ChatInputCommandInteraction,
-  fn: () => Promise<void>,
-): Promise<void> {
-  await interaction.deferReply()
-  try {
-    await fn()
-  } finally {
-    await interaction.deleteReply().catch(() => {})
-  }
-}
-
 export async function silentReply(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply()
   await interaction.deleteReply().catch(() => {})

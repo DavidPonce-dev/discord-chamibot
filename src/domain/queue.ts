@@ -125,12 +125,6 @@ export const applyLoop = (q: Queue, finished: Track): Queue => {
   return q
 }
 
-export const clear = (q: Queue): Queue => ({
-  ...q,
-  userTracks: [],
-  radioTracks: [],
-})
-
 export const getAllTracks = (q: Queue): readonly Track[] => [...q.userTracks, ...q.radioTracks]
 
 export const getSize = (q: Queue): number => q.userTracks.length + q.radioTracks.length

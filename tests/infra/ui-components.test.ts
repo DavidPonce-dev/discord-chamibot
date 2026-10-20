@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest"
 import { buildTrackRows, buildNavRow, buildPlaybackRow } from "@/infra/ui/queue-components"
-import { buildEmptyEmbed } from "@/infra/ui/queue-embed"
 import { buildHelpEmbed } from "@/infra/ui/help-embed"
 import type { GuildSession } from "@/domain/types"
 import { createSession } from "@/domain/session"
@@ -128,14 +127,6 @@ describe("infra/ui/queue-components", () => {
 })
 
 describe("infra/ui/embeds", () => {
-  describe("buildEmptyEmbed", () => {
-    it("creates embed with description", () => {
-      const embed = buildEmptyEmbed()
-      const data = embed.toJSON()
-      expect(data.description).toContain("vacia")
-    })
-  })
-
   describe("buildHelpEmbed", () => {
     it("creates embed with all commands", () => {
       const embed = buildHelpEmbed()

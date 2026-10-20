@@ -9,7 +9,6 @@ const mockLogger: LoggerPort = {
 
 const mockCookieStore = (overrides: Partial<CookieStorePort> = {}): CookieStorePort => ({
   read: () => null,
-  write: () => {},
   validate: () => ({ isValid: false, cookieCount: 0, cookieNames: [], hasPSID: false, hasSID: false, lastModified: null }),
   delete: () => {},
   filePath: () => "/cookies/youtube-cookies.txt",
@@ -17,7 +16,6 @@ const mockCookieStore = (overrides: Partial<CookieStorePort> = {}): CookieStoreP
 })
 
 const mockBrowser = (overrides: Partial<BrowserPort> = {}): BrowserPort => ({
-  init: async () => ok(undefined),
   close: async () => {},
   refresh: async () => ({ success: true, cookieCount: 5, timestamp: "now" }),
   extract: async () => ({ success: true, cookieCount: 5, timestamp: "now" }),

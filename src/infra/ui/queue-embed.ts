@@ -45,8 +45,3 @@ export function buildQueueContent(session: GuildSession, _page: number): ReturnT
 
   return embed
 }
-
-export function buildEmptyEmbed(): ReturnType<typeof createBaseEmbed> {
-  return createBaseEmbed()
-    .setDescription("La cola esta vacia")
-}

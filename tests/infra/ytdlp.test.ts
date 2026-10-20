@@ -4,7 +4,6 @@ import type { CookieStorePort } from "@/domain/ports"
 
 const mockCookieStore = (filePath: string | null): CookieStorePort => ({
   read: () => null,
-  write: () => {},
   validate: () => ({ isValid: false, cookieCount: 0, cookieNames: [], hasPSID: false, hasSID: false, lastModified: null }),
   delete: () => {},
   filePath: () => filePath,

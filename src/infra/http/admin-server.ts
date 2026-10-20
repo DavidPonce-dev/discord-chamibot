@@ -45,7 +45,7 @@ export const createAdminServer = (
     if (server) return
 
     vncProxy = httpProxy.createProxyServer()
-    vncProxy.on("error", (err: Error, req: http.IncomingMessage, res: http.ServerResponse | Socket) => {
+    vncProxy.on("error", (err: Error, _req: http.IncomingMessage, res: http.ServerResponse | Socket) => {
       logger.error("vnc", "Proxy error", { error: err.message })
       if (res instanceof http.ServerResponse) {
         json(res, 502, { error: "VNC proxy error: " + err.message })

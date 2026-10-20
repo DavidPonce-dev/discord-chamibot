@@ -104,9 +104,9 @@ const tryLastFmRecommendation = async (
   if (candidates.length === 0) return null
 
   const pool = [...candidates].sort((a, b) => b.match - a.match).slice(0, 10)
-  const picks = shuffled(pool)
+  // Filter before picking so recently played songs don't use up the attempts
+  const picks = shuffled(pool.filter(cand => !wasRecentlyPlayed(cand, last5Titles)))
     .slice(0, MAX_RETRIES)
-    .filter(cand => !wasRecentlyPlayed(cand, last5Titles))
 
   return firstInBatches(picks, cand => resolveToYouTube(ports.search, cand.artist, cand.name, excludeIds))
 }
@@ -129,7 +129,7 @@ const tryArtistSwitch = async (
 
   // Up to MAX_RETRIES random picks per artist, ordered by artist similarity then pick round
   const picksPerArtist = topTracksPerArtist.map(tracks =>
-    shuffled(tracks).slice(0, MAX_RETRIES).filter(cand => !wasRecentlyPlayed(cand, last5Titles)),
+    shuffled(tracks.filter(cand => !wasRecentlyPlayed(cand, last5Titles))).slice(0, MAX_RETRIES),
   )
   const candidates = Array.from({ length: MAX_RETRIES }, (_, round) =>
     picksPerArtist.flatMap(picks => (picks[round] ? [picks[round]] : [])),

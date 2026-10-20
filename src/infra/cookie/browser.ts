@@ -246,7 +246,6 @@ export const createPlaywrightBrowser = (
   }
 
   return {
-    init: initBrowser,
     close: closeBrowser,
     refresh,
     extract,
