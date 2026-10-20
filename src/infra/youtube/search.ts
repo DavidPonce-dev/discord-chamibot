@@ -130,6 +130,11 @@ export const createYouTubeSearch = (
           duration: video.duration !== undefined ? formatTime(video.duration) : undefined,
           id,
           thumbnail: id ? youtubeThumbnail(id) : undefined,
+          // Exact music metadata (official uploads): gives the radio a clean "Artist - Song" seed
+          track: video.track,
+          artist: video.artist,
+          album: video.album,
+          channel: video.channel,
         }],
       })
     }

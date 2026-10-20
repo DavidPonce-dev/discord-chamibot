@@ -1,56 +1,56 @@
-const SEPARATORS = [
-  { pattern: /\sft\.\s|\sfeat\.\s|\bfeat\./i },
-  { pattern: /\s[-–—|│]\s/ },
-  { pattern: /\s\/\/\s/ },
-  { pattern: /\s?:\s/ },
-] as const
+// "Artist - Song | Album", "Artist – Song // Live": the first segment is the artist, the second the song
+const SEGMENT_SEPARATOR = /\s+[-–—|│]\s+|\s+\/\/\s+/
+// Only used when there is no other separator: "Queen: Bohemian Rhapsody"
+const COLON_SEPARATOR = /^(.+?)\s?:\s(.+)$/
+// Featured artists: "Song ft. X", "Artist feat. X", "Song featuring X"
+const FEATURING = /\s+(?:ft\.?|feat\.?|featuring)\s.*$/i
+// Upload noise left at the end of a segment once brackets are removed
+const TRAILING_NOISE = /\s*\b(?:official\s+(?:music\s+)?(?:video|audio|visualizer)|lyrics?(?:\s+video)?|video\s+oficial|audio\s+oficial|letra|hd|4k)\s*$/i
+
+export type ParsedTitle = Readonly<{ artist: string; song: string }>
 
 export const youtubeThumbnail = (id: string): string =>
   `https://img.youtube.com/vi/${id}/hqdefault.jpg`
 
-export const extractArtist = (title: string): string => {
-  const jpOpen = title.indexOf("「")
-  if (jpOpen > 0) return title.slice(0, jpOpen).trim()
+const stripFeaturing = (s: string): string => s.replace(FEATURING, "").trim()
 
-  const clean = title.replace(/\[.*?\]|\(.*?\)/g, "").trim()
+const cleanSegment = (s: string): string => stripFeaturing(s).replace(TRAILING_NOISE, "").trim()
 
-  for (const { pattern } of SEPARATORS) {
-    const match = title.search(pattern)
-    if (match > 0) {
-      const artist = title.slice(0, match).trim()
-      if (artist.length > 0 && artist.length < clean.length) return artist
-    }
-  }
-
-  return ""
-}
-
-export const extractSong = (title: string): string => {
+// Best-effort split of a YouTube title into artist and song (artist is "" when unknown).
+// The result feeds Last.fm lookups, which need clean names to find similar tracks.
+export const parseTitle = (title: string): ParsedTitle => {
   const jpOpen = title.indexOf("「")
   const jpClose = title.indexOf("」")
-  if (jpOpen >= 0 && jpClose > jpOpen) {
-    return title.slice(jpOpen + 1, jpClose).trim()
+  if (jpOpen > 0 && jpClose > jpOpen) {
+    return { artist: title.slice(0, jpOpen).trim(), song: title.slice(jpOpen + 1, jpClose).trim() }
   }
 
-  const clean = title.replace(/\[.*?\]|\(.*?\)/g, "").trim()
+  const clean = title.replace(/\[.*?\]|\(.*?\)/g, " ").replace(/\s+/g, " ").trim()
 
-  for (const { pattern } of SEPARATORS) {
-    const match = clean.match(pattern)
-    if (match && match.index !== undefined && match.index > 0) {
-      let song = clean.slice(match.index + match[0].length).trim()
-      for (const { pattern: p2 } of SEPARATORS) {
-        const m2 = song.match(p2)
-        if (m2 && m2.index !== undefined && m2.index >= 0) {
-          song = song.slice(m2.index + m2[0].length).trim()
-          break
-        }
-      }
-      if (song.length > 0) return song
-    }
+  const segments = clean.split(SEGMENT_SEPARATOR).map(s => s.trim()).filter(Boolean)
+  if (segments.length >= 2) {
+    const artist = stripFeaturing(segments[0])
+    const song = cleanSegment(segments[1])
+    if (artist && song) return { artist, song }
   }
 
-  return clean
+  const colon = clean.match(COLON_SEPARATOR)
+  if (colon) {
+    const artist = stripFeaturing(colon[1])
+    const song = cleanSegment(colon[2])
+    if (artist && song) return { artist, song }
+  }
+
+  // "Drake feat. Rihanna": no song separator, but the featuring marks the end of the artist
+  const withoutFeaturing = stripFeaturing(clean)
+  if (withoutFeaturing && withoutFeaturing !== clean) return { artist: withoutFeaturing, song: clean }
+
+  return { artist: "", song: cleanSegment(clean) || clean }
 }
+
+export const extractArtist = (title: string): string => parseTitle(title).artist
+
+export const extractSong = (title: string): string => parseTitle(title).song
 
 export const sanitizeYouTubeUrl = (url: string): string => {
   try {

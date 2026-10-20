@@ -1,7 +1,7 @@
 import type { Ports, MusicRecommendPort, LoggerPort } from "./ports"
 import type { RadioResult, VideoSearchResult, GuildSession, Track, GroqCandidate } from "./types"
 import * as Queue from "./queue"
-import { extractArtist, extractSong, youtubeThumbnail } from "./track-parser"
+import { parseTitle, youtubeThumbnail } from "./track-parser"
 import { parseDurationSec } from "../shared/format"
 import { MAX_AUTOPLAY_SEC, MAX_RETRIES, ARTIST_ROTATION_LIMIT } from "../config/radio"
 
@@ -137,7 +137,7 @@ const tryArtistSwitch = async (
 
   const result = await firstInBatches(candidates, cand => resolveToYouTube(ports.search, cand.artist, cand.name, excludeIds))
   if (result) {
-    ports.logger.info("radio", "Artista rotado exitosamente", {
+    ports.logger.info("radio", "Recomendacion Last.fm encontrada (artista similar)", {
       from: currentArtist,
       track: result.track.title,
       canonicalTitle: result.canonicalTitle,
@@ -262,8 +262,7 @@ export const createRadioEngine = (ports: Ports) => {
     const currentArtist = opts?.currentArtist ?? null
     const artistHistory = opts?.artistHistory ?? []
 
-    let artist = extractArtist(lastTrackTitle)
-    let songOnly = extractSong(lastTrackTitle)
+    let { artist, song: songOnly } = parseTitle(lastTrackTitle)
 
     if (!artist) {
       const parsed = await ports.groq.parseTitle(lastTrackTitle)
@@ -310,6 +309,14 @@ export const createRadioEngine = (ports: Ports) => {
         canonicalTitle: lastfmResult.canonicalTitle,
       })
       return lastfmResult
+    }
+
+    // No similar tracks (unknown or obscure song): similar artists still keep the style,
+    // so try them before the LLM and the generic YouTube fallbacks
+    const alreadyTriedArtist = shouldSwitch && currentArtist?.toLowerCase() === artist.toLowerCase()
+    if (artist && !alreadyTriedArtist) {
+      const similarArtistResult = await tryArtistSwitch(ports, artist, excludeIds, last5Titles)
+      if (similarArtistResult) return similarArtistResult
     }
 
     const groqResult = await resolveGroqCandidates(ports, await groqCandidatesPromise, excludeIds)

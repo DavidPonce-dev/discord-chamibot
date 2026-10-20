@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { extractArtist, extractSong, youtubeThumbnail, sanitizeYouTubeUrl, extractVideoId } from "@/domain/track-parser"
+import { extractArtist, extractSong, parseTitle, youtubeThumbnail, sanitizeYouTubeUrl, extractVideoId } from "@/domain/track-parser"
 
 describe("domain/track-parser", () => {
   describe("youtubeThumbnail", () => {
@@ -37,6 +37,33 @@ describe("domain/track-parser", () => {
 
     it("extrae cancion con brackets japoneses", () => {
       expect(extractSong("Babymetal「Gimme Chocolate」")).toBe("Gimme Chocolate")
+    })
+  })
+
+  describe("parseTitle (titulos reales de YouTube)", () => {
+    it.each([
+      ["Daft Punk - One More Time (Official Video)", "Daft Punk", "One More Time"],
+      // Album after "|" must not be taken as the song
+      ["Bad Bunny - Tití Me Preguntó (Official Video) | Un Verano Sin Ti", "Bad Bunny", "Tití Me Preguntó"],
+      ["Bad Bunny (ft. Chencho Corleone) - Me Porto Bonito (Official Video) | Un Verano Sin Ti", "Bad Bunny", "Me Porto Bonito"],
+      // Featuring after the song must not swallow the artist or replace the song
+      ["Calvin Harris - Summer ft. Ellie Goulding", "Calvin Harris", "Summer"],
+      ["Shakira - Hips Dont Lie feat. Wyclef Jean", "Shakira", "Hips Dont Lie"],
+      ["Daft Punk - Get Lucky (Official Audio) ft. Pharrell Williams, Nile Rodgers", "Daft Punk", "Get Lucky"],
+      ["Artist ft. Other - Song (Lyrics)", "Artist", "Song"],
+      // Trailing segments / noise
+      ["The Weeknd - Blinding Lights | Official Video", "The Weeknd", "Blinding Lights"],
+      ["Coldplay - Yellow - Live in Buenos Aires", "Coldplay", "Yellow"],
+      ["AIR - La femme d'argent (from Moon Safari - Official Audio)", "AIR", "La femme d'argent"],
+      ["Metallica: One (Official Music Video)", "Metallica", "One"],
+      // Hyphen inside a name is not a separator
+      ["Jay-Z - 99 Problems", "Jay-Z", "99 Problems"],
+    ])("%s", (title, artist, song) => {
+      expect(parseTitle(title)).toEqual({ artist, song })
+    })
+
+    it("keeps titles without a separator as the song", () => {
+      expect(parseTitle("Video Killed the Radio Star")).toEqual({ artist: "", song: "Video Killed the Radio Star" })
     })
   })
 

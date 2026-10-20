@@ -18,7 +18,7 @@ export const createLastFmAdapter = (apiKey: string): LastFmPort => {
 
   const getSimilarTracks = async (artist: string, track: string, limit = 15): Promise<readonly LastFmSimilarTrack[]> => {
     try {
-      const response = await getTrackApi().getSimilar({ artist, track, limit })
+      const response = await getTrackApi().getSimilar({ artist, track, limit, autocorrect: 1 })
       if (!response.similartracks?.track) return []
       return response.similartracks.track.map((t): LastFmSimilarTrack => ({
         name: t.name,
@@ -34,7 +34,7 @@ export const createLastFmAdapter = (apiKey: string): LastFmPort => {
 
   const getSimilarArtists = async (artist: string, limit = 10): Promise<readonly LastFmSimilarArtist[]> => {
     try {
-      const response = await getArtistApi().getSimilar({ artist, limit })
+      const response = await getArtistApi().getSimilar({ artist, limit, autocorrect: 1 })
       if (!response.similarartists?.artist) return []
       return response.similarartists.artist.map((a): LastFmSimilarArtist => ({
         name: a.name,
@@ -48,7 +48,7 @@ export const createLastFmAdapter = (apiKey: string): LastFmPort => {
 
   const getArtistTopTracks = async (artist: string, limit = 10): Promise<readonly LastFmSimilarTrack[]> => {
     try {
-      const response = await getArtistApi().getTopTracks({ artist, limit })
+      const response = await getArtistApi().getTopTracks({ artist, limit, autocorrect: 1 })
       if (!response.toptracks?.track) return []
       return response.toptracks.track.map((t): LastFmSimilarTrack => ({
         name: t.name,
@@ -78,7 +78,7 @@ export const createLastFmAdapter = (apiKey: string): LastFmPort => {
 
   const getTrackTopTags = async (artist: string, track: string): Promise<readonly LastFmTag[]> => {
     try {
-      const response = await getTrackApi().getTopTags({ artist, track })
+      const response = await getTrackApi().getTopTags({ artist, track, autocorrect: 1 })
       if (!response.toptags?.tag) return []
       return response.toptags.tag.map((t): LastFmTag => ({
         name: t.name,

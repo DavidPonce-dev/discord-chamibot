@@ -308,6 +308,46 @@ describe("domain/radio - RadioEngine", () => {
     }
   })
 
+  it("tries Last.fm similar artists before Groq when there are no similar tracks", async () => {
+    const groqRecommend = vi.fn(async () => [{ name: "LLM Pick", artist: "Random Artist" }])
+    const getSimilarArtists = vi.fn(async () => [{ name: "Justice", match: 0.9, url: "" }])
+    const ports = createMockPorts({
+      lastfm: {
+        getSimilarTracks: async () => [],
+        getSimilarArtists,
+        getArtistTopTracks: async () => [{ name: "Genesis", artist: "Justice", match: 1, url: "" }],
+        searchTrack: async () => [],
+        getTrackTopTags: async () => [],
+      },
+      groq: { recommend: groqRecommend, parseTitle: async () => null },
+      search: {
+        resolveQuery: async () => ok({ tracks: [] }),
+        autocomplete: async () => [],
+        searchVideos: async (query: string) => [
+          { title: query, url: `https://youtube.com/watch?v=${query.length}`, id: query, durationRaw: "3:00" },
+        ],
+      },
+    })
+    const result = await createRadioEngine(ports).findRelated("Daft Punk - Obscure B-Side (Official Audio)", [])
+    expect(getSimilarArtists).toHaveBeenCalledWith("Daft Punk", 5)
+    expect(result?.canonicalTitle).toBe("Justice - Genesis")
+  })
+
+  it("sends clean artist/song names to Last.fm", async () => {
+    const getSimilarTracks = vi.fn(async () => [])
+    const ports = createMockPorts({
+      lastfm: {
+        getSimilarTracks,
+        getSimilarArtists: async () => [],
+        getArtistTopTracks: async () => [],
+        searchTrack: async () => [],
+        getTrackTopTags: async () => [],
+      },
+    })
+    await createRadioEngine(ports).findRelated("Bad Bunny - Tití Me Preguntó (Official Video) | Un Verano Sin Ti", [])
+    expect(getSimilarTracks).toHaveBeenCalledWith("Bad Bunny", "Tití Me Preguntó", 15)
+  })
+
   it("falls back to broad YouTube search", async () => {
     const ports = createMockPorts({
       groq: { recommend: async () => [], parseTitle: async () => ({ artist: "Artist", song: "Song" }) },
