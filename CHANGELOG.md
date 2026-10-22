@@ -4,6 +4,14 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.6.1 (2026-10-21)
+
+### Correcciones de reproducción
+- **La radio ya no se queda en silencio cuando un tema no está disponible**: la pista fallida seguía marcada como actual, la cola nunca se veía vacía y la radio no se volvía a llenar. Ahora se descarta, su id se excluye de las recomendaciones y la radio busca otro tema (hasta 3 fallos seguidos).
+- **Videos no disponibles** (eliminados, privados, bloqueados por región o solo para miembros): yt-dlp ya no reintenta 3 veces ni cae al respaldo de play-dl, que solo agregaba un error engañoso de "Sign in to confirm you're not a bot".
+
+---
+
 ## v1.6.0 (2026-10-20)
 
 ### Rendimiento
