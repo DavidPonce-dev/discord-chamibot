@@ -84,6 +84,18 @@ describe("infra/youtube/audio getAudioUrl", () => {
     expect(spawnYtDlp).toHaveBeenCalledTimes(3)
   })
 
+  it("does not retry or fall back to play-dl when the video is unavailable", async () => {
+    vi.mocked(spawnYtDlp).mockResolvedValue({ code: 1, stdout: "", stderr: "ERROR: [youtube] abc123: Video unavailable\n" })
+
+    const audio = createYtDlpAudio(mockCookieStore(null), mockLogger)
+    const result = await audio.createResource("guild1", "https://youtube.com/watch?v=abc123")
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toContain("Video unavailable")
+    expect(spawnYtDlp).toHaveBeenCalledTimes(1)
+    expect(play.stream).not.toHaveBeenCalled()
+  })
+
   it("falls back to play-dl stream when yt-dlp cannot resolve the audio URL", async () => {
     vi.mocked(spawnYtDlp).mockResolvedValue({ code: -1, stdout: "", stderr: "ERROR: [youtube] abc123: The page needs to be reloaded.\n" })
     vi.mocked(play.stream).mockResolvedValueOnce({

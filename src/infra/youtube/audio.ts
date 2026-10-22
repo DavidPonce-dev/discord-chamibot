@@ -4,7 +4,7 @@ import play from "play-dl"
 import { createAudioResource, StreamType, type AudioResource } from "@discordjs/voice"
 import type { AudioStreamPort, CookieStorePort, LoggerPort } from "../../domain/ports"
 import type { CookieRefreshResult } from "../../domain/types"
-import { isCookieError, withCookieRetry } from "../../domain/ports"
+import { isCookieError, isUnavailableVideoError, withCookieRetry } from "../../domain/ports"
 import { ok, err, type Result } from "../../shared/result"
 import { buildYtDlpArgs, spawnYtDlp, USER_AGENT, AUDIO_FORMAT } from "./ytdlp"
 import { createAudioUrlCache, type AudioUrlCache } from "./audio-url-cache"
@@ -102,6 +102,7 @@ export const createYtDlpAudio = (
       const result = await withCookieRetry(attempt, refresh)
       if (result.ok) return result
       lastError = result.error
+      if (isUnavailableVideoError(lastError)) break
       if (attemptCount < 3) {
         logger.warn("audio", "getAudioUrl fallo, reintentando", {
           url: url.slice(0, 60),
@@ -241,6 +242,7 @@ export const createYtDlpAudio = (
     try {
       const audioUrlResult = await getAudioUrl(url)
       if (audioUrlResult.ok) return createFromAudioUrl(guildId, audioUrlResult.value, seekTo)
+      if (isUnavailableVideoError(audioUrlResult.error)) return err(audioUrlResult.error)
 
       logger.warn("audio", "yt-dlp no pudo obtener URL de audio, usando fallback play-dl", {
         url: url.slice(0, 60),

@@ -58,6 +58,8 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
   const starting = new Set<string>()
   const MAX_STREAM_RETRIES = 2
   const streamRetries = new Map<string, number>()
+  const MAX_RADIO_REFILLS_AFTER_FAILURE = 3
+  const radioRefillsAfterFailure = new Map<string, number>()
 
   const onTrackChange = (guildId: string): void => {
     callbacks?.onTrackChange?.(guildId)
@@ -78,6 +80,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
       ports.voice.destroy(guildId)
       sessions.delete(guildId)
       streamRetries.delete(guildId)
+      radioRefillsAfterFailure.delete(guildId)
       ports.notify.deleteMessage(guildId).catch(() => {})
     }
   }
@@ -128,11 +131,29 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
         track: track.title,
         error: resourceResult.error,
       })
-      sessions.set(guildId, { ...latest, prefetchedUrl: null })
+      // Clear current: otherwise the queue never looks empty and radio is never refilled.
+      // Exclude the failed video so radio doesn't pick it again
+      sessions.set(guildId, {
+        ...latest,
+        prefetchedUrl: null,
+        queue: { ...latest.queue, current: null },
+        last5Ids: track.id ? [track.id, ...latest.last5Ids].slice(0, 5) : latest.last5Ids,
+      })
+      const afterFailure = sessions.get(guildId)!
+      if (afterFailure.prefs.autoplay && Queue.isEmpty(afterFailure.queue)) {
+        const refills = (radioRefillsAfterFailure.get(guildId) ?? 0) + 1
+        radioRefillsAfterFailure.set(guildId, refills)
+        if (refills > MAX_RADIO_REFILLS_AFTER_FAILURE) {
+          ports.logger.warn("radio", "Demasiados temas de radio fallidos seguidos, deteniendo", { guildId, refills })
+          return
+        }
+        await populateRadio(guildId)
+      }
       await startPlayback(guildId)
       return
     }
 
+    radioRefillsAfterFailure.delete(guildId)
     ports.player.play(guildId, resourceResult.value)
     const playing = Session.setPlaying(latest, track)
     const updated = track.requestedBy !== "radio"

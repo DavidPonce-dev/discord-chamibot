@@ -492,6 +492,34 @@ describe("usecases/music", () => {
       expect(s.playback.isPlaying).toBe(true)
     })
 
+    it("refills radio and keeps playing when the only radio track fails", async () => {
+      const createResource = vi.fn()
+        .mockResolvedValueOnce({ ok: true as const, value: {} })
+        .mockResolvedValueOnce({ ok: false as const, error: "Video unavailable" })
+        .mockResolvedValue({ ok: true as const, value: {} })
+      const findRelated = vi.fn()
+        .mockResolvedValueOnce({ track: { title: "Broken", url: "ub", duration: "3:00", id: "bad" }, canonicalTitle: "X - Broken" })
+        .mockResolvedValue({ track: { title: "Good", url: "ug", duration: "3:00", id: "good" }, canonicalTitle: "X - Good" })
+      const ports = createMockPorts({
+        // Prefetch fails too, so playback goes through createResource
+        audio: { ...createMockPorts().audio, createResource, getAudioUrl: async () => ({ ok: false as const, error: "Video unavailable" }) },
+        recommend: { findRelated },
+      } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("solo", "g1", "u1", "v1", {})
+      const session = music.getSession("g1")!
+      music.setSession("g1", { ...session, prefs: { ...session.prefs, autoplay: true } })
+
+      captureIdle(ports)("g1")
+      await vi.waitFor(() => {
+        const s = music.getSession("g1")!
+        expect(s.queue.current?.title).toBe("Good")
+        expect(s.playback.isPlaying).toBe(true)
+      })
+      const lastCallOpts = findRelated.mock.calls.at(-1)![2] as { excludeIds: string[] }
+      expect(lastCallOpts.excludeIds).toContain("bad")
+    })
+
     it("advances to the next track when seek fails", async () => {
       const createResource = vi.fn()
         .mockResolvedValueOnce({ ok: true as const, value: {} })

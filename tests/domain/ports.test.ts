@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { isCookieError, withCookieRetry } from "@/domain/ports"
+import { isCookieError, isUnavailableVideoError, withCookieRetry } from "@/domain/ports"
 import { ok, err } from "@/shared/result"
 
 describe("domain/ports", () => {
@@ -34,6 +34,20 @@ describe("domain/ports", () => {
 
     it("no detecta errores de formato", () => {
       expect(isCookieError("Invalid URL format")).toBe(false)
+    })
+  })
+
+  describe("isUnavailableVideoError", () => {
+    it("detecta video unavailable", () => {
+      expect(isUnavailableVideoError("ERROR: [youtube] abc123: Video unavailable\n")).toBe(true)
+    })
+
+    it("detecta private video", () => {
+      expect(isUnavailableVideoError("ERROR: [youtube] abc123: Private video. Sign in if you've been granted access")).toBe(true)
+    })
+
+    it("no detecta errores de cookies", () => {
+      expect(isUnavailableVideoError("Sign in to confirm you're not a bot")).toBe(false)
     })
   })
 

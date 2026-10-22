@@ -141,6 +141,20 @@ export const isCookieError = (msg: string): boolean => {
   return patterns.some(p => p.test(msg))
 }
 
+// The video itself can't be played (removed, private, region-locked): retrying won't help
+export const isUnavailableVideoError = (msg: string): boolean => {
+  const patterns = [
+    /video unavailable/i,
+    /private video/i,
+    /video has been removed/i,
+    /no longer available/i,
+    /not available in your country/i,
+    /blocked it in your country/i,
+    /members-only/i,
+  ]
+  return patterns.some(p => p.test(msg))
+}
+
 export const withCookieRetry = async <T>(
   fn: () => Promise<Result<T, string>>,
   refresh: () => Promise<CookieRefreshResult>,
