@@ -48,9 +48,6 @@ export async function bootstrap(): Promise<void> {
     browserProfile: config.youtube.browserProfile,
   }, logger)
 
-  logger.info("bootstrap", "Reiniciando perfil de navegador (deploy limpio)")
-  await browser.resetProfile()
-
   const blacklist = createJsonBlacklist("data/blacklist.json")
   const audioUrlCache = createAudioUrlCache()
   const audio = createYtDlpAudio(cookieStore, logger, () => browser.refresh(), audioUrlCache)
