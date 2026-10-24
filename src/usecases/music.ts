@@ -145,11 +145,18 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
         radioRefillsAfterFailure.set(guildId, refills)
         if (refills > MAX_RADIO_REFILLS_AFTER_FAILURE) {
           ports.logger.warn("radio", "Demasiados temas de radio fallidos seguidos, deteniendo", { guildId, refills })
+          destroySession(guildId)
           return
         }
         await populateRadio(guildId)
       }
       await startPlayback(guildId)
+      // Nothing left to play after the failure: end like a normal end of queue instead of
+      // idling in the voice channel with a frozen player
+      const afterRetry = sessions.get(guildId)
+      if (afterRetry && !afterRetry.playback.isPlaying && !starting.has(guildId) && Queue.isEmpty(afterRetry.queue)) {
+        destroySession(guildId)
+      }
       return
     }
 

@@ -520,6 +520,39 @@ describe("usecases/music", () => {
       expect(lastCallOpts.excludeIds).toContain("bad")
     })
 
+    it("ends the session when radio gives up after repeated failures", async () => {
+      const createResource = vi.fn()
+        .mockResolvedValueOnce({ ok: true as const, value: {} })
+        .mockResolvedValue({ ok: false as const, error: "Video unavailable" })
+      let n = 0
+      const findRelated = vi.fn(async () => {
+        n++
+        return { track: { title: `Broken ${n}`, url: `ub${n}`, duration: "3:00", id: `bad${n}` }, canonicalTitle: `X - Broken ${n}` }
+      })
+      const ports = createMockPorts({
+        audio: { ...createMockPorts().audio, createResource, getAudioUrl: async () => ({ ok: false as const, error: "Video unavailable" }) },
+        recommend: { findRelated },
+      } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("solo", "g1", "u1", "v1", {})
+      const session = music.getSession("g1")!
+      music.setSession("g1", { ...session, prefs: { ...session.prefs, autoplay: true } })
+
+      captureIdle(ports)("g1")
+      await vi.waitFor(() => expect(music.getSession("g1")).toBeNull())
+      expect(ports.notify.deleteMessage).toHaveBeenCalledWith("g1")
+    })
+
+    it("ends the session when the only track is unavailable and autoplay is off", async () => {
+      const createResource = vi.fn().mockResolvedValue({ ok: false as const, error: "Video unavailable" })
+      const ports = createMockPorts({
+        audio: { ...createMockPorts().audio, createResource },
+      } as Partial<Ports>)
+      const music = createMusicUseCases(ports)
+      await music.play("solo", "g1", "u1", "v1", {})
+      expect(music.getSession("g1")).toBeNull()
+    })
+
     it("advances to the next track when seek fails", async () => {
       const createResource = vi.fn()
         .mockResolvedValueOnce({ ok: true as const, value: {} })
