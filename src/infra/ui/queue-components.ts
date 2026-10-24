@@ -4,9 +4,14 @@ import {
   ButtonStyle,
 } from "discord.js"
 import type { GuildSession } from "../../domain/types"
+import * as Queue from "../../domain/queue"
 import { BUTTON_PREFIXES, TRACKS_PER_PAGE, RADIO_MARK } from "../../config/ui"
 import { paginate } from "../../shared/format"
 import { displayTitle } from "../../domain/track-parser"
+
+// The page the player is actually showing (the stored one can be past the end after the queue shrinks)
+export const visibleQueuePage = (session: GuildSession): number =>
+  paginate(Queue.getAllTracks(session.queue), session.queuePage, TRACKS_PER_PAGE).page
 
 // Discord's limit for button labels
 const MAX_TRACK_LABEL = 80
@@ -16,8 +21,9 @@ function truncateLabel(text: string, max: number): string {
   return text.slice(0, max - 1) + "…"
 }
 
+// One row per track: TRACKS_PER_PAGE + nav + playback must stay within Discord's 5 rows per message
 export function buildTrackRows(session: GuildSession, page: number): ActionRowBuilder<ButtonBuilder>[] {
-  const allTracks = [...session.queue.userTracks, ...session.queue.radioTracks]
+  const allTracks = Queue.getAllTracks(session.queue)
   const { pageItems, startIdx } = paginate(allTracks, page, TRACKS_PER_PAGE)
 
   const rows: ActionRowBuilder<ButtonBuilder>[] = []

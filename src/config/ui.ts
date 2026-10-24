@@ -21,6 +21,7 @@ export const EMBED_COLORS = {
   danger: 0xED4245,
 } as const
 
+// Max 3: each track is a button row, plus nav and playback rows, and Discord allows 5 rows per message
 export const TRACKS_PER_PAGE = 3
 
 // Marks radio (autoplay) tracks in the queue UI

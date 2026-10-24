@@ -5,6 +5,7 @@ import type { RadioUseCases } from "../../usecases/radio"
 import type { LoggerPort } from "../../domain/ports"
 import { BUTTON_PREFIXES } from "../../config/ui"
 import { getErrorMessage } from "../../shared/error"
+import { visibleQueuePage } from "../ui/queue-components"
 
 type ButtonBundle = Readonly<{
   music: MusicUseCases
@@ -31,7 +32,9 @@ export const handleButton = async (
 
   const requireSession = async (): Promise<boolean> => {
     if (!music.getSession(guildId)) {
-      await interaction.editReply({ content: "No hay sesion activa" }).catch(() => {})
+      // The player outlived its session (e.g. a restart): remove it instead of leaving dead buttons
+      await interaction.message.delete().catch(() => {})
+      await interaction.followUp({ content: "No hay sesion activa", ephemeral: true }).catch(() => {})
       return false
     }
     return true
@@ -66,14 +69,14 @@ export const handleButton = async (
     if (customId === BUTTON_PREFIXES.queuePagePrev) {
       const session = music.getSession(guildId)
       if (!session) return
-      await refreshMessage(interaction, Math.max(1, session.queuePage - 1))
+      await refreshMessage(interaction, Math.max(1, visibleQueuePage(session) - 1))
       return
     }
 
     if (customId === BUTTON_PREFIXES.queuePageNext) {
       const session = music.getSession(guildId)
       if (!session) return
-      await refreshMessage(interaction, session.queuePage + 1)
+      await refreshMessage(interaction, visibleQueuePage(session) + 1)
       return
     }
 

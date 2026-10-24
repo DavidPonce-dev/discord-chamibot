@@ -61,15 +61,7 @@ export async function bootstrap(): Promise<void> {
   const playerPort = createDiscordPlayer()
 
   const queueStore = createQueueMessageStore()
-  const notifier = createDiscordNotifier(
-    queueStore.messages.get,
-    queueStore.messages.set,
-    queueStore.channels.get,
-    queueStore.channels.set,
-    queueStore.messages.clear,
-    queueStore.channels.clear,
-    logger,
-  )
+  const notifier = createDiscordNotifier(queueStore.messages, queueStore.channels, logger)
 
   const guilds = createDiscordGuildAdapter(getBotClient)
 

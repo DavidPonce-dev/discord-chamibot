@@ -45,8 +45,11 @@ export const createMessageQueue = () => {
       processNext(guildId, s)
     },
 
+    // Drops the pending edit but keeps the state: deleting it would let a new edit run
+    // concurrently with the one still in flight
     clear: (guildId: string): void => {
-      state.delete(guildId)
+      const s = state.get(guildId)
+      if (s) s.pending = null
     },
   } as const
 }

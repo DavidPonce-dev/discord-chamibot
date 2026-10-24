@@ -52,9 +52,8 @@ export const createMockPorts = (overrides: Partial<Ports> = {}): Ports => ({
     destroy: () => {},
   },
   notify: {
-    sendQueueUpdate: async () => {},
-    editMessage: async () => {},
-    deleteMessage: async () => {},
+    renderQueue: () => {},
+    deleteMessage: vi.fn(async () => {}),
   },
   cookieStore: {
     read: (): string | null => null,

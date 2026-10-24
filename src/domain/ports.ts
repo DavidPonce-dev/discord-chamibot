@@ -66,8 +66,8 @@ export type AudioPlayerPort = Readonly<{
 }>
 
 export type NotificationPort = Readonly<{
-  sendQueueUpdate: (guildId: string, payload: QueuePayload) => Promise<void>
-  editMessage: (guildId: string, payload: QueuePayload) => Promise<void>
+  // build runs when the edit executes (edits are serialized per guild), so it renders the latest state
+  renderQueue: (guildId: string, build: () => QueuePayload | null) => void
   deleteMessage: (guildId: string) => Promise<void>
 }>
 

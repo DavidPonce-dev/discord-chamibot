@@ -306,7 +306,7 @@ Playwright está **integrado directamente en el bot**:
 | **Paginación** | ◀ / ▶ con indicador de página actual |
 | **Playback en vivo** | Pausar, saltar, mezclar, limpiar desde el mismo mensaje |
 | **Modo Radio** | 💿 Agrega automáticamente tracks similares |
-| **Actualización en tiempo real** | Se actualiza cada 3 segundos con la posición actual |
+| **Actualización en tiempo real** | Se actualiza cada 5 segundos con la posición actual |
 | **Auto-recuperación** | Si borran el mensaje, lo recrea automáticamente |
 
 ---
@@ -464,7 +464,7 @@ npm run test:watch # Tests en modo watch
 | `yt-dlp falla` | Versión desactualizada | Ejecutar `yt-dlp -U` o reconstruir Docker |
 | `Error de cookies` | Sesión de YouTube expirada | Esperar auto-refresh (30min) o extraer manualmente. El error se loguea explícitamente. |
 | `403 Access Denied` | Sin token en URL del admin | Agregar `?token=TU_ADMIN_TOKEN` |
-| `El reproductor desaparece` | Mensaje borrado | Se recrea automáticamente en el siguiente tick (3s) |
+| `El reproductor desaparece` | Mensaje borrado | Se recrea automáticamente en el siguiente tick (5s) |
 
 ---
 

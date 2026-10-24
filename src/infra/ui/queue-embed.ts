@@ -1,3 +1,4 @@
+import { escapeMarkdown } from "discord.js"
 import type { GuildSession, Track } from "../../domain/types"
 import { parseDuration, buildProgressBar, formatTime } from "../../shared/format"
 import { createBaseEmbed } from "./base-embed"
@@ -26,13 +27,14 @@ export function buildQueueContent(session: GuildSession, _page: number): ReturnT
   if (current) {
     const { artist, song } = trackNames(current)
 
-    fields.push({ name: "\u{1F3B5} Cancion", value: `***${song}***`, inline: false })
+    // Titles like "*NSYNC" or "||spoiler||" would otherwise break the formatting
+    fields.push({ name: "\u{1F3B5} Cancion", value: `***${escapeMarkdown(song)}***`, inline: false })
     if (artist) {
-      fields.push({ name: "\u{1F3A4} Artista", value: `**${artist}**`, inline: false })
+      fields.push({ name: "\u{1F3A4} Artista", value: `**${escapeMarkdown(artist)}**`, inline: false })
     }
 
     if (current.album) {
-      fields.push({ name: "\u{1F4BF} Album", value: current.album, inline: false })
+      fields.push({ name: "\u{1F4BF} Album", value: escapeMarkdown(current.album), inline: false })
     }
 
     const pos = getPosition(session)

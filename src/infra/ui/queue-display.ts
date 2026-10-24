@@ -1,24 +1,14 @@
-import type { GuildTextBasedChannel, ButtonInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Message } from "discord.js"
+import type { GuildTextBasedChannel, ButtonInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder } from "discord.js"
 import type { GuildSession } from "../../domain/types"
 import type { MusicUseCases } from "../../usecases/music"
 import type { NotificationPort, LoggerPort } from "../../domain/ports"
+import type { QueueMessageStore, QueueChannelStore } from "../discord/messages"
+import * as Queue from "../../domain/queue"
 import { buildQueueContent } from "./queue-embed"
 import { buildTrackRows, buildNavRow, buildPlaybackRow } from "./queue-components"
 import { paginate } from "../../shared/format"
 import { TRACKS_PER_PAGE } from "../../config/ui"
 import { PROGRESS_UPDATE_INTERVAL_MS } from "../../config/timeouts"
-
-type QueueMessageStore = {
-  get: (guildId: string) => Message | undefined
-  set: (guildId: string, msg: Message) => void
-  clear: (guildId: string) => void
-}
-
-type QueueChannelStore = {
-  get: (guildId: string) => GuildTextBasedChannel | undefined
-  set: (guildId: string, ch: GuildTextBasedChannel) => void
-  clear: (guildId: string) => void
-}
 
 type QueueDisplayDeps = Readonly<{
   music: MusicUseCases
@@ -35,10 +25,10 @@ export type QueueDisplay = Readonly<{
   startProgressUpdates: (guildId: string) => void
 }>
 
-const buildQueuePayload = (session: GuildSession, page: number): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } => {
+const buildQueuePayload = (session: GuildSession): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } => {
+  // The stored page can be past the end after the queue shrinks: render the clamped one
+  const { page, totalPages } = paginate(Queue.getAllTracks(session.queue), session.queuePage, TRACKS_PER_PAGE)
   const embed = buildQueueContent(session, page)
-  const allTracks = [...session.queue.userTracks, ...session.queue.radioTracks]
-  const { totalPages } = paginate(allTracks, page, TRACKS_PER_PAGE)
 
   const rows = buildTrackRows(session, page)
   const navRow = buildNavRow(page, totalPages)
@@ -49,17 +39,14 @@ const buildQueuePayload = (session: GuildSession, page: number): { embeds: Embed
 }
 
 export const createQueueDisplay = (deps: QueueDisplayDeps): QueueDisplay => {
-  const { music, notifier, queueChannels } = deps
+  const { music, notifier, queueMessages, queueChannels } = deps
   const progressIntervals = new Map<string, NodeJS.Timeout>()
 
   const updateQueueForGuild = (guildId: string): void => {
-    const session = music.getSession(guildId)
-    if (!session) return
-
-    const channel = queueChannels.get(guildId)
-    if (!channel) return
-
-    notifier.editMessage(guildId, buildQueuePayload(session, session.queuePage) as any)
+    notifier.renderQueue(guildId, () => {
+      const session = music.getSession(guildId)
+      return session ? buildQueuePayload(session) : null
+    })
   }
 
   const stopProgressUpdates = (guildId: string): void => {
@@ -71,7 +58,7 @@ export const createQueueDisplay = (deps: QueueDisplayDeps): QueueDisplay => {
     stopProgressUpdates(guildId)
     progressIntervals.set(guildId, setInterval(() => {
       const session = music.getSession(guildId)
-      if (!session || (!session.queue.current && session.queue.userTracks.length === 0 && session.queue.radioTracks.length === 0)) {
+      if (!session || Queue.isEmpty(session.queue)) {
         stopProgressUpdates(guildId)
         return
       }
@@ -81,10 +68,9 @@ export const createQueueDisplay = (deps: QueueDisplayDeps): QueueDisplay => {
 
   const initializeQueueDisplay = async (guildId: string, channel: GuildTextBasedChannel | undefined): Promise<void> => {
     if (!channel?.send) return
-    const session = music.getSession(guildId)
-    if (!session) return
-    await notifier.sendQueueUpdate(guildId, buildQueuePayload(session, session.queuePage) as any)
+    if (!music.getSession(guildId)) return
     queueChannels.set(guildId, channel)
+    updateQueueForGuild(guildId)
     startProgressUpdates(guildId)
   }
 
@@ -93,22 +79,30 @@ export const createQueueDisplay = (deps: QueueDisplayDeps): QueueDisplay => {
     if (!guildId) return
     const session = music.getSession(guildId)
     if (!session) {
-      await notifier.deleteMessage(guildId)
       stopProgressUpdates(guildId)
+      await notifier.deleteMessage(guildId)
       return
     }
 
-    const currentPage = page ?? session.queuePage
-    music.setSession(guildId, { ...session, queuePage: currentPage })
+    if (page !== undefined) {
+      const clamped = paginate(Queue.getAllTracks(session.queue), page, TRACKS_PER_PAGE).page
+      music.setSession(guildId, { ...session, queuePage: clamped })
+    }
 
-    const isEmpty = !session.queue.current && session.queue.userTracks.length === 0 && session.queue.radioTracks.length === 0
-    if (isEmpty) {
-      await notifier.deleteMessage(guildId)
-      stopProgressUpdates(guildId)
+    const tracked = queueMessages.get(guildId)
+    if (!tracked) {
+      // Messages live in memory only: after a restart or a lost reference, adopt the clicked one
+      queueMessages.set(guildId, interaction.message)
+      if (!queueChannels.get(guildId) && interaction.channel) {
+        queueChannels.set(guildId, interaction.channel as GuildTextBasedChannel)
+      }
+    } else if (tracked.id !== interaction.message.id) {
+      // A stale player left in the chat: only the tracked one stays
+      interaction.message.delete().catch(() => {})
       return
     }
 
-    await interaction.editReply(buildQueuePayload(session, currentPage))
+    updateQueueForGuild(guildId)
   }
 
   return { updateQueueForGuild, initializeQueueDisplay, refreshButtonMessage, startProgressUpdates } as const
