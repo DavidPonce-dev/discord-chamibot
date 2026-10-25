@@ -7,7 +7,6 @@ import type {
 } from "discord.js"
 import type { NotificationPort, LoggerPort } from "../../domain/ports"
 import type { QueuePayload } from "../../domain/types"
-import { createMessageQueue } from "../../shared/message-queue"
 import { getErrorMessage } from "../../shared/error"
 
 export type QueueMessageStore = {
@@ -45,14 +44,15 @@ const toMessageOptions = (payload: QueuePayload) => ({
   components: payload.components as ActionRowBuilder<ButtonBuilder>[],
 })
 
-// The only writer of the queue message: edits are serialized per guild, so the message never
-// gets duplicated and each edit renders the session state at the moment it runs
+// The only writer of the queue message. No queue: a render while another is still in flight for
+// the same guild is skipped (the next tick shows the latest state), so a slow or rate-limited
+// edit never piles up work behind it
 export const createDiscordNotifier = (
   messages: QueueMessageStore,
   channels: QueueChannelStore,
   logger: LoggerPort,
 ): NotificationPort => {
-  const messageQueue = createMessageQueue()
+  const inFlight = new Set<string>()
   // Bumped by deleteMessage: an edit that started before it must not bring the message back
   const generations = new Map<string, number>()
   const lastRendered = new Map<string, string>()
@@ -63,7 +63,7 @@ export const createDiscordNotifier = (
 
   const generationOf = (guildId: string): number => generations.get(guildId) ?? 0
 
-  const render = async (guildId: string, build: () => QueuePayload | null): Promise<void> => {
+  const renderNow = async (guildId: string, build: () => QueuePayload | null): Promise<void> => {
     const generation = generationOf(guildId)
     const channel = channels.get(guildId)
     if (!channel) return
@@ -108,13 +108,18 @@ export const createDiscordNotifier = (
     }
   }
 
-  const renderQueue = (guildId: string, build: () => QueuePayload | null): void => {
-    messageQueue.enqueue(guildId, () => render(guildId, build))
+  const render = async (guildId: string, build: () => QueuePayload | null): Promise<void> => {
+    if (inFlight.has(guildId)) return
+    inFlight.add(guildId)
+    try {
+      await renderNow(guildId, build)
+    } finally {
+      inFlight.delete(guildId)
+    }
   }
 
   const deleteMessage = async (guildId: string): Promise<void> => {
     generations.set(guildId, generationOf(guildId) + 1)
-    messageQueue.clear(guildId)
     const msg = messages.get(guildId)
     if (msg) msg.delete().catch(() => {})
     messages.clear(guildId)
@@ -122,5 +127,5 @@ export const createDiscordNotifier = (
     lastRendered.delete(guildId)
   }
 
-  return { renderQueue, deleteMessage } as const
+  return { render, deleteMessage } as const
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { createDiscordNotifier, createQueueMessageStore } from "@/infra/discord/messages"
 import { createQueueDisplay } from "@/infra/ui/queue-display"
 import { createSession } from "@/domain/session"
@@ -6,6 +6,7 @@ import type { GuildSession, Track } from "@/domain/types"
 import type { LoggerPort } from "@/domain/ports"
 import type { MusicUseCases } from "@/usecases/music"
 import { BUTTON_PREFIXES } from "@/config/ui"
+import { PROGRESS_UPDATE_INTERVAL_MS } from "@/config/timeouts"
 
 const mockLogger: LoggerPort = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), event: vi.fn() }
 
@@ -83,7 +84,7 @@ const setup = (initial: GuildSession | null = withTracks(2)) => {
   }
 }
 
-const flush = () => new Promise((r) => setTimeout(r, 0))
+const tick = () => vi.advanceTimersByTimeAsync(PROGRESS_UPDATE_INTERVAL_MS)
 
 const pageIndicator = (payload: any): string | undefined => {
   for (const row of payload.components) {
@@ -94,25 +95,17 @@ const pageIndicator = (payload: any): string | undefined => {
   return undefined
 }
 
+const pauseEmoji = (payload: any): string => payload.components.at(-1).toJSON().components[0].emoji.name
+
 describe("infra/ui/queue-display", () => {
+  beforeEach(() => { vi.useFakeTimers() })
   afterEach(() => { vi.useRealTimers() })
 
   describe("initializeQueueDisplay", () => {
-    it("envia el reproductor en el primer /p", async () => {
+    it("envia el reproductor en el primer /p sin esperar al tick", async () => {
       const { display } = setup()
       const channel = makeChannel()
       await display.initializeQueueDisplay("g1", channel as any)
-      await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(1))
-    })
-
-    it("no duplica el mensaje si se renderiza varias veces seguidas", async () => {
-      const { display } = setup()
-      const channel = makeChannel()
-      await display.initializeQueueDisplay("g1", channel as any)
-      display.updateQueueForGuild("g1")
-      display.updateQueueForGuild("g1")
-      await flush()
-      await flush()
       expect(channel.send).toHaveBeenCalledTimes(1)
     })
 
@@ -121,21 +114,73 @@ describe("infra/ui/queue-display", () => {
       const first = makeChannel("c1")
       const second = makeChannel("c2")
       await display.initializeQueueDisplay("g1", first as any)
-      await vi.waitFor(() => expect(first.send).toHaveBeenCalledTimes(1))
-
       await display.initializeQueueDisplay("g1", second as any)
-      await vi.waitFor(() => expect(second.send).toHaveBeenCalledTimes(1))
+      expect(second.send).toHaveBeenCalledTimes(1)
       expect(first.sent[0].delete).toHaveBeenCalled()
     })
   })
 
-  describe("paginacion", () => {
+  describe("loop de render", () => {
+    it("muestra los cambios en el siguiente tick, no antes", async () => {
+      const ctx = setup()
+      const channel = makeChannel()
+      await ctx.display.initializeQueueDisplay("g1", channel as any)
+      const player = channel.sent[0]
+
+      const session = ctx.getSession()!
+      ctx.setSessionState({ ...session, playback: { ...session.playback, isPaused: true } })
+      ctx.display.ensureRendering("g1")
+      await vi.advanceTimersByTimeAsync(PROGRESS_UPDATE_INTERVAL_MS - 1)
+      expect(player.edit).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(player.edit).toHaveBeenCalledTimes(1)
+      expect(pauseEmoji(player.payload)).toBe("▶")
+    })
+
+    it("los eventos frecuentes no posponen el render", async () => {
+      const ctx = setup()
+      const channel = makeChannel()
+      await ctx.display.initializeQueueDisplay("g1", channel as any)
+      const player = channel.sent[0]
+      const session = ctx.getSession()!
+      ctx.setSessionState({ ...session, playback: { ...session.playback, isPaused: true } })
+
+      // An event every second (track changes, buttons, radio): the loop must still fire at 5 s
+      for (let i = 0; i < 5; i++) {
+        ctx.display.ensureRendering("g1")
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+      expect(player.edit).toHaveBeenCalledTimes(1)
+    })
+
+    it("no edita si nada cambio", async () => {
+      const ctx = setup()
+      const channel = makeChannel()
+      await ctx.display.initializeQueueDisplay("g1", channel as any)
+      const session = ctx.getSession()!
+      // Paused: the position doesn't move, so every tick renders the same content
+      ctx.setSessionState({ ...session, playback: { ...session.playback, isPaused: true, playbackStart: null } })
+      await tick()
+      await tick()
+      await tick()
+      expect(channel.sent[0].edit).toHaveBeenCalledTimes(1)
+    })
+
+    it("se detiene cuando la sesion termina", async () => {
+      const ctx = setup()
+      const channel = makeChannel()
+      await ctx.display.initializeQueueDisplay("g1", channel as any)
+      ctx.setSessionState(null)
+      await tick()
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
     it("acota la pagina cuando la cola se achica", async () => {
       // 6 tracks with 3 per page = 2 pages, but the stored page is still 3
       const { display } = setup(withTracks(6, { queuePage: 3 }))
       const channel = makeChannel()
       await display.initializeQueueDisplay("g1", channel as any)
-      await vi.waitFor(() => expect(channel.send).toHaveBeenCalled())
       expect(pageIndicator(channel.sent[0].payload)).toBe("2 / 2")
     })
   })
@@ -148,30 +193,27 @@ describe("infra/ui/queue-display", () => {
       editReply: vi.fn().mockResolvedValue(undefined),
     })
 
-    it("edita el reproductor con el estado actual a traves del notifier", async () => {
+    it("no edita al instante: el cambio sale en el siguiente tick", async () => {
       const ctx = setup()
       const channel = makeChannel()
       await ctx.display.initializeQueueDisplay("g1", channel as any)
-      await vi.waitFor(() => expect(channel.send).toHaveBeenCalled())
       const player = channel.sent[0]
 
       const session = ctx.getSession()!
       ctx.setSessionState({ ...session, playback: { ...session.playback, isPaused: true } })
       const interaction = makeButtonInteraction(player, channel)
       await ctx.display.refreshButtonMessage(interaction as any)
-
-      await vi.waitFor(() => expect(player.edit).toHaveBeenCalled())
+      expect(player.edit).not.toHaveBeenCalled()
       expect(interaction.editReply).not.toHaveBeenCalled()
-      const lastPayload = player.edit.mock.calls.at(-1)![0] as any
-      const pauseBtn = lastPayload.components.at(-1).toJSON().components[0]
-      expect(pauseBtn.emoji.name).toBe("▶")
+
+      await tick()
+      expect(pauseEmoji(player.payload)).toBe("▶")
     })
 
     it("guarda la pagina acotada", async () => {
       const ctx = setup(withTracks(6))
       const channel = makeChannel()
       await ctx.display.initializeQueueDisplay("g1", channel as any)
-      await vi.waitFor(() => expect(channel.send).toHaveBeenCalled())
 
       await ctx.display.refreshButtonMessage(makeButtonInteraction(channel.sent[0], channel) as any, 9)
       expect(ctx.getSession()!.queuePage).toBe(2)
@@ -181,7 +223,6 @@ describe("infra/ui/queue-display", () => {
       const ctx = setup()
       const channel = makeChannel()
       await ctx.display.initializeQueueDisplay("g1", channel as any)
-      await vi.waitFor(() => expect(channel.send).toHaveBeenCalled())
 
       const orphan = makeMessage("c1", {})
       await ctx.display.refreshButtonMessage(makeButtonInteraction(orphan, channel) as any)
@@ -189,12 +230,13 @@ describe("infra/ui/queue-display", () => {
       expect(channel.sent[0].delete).not.toHaveBeenCalled()
     })
 
-    it("adopta el mensaje del boton si no hay reproductor registrado", async () => {
+    it("adopta el mensaje del boton si no hay reproductor registrado y arranca el loop", async () => {
       const ctx = setup()
       const channel = makeChannel()
       const message = makeMessage("c1", {})
       await ctx.display.refreshButtonMessage(makeButtonInteraction(message, channel) as any)
-      await vi.waitFor(() => expect(message.edit).toHaveBeenCalled())
+      await tick()
+      expect(message.edit).toHaveBeenCalled()
       expect(channel.send).not.toHaveBeenCalled()
     })
 
@@ -206,7 +248,7 @@ describe("infra/ui/queue-display", () => {
       ctx.store.channels.set("g1", channel as any)
 
       await ctx.display.refreshButtonMessage(makeButtonInteraction(player, channel) as any)
-      await flush()
+      await tick()
       expect(player.delete).not.toHaveBeenCalled()
     })
   })
@@ -221,23 +263,31 @@ describe("infra/discord/messages (notifier)", () => {
     return { store, notifier, channel }
   }
 
-  it("arma el contenido al ejecutar la edicion, no al encolarla", async () => {
-    const { store, notifier, channel } = setupNotifier()
+  it("saltea el render si hay otro en curso, sin encolarlo", async () => {
+    const { store, notifier } = setupNotifier()
     const player = makeMessage("c1", {})
     store.messages.set("g1", player as any)
 
     let release!: () => void
     player.edit.mockImplementationOnce(() => new Promise<void>((r) => { release = r }))
-    let state = "a"
-    notifier.renderQueue("g1", () => ({ embeds: [state], components: [] }))
-    await flush()
-    notifier.renderQueue("g1", () => ({ embeds: [state], components: [] }))
-    state = "b"
+    const first = notifier.render("g1", () => ({ embeds: ["a"], components: [] }))
+    const skippedBuild = vi.fn(() => ({ embeds: ["b"], components: [] }))
+    await notifier.render("g1", skippedBuild)
     release()
+    await first
 
-    await vi.waitFor(() => expect(player.edit).toHaveBeenCalledTimes(2))
-    expect(player.edit.mock.calls[1][0].embeds).toEqual(["b"])
-    expect(channel.send).not.toHaveBeenCalled()
+    expect(skippedBuild).not.toHaveBeenCalled()
+    expect(player.edit).toHaveBeenCalledTimes(1)
+  })
+
+  it("vuelve a renderizar cuando termina el render en curso", async () => {
+    const { store, notifier } = setupNotifier()
+    const player = makeMessage("c1", {})
+    store.messages.set("g1", player as any)
+
+    await notifier.render("g1", () => ({ embeds: ["a"], components: [] }))
+    await notifier.render("g1", () => ({ embeds: ["b"], components: [] }))
+    expect(player.edit).toHaveBeenCalledTimes(2)
   })
 
   it("no edita si el contenido no cambio", async () => {
@@ -246,11 +296,8 @@ describe("infra/discord/messages (notifier)", () => {
     store.messages.set("g1", player as any)
     const build = () => ({ embeds: ["same"], components: [] })
 
-    notifier.renderQueue("g1", build)
-    await vi.waitFor(() => expect(player.edit).toHaveBeenCalledTimes(1))
-    notifier.renderQueue("g1", build)
-    await flush()
-    await flush()
+    await notifier.render("g1", build)
+    await notifier.render("g1", build)
     expect(player.edit).toHaveBeenCalledTimes(1)
   })
 
@@ -260,8 +307,8 @@ describe("infra/discord/messages (notifier)", () => {
     player.edit.mockRejectedValueOnce(new Error("Unknown Message"))
     store.messages.set("g1", player as any)
 
-    notifier.renderQueue("g1", () => ({ embeds: ["x"], components: [] }))
-    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(1))
+    await notifier.render("g1", () => ({ embeds: ["x"], components: [] }))
+    expect(channel.send).toHaveBeenCalledTimes(1)
     expect(store.messages.get("g1")).toBe(channel.sent[0])
   })
 
@@ -272,13 +319,11 @@ describe("infra/discord/messages (notifier)", () => {
 
     let reject!: (e: Error) => void
     player.edit.mockImplementationOnce(() => new Promise((_r, rj) => { reject = rj }))
-    notifier.renderQueue("g1", () => ({ embeds: ["x"], components: [] }))
-    await flush()
+    const rendering = notifier.render("g1", () => ({ embeds: ["x"], components: [] }))
 
     await notifier.deleteMessage("g1")
     reject(new Error("Unknown Message"))
-    await flush()
-    await flush()
+    await rendering
 
     expect(channel.send).not.toHaveBeenCalled()
     expect(store.messages.get("g1")).toBeUndefined()
@@ -287,7 +332,7 @@ describe("infra/discord/messages (notifier)", () => {
   it("loguea cuando no puede enviar el mensaje", async () => {
     const { notifier, channel } = setupNotifier()
     channel.send.mockRejectedValueOnce(new Error("Missing Permissions"))
-    notifier.renderQueue("g1", () => ({ embeds: ["x"], components: [] }))
-    await vi.waitFor(() => expect(mockLogger.warn).toHaveBeenCalledWith("notify", expect.any(String), expect.objectContaining({ guildId: "g1" })))
+    await notifier.render("g1", () => ({ embeds: ["x"], components: [] }))
+    expect(mockLogger.warn).toHaveBeenCalledWith("notify", expect.any(String), expect.objectContaining({ guildId: "g1" }))
   })
 })

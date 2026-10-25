@@ -31,7 +31,7 @@ const createMockPorts = (overrides: Partial<Ports> = {}): Ports => ({
   },
   voice: { join: async () => ok(undefined), destroy: () => {} },
   player: { play: () => {}, stop: () => {}, pause: () => {}, unpause: () => {}, onIdle: () => {}, onError: () => {} },
-  notify: { renderQueue: () => {}, deleteMessage: async () => {} },
+  notify: { render: async () => {}, deleteMessage: async () => {} },
   cookieStore: { read: () => null, validate: () => ({ isValid: false, cookieCount: 0, cookieNames: [], hasPSID: false, hasSID: false, lastModified: null }), delete: () => {}, filePath: () => null },
   browser: { close: async () => {}, refresh: async () => ({ success: true, timestamp: "" }), extract: async () => ({ success: true, timestamp: "" }), setupLogin: async () => ok({ url: "", instructions: "" }), isActive: () => false, resetProfile: async () => {} },
   blacklist: { getAll: () => [], add: () => {}, remove: () => false, isBlacklisted: () => false },

@@ -88,17 +88,9 @@ export async function bootstrap(): Promise<void> {
     logger,
   })
 
-  trackChangeHandler = (guildId) => {
-    queueDisplay.updateQueueForGuild(guildId)
-    const session = music.getSession(guildId)
-    if (session?.queue.current) queueDisplay.startProgressUpdates(guildId)
-  }
-
-  radioChangeHandler = (guildId) => {
-    queueDisplay.updateQueueForGuild(guildId)
-    const session = music.getSession(guildId)
-    if (session?.queue.current) queueDisplay.startProgressUpdates(guildId)
-  }
+  // Changes don't render on their own: the display loop picks them up on its next 5 s tick
+  trackChangeHandler = queueDisplay.ensureRendering
+  radioChangeHandler = queueDisplay.ensureRendering
 
   const cookieScheduler = await initCookieSystem({
     cookieStore, browser,
@@ -122,11 +114,7 @@ export async function bootstrap(): Promise<void> {
     radio: radioUC,
     admin: adminUC,
     search: searchUC,
-    updateUI: (guildId: string) => {
-      queueDisplay.updateQueueForGuild(guildId)
-      const session = music.getSession(guildId)
-      if (session?.queue.current) queueDisplay.startProgressUpdates(guildId)
-    },
+    updateUI: queueDisplay.ensureRendering,
     initializeQueueDisplay: queueDisplay.initializeQueueDisplay,
     refreshButtonMessage: queueDisplay.refreshButtonMessage,
     blacklistIsBlacklisted: blacklist.isBlacklisted,

@@ -52,7 +52,7 @@ export const createMockPorts = (overrides: Partial<Ports> = {}): Ports => ({
     destroy: () => {},
   },
   notify: {
-    renderQueue: () => {},
+    render: vi.fn(async () => {}),
     deleteMessage: vi.fn(async () => {}),
   },
   cookieStore: {

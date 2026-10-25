@@ -19,10 +19,9 @@ type QueueDisplayDeps = Readonly<{
 }>
 
 export type QueueDisplay = Readonly<{
-  updateQueueForGuild: (guildId: string) => void
+  ensureRendering: (guildId: string) => void
   initializeQueueDisplay: (guildId: string, channel: GuildTextBasedChannel | undefined) => Promise<void>
   refreshButtonMessage: (interaction: ButtonInteraction, page?: number) => Promise<void>
-  startProgressUpdates: (guildId: string) => void
 }>
 
 const buildQueuePayload = (session: GuildSession): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } => {
@@ -40,29 +39,29 @@ const buildQueuePayload = (session: GuildSession): { embeds: EmbedBuilder[]; com
 
 export const createQueueDisplay = (deps: QueueDisplayDeps): QueueDisplay => {
   const { music, notifier, queueMessages, queueChannels } = deps
-  const progressIntervals = new Map<string, NodeJS.Timeout>()
+  const renderLoops = new Map<string, NodeJS.Timeout>()
 
-  const updateQueueForGuild = (guildId: string): void => {
-    notifier.renderQueue(guildId, () => {
+  const renderGuild = (guildId: string): Promise<void> =>
+    notifier.render(guildId, () => {
       const session = music.getSession(guildId)
       return session ? buildQueuePayload(session) : null
     })
+
+  const stopRendering = (guildId: string): void => {
+    const iv = renderLoops.get(guildId)
+    if (iv) { clearInterval(iv); renderLoops.delete(guildId) }
   }
 
-  const stopProgressUpdates = (guildId: string): void => {
-    const iv = progressIntervals.get(guildId)
-    if (iv) { clearInterval(iv); progressIntervals.delete(guildId) }
-  }
-
-  const startProgressUpdates = (guildId: string): void => {
-    stopProgressUpdates(guildId)
-    progressIntervals.set(guildId, setInterval(() => {
-      const session = music.getSession(guildId)
-      if (!session || Queue.isEmpty(session.queue)) {
-        stopProgressUpdates(guildId)
+  // The player is redrawn only by this loop, every PROGRESS_UPDATE_INTERVAL_MS, while the session
+  // exists. Idempotent: restarting it on every event would keep pushing the next render back
+  const ensureRendering = (guildId: string): void => {
+    if (renderLoops.has(guildId)) return
+    renderLoops.set(guildId, setInterval(() => {
+      if (!music.getSession(guildId)) {
+        stopRendering(guildId)
         return
       }
-      updateQueueForGuild(guildId)
+      void renderGuild(guildId)
     }, PROGRESS_UPDATE_INTERVAL_MS))
   }
 
@@ -70,8 +69,9 @@ export const createQueueDisplay = (deps: QueueDisplayDeps): QueueDisplay => {
     if (!channel?.send) return
     if (!music.getSession(guildId)) return
     queueChannels.set(guildId, channel)
-    updateQueueForGuild(guildId)
-    startProgressUpdates(guildId)
+    ensureRendering(guildId)
+    // Show the player right away instead of waiting for the first tick
+    await renderGuild(guildId)
   }
 
   const refreshButtonMessage = async (interaction: ButtonInteraction, page?: number): Promise<void> => {
@@ -79,7 +79,7 @@ export const createQueueDisplay = (deps: QueueDisplayDeps): QueueDisplay => {
     if (!guildId) return
     const session = music.getSession(guildId)
     if (!session) {
-      stopProgressUpdates(guildId)
+      stopRendering(guildId)
       await notifier.deleteMessage(guildId)
       return
     }
@@ -102,8 +102,9 @@ export const createQueueDisplay = (deps: QueueDisplayDeps): QueueDisplay => {
       return
     }
 
-    updateQueueForGuild(guildId)
+    // The change shows on the next tick
+    ensureRendering(guildId)
   }
 
-  return { updateQueueForGuild, initializeQueueDisplay, refreshButtonMessage, startProgressUpdates } as const
+  return { ensureRendering, initializeQueueDisplay, refreshButtonMessage } as const
 }
