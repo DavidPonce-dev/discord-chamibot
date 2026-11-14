@@ -14,6 +14,7 @@ import { createSearchUseCases } from "./usecases/search"
 import { createYtDlpAudio } from "./infra/youtube/audio"
 import { createYouTubeSearch } from "./infra/youtube/search"
 import { createAudioUrlCache } from "./infra/youtube/audio-url-cache"
+import { createYtDlpUpdater } from "./infra/youtube/updater"
 import { createLastFmAdapter } from "./infra/recommendation/lastfm"
 import { createGroqAdapter } from "./infra/recommendation/groq"
 import { createRadioService } from "./infra/recommendation/radio-service"
@@ -97,6 +98,8 @@ export async function bootstrap(): Promise<void> {
     cookieRefreshIntervalMs: config.youtube.cookieRefreshIntervalMs,
     logger,
   })
+
+  if (config.youtube.autoUpdateYtDlp) createYtDlpUpdater(logger).start()
 
   const adminPort = parseInt(process.env.ADMIN_PORT || "3002", 10)
   const adminServer = createAdminServer(

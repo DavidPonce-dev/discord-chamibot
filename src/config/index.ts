@@ -31,6 +31,8 @@ export const config = {
     cookieDir: optional("COOKIE_DIR", "data/cookies"),
     browserProfile: optional("BROWSER_PROFILE", "data/browser-profile"),
     cookieRefreshIntervalMs: optionalInt("COOKIE_REFRESH_INTERVAL_MS", 30 * 60 * 1000),
+    // Only where the process may overwrite the yt-dlp binary (the Docker image sets it)
+    autoUpdateYtDlp: process.env.YTDLP_AUTO_UPDATE === "true",
   },
   lastfm: {
     apiKey: process.env.LASTFM_API_KEY ?? "",

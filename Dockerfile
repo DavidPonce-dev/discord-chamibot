@@ -55,9 +55,14 @@ RUN ARCH=$(uname -m) && \
     rm /tmp/deno.zip
 ENV PATH="/usr/local/bin:$PATH"
 
-# Install yt-dlp for YouTube URL extraction
-RUN wget -O /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
-  && chmod +x /usr/local/bin/yt-dlp
+# Install yt-dlp for YouTube URL extraction, where the node user can replace it: YouTube changes
+# break old builds, so the bot updates it in place (YTDLP_AUTO_UPDATE) instead of waiting for a deploy
+RUN mkdir -p /home/node/bin \
+  && wget -O /home/node/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+  && chmod +x /home/node/bin/yt-dlp \
+  && chown -R node:node /home/node/bin
+ENV PATH="/home/node/bin:$PATH"
+ENV YTDLP_AUTO_UPDATE=true
 
 WORKDIR /app
 
@@ -69,17 +74,21 @@ COPY --from=builder /app/dist ./dist
 # Set Playwright browsers path to a non-root accessible location BEFORE installing
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
 
-# Install Playwright and Chromium (will use PLAYWRIGHT_BROWSERS_PATH)
-RUN npx playwright install chromium \
-  && npx playwright install-deps chromium 2>/dev/null || true
-
-# Verify Chromium binary exists
-RUN node -e "const { chromium } = require('playwright'); console.log('Playwright module loaded')"
+# System libraries Chromium needs beyond the ones above (needs root)
+RUN npx playwright install-deps chromium 2>/dev/null || true
 
 # Create directories with proper ownership for non-root user
 RUN mkdir -p /cookies /profile /app/data /home/node/.cache && chown -R node:node /cookies /profile /app/data /home/node/.cache
 
 ENV NODE_OPTIONS=--no-deprecation
 USER node
+
+# Install Chromium as the runtime user (into PLAYWRIGHT_BROWSERS_PATH): installing it as root and
+# chown-ing it afterwards stored the whole browser a second time in another layer
+RUN npx playwright install chromium
+
+# Fail the build if the browser is not where Playwright will look for it
+RUN node -e "const fs = require('fs'); const p = require('playwright').chromium.executablePath(); if (!fs.existsSync(p)) { console.error('Chromium missing: ' + p); process.exit(1) } console.log('Chromium at ' + p)"
+
 # Run node directly: behind npm/sh the SIGTERM of a deploy may never reach the graceful shutdown
 CMD ["node", "dist/index.js"]
