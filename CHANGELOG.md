@@ -4,6 +4,59 @@ Todas las versiones notables de este proyecto.
 
 ---
 
+## v1.7.0 (2026-11-13)
+
+### Rendimiento
+- **FFmpeg ya no acumula su salida de progreso**: escribía una línea de estadísticas dos veces por segundo y todo ese texto se guardaba y se volvía a recorrer en cada fragmento buscando errores de cookies. En temas largos el costo crecía sin límite. Ahora se lanza con `-nostats -loglevel warning` y solo se conserva el final del stderr, que además es la parte que explica un fallo.
+- **Un solo refresco de cookies por tema**: al reintentar la URL de audio se podía lanzar Chromium hasta tres veces seguidas.
+- **Caché de sugerencias del autocompletado limitado** a 500 entradas: crecía con cada texto distinto tipeado mientras el bot estuviera encendido.
+
+### Radio
+- **Ya no repite los mismos temas**: recuerda los últimos 30 (títulos e ids de video) en lugar de 5.
+- **Elige la canción y no una versión alternativa**: los resultados en vivo, covers, karaokes, remixes y similares solo se usan si no hay otra cosa, o si el tema recomendado es justamente esa versión.
+- Se descartan resultados de menos de un minuto (shorts, adelantos) o sin duración.
+- Los temas recientes se comparan por palabras completas: "Blind" ya no se descartaba por estar dentro de "Blinding Lights".
+- **Respaldo de Groq confiable**: se llamaba en modo `json_object` pero el prompt pedía un array, así que el nombre de la clave quedaba a criterio del modelo. Ahora se pide un objeto `{"tracks": [...]}`, los rechazos de la API se registran en el log y el modelo se puede cambiar con `GROQ_MODEL`.
+- **Timeout en Last.fm** (8 s): una petición colgada dejaba la radio en silencio.
+
+### Cookies de YouTube
+- **El refresco automático se reanuda siempre tras el login por VNC**: solo lo reanudaba el botón de detener el setup. Si se cerraba el navegador desde el panel, o Chromium se cerraba solo, las cookies dejaban de renovarse hasta el próximo reinicio.
+- **Locks viejos del perfil de Chromium**: son enlaces simbólicos que quedan colgando tras un cierre brusco y la verificación anterior nunca los veía. Ahora se eliminan antes de cada arranque del navegador.
+- El encabezado de cookies que recibe FFmpeg sigue al archivo: un refresco programado se aplica sin esperar a que algo falle.
+
+### Interfaz
+- **Los botones de la cola están atados a su tema**: llevan el id del video y no hacen nada si la cola cambió desde que se dibujó el reproductor, en lugar de borrar o mover otro tema.
+- **Modo de repetición visible** en el reproductor ("Tema actual" / "Toda la cola").
+- **`/p` explica qué falló**: no encontró el tema, no pudo entrar al canal de voz o el bot se está actualizando, en lugar de un error genérico.
+- Los errores de los botones se envían en privado: antes quedaban escritos para siempre en el mensaje del reproductor.
+- Si el bot pierde acceso al canal del reproductor deja de reintentar la edición cada 5 s; se usa el código de error de Discord en lugar de buscarlo en el texto del mensaje.
+- Los clicks en los botones se muestran al instante aunque haya una edición en curso.
+
+### Correcciones de reproducción
+- **El bot se va cuando nadie escucha**: termina la sesión si lo desconectan del canal de voz o si el canal queda un minuto sin oyentes. Antes seguía transmitiendo (y, con autoplay, buscando temas) indefinidamente.
+- **Dos `/p` al mismo tiempo sin sesión**: el segundo entraba de nuevo al canal y pisaba la cola del primero. Ahora comparten la misma sesión y se conservan ambos temas.
+- **Saltar con repetición de un tema**: el skip volvía a reproducir el mismo tema; ahora pasa al siguiente.
+- **Un stream que falla a mitad de tema se retoma desde donde iba**, no desde el principio.
+- **Playlists**: se resuelven con yt-dlp. Los links de playlist reproducían un solo video porque play-dl dejó de funcionar con YouTube.
+- Un link copiado mientras suena un mix automático de YouTube (`list=RD...`) agrega ese video, no cincuenta.
+- Se libera la conexión de voz cuando no se puede entrar al canal; una URL mal formada ya no produce un error interno.
+
+### Admin / Docker
+- **Blacklistear un servidor ya no tumba el bot**: el archivo se escribía en un directorio sin permisos dentro del contenedor y el error detenía el proceso. Además no tenía volumen y se perdía en cada deploy. **Nuevo volumen `data`** (`/app/data`), que debe persistir igual que `browser-profile` y `cookies`.
+- **Apagado limpio**: al recibir SIGTERM el bot corta las sesiones, cierra Chromium y se desconecta de Discord. El contenedor ejecuta `node` directamente y con `init: true` para que la señal llegue.
+- **yt-dlp se actualiza solo** al arrancar y una vez al día (`YTDLP_AUTO_UPDATE`, activado en la imagen): una imagen construida hace semanas ya no se rompe cuando YouTube cambia algo.
+- **Imagen más liviana**: Chromium se instala como el usuario `node`; antes quedaba almacenado dos veces. El build falla si el navegador no está donde Playwright lo busca.
+- El token del panel se compara en tiempo constante y x11vnc escucha solo en localhost.
+- `LOG_LEVEL` (`debug`, `info`, `warn`, `error`) para filtrar el log.
+
+### Limpieza
+- **Eliminada la dependencia play-dl** (sin versiones desde 2023): sus respaldos de búsqueda y stream ya fallaban contra YouTube y solo agregaban demora.
+- Los campos del historial de radio pasan a llamarse `recentTitles` / `recentIds`; se eliminan `GuildSession.destroyed` y un parámetro sin uso.
+- Workflow de CI (typecheck, lint y tests) en GitHub Actions.
+- 82 tests nuevos (463 en total).
+
+---
+
 ## v1.6.1 (2026-10-21)
 
 ### Correcciones de reproducción

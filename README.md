@@ -117,8 +117,9 @@ docker compose run --rm bot npm run register
 El `docker-compose.yml` usa **Docker named volumes** para persistencia:
 - `browser-profile` — Perfil de Chromium (sesiones, cookies del browser)
 - `cookies` — Archivo de cookies de YouTube para yt-dlp
+- `data` — Datos del bot (`/app/data`, blacklist de servidores)
 
-Ambos volúmenes persisten entre redeployments de Coolify.
+Los tres volúmenes deben persistir entre redeployments de Coolify.
 
 ### Opción B: Local
 
@@ -236,6 +237,9 @@ Playwright está **integrado directamente en el bot**:
 | `BROWSER_PROFILE` | `/profile` | Directorio para perfil de Chromium |
 | `COOKIE_REFRESH_INTERVAL_MS` | `1800000` (30min) | Intervalo de auto-refresh |
 | `ADMIN_PORT` | `3002` | Puerto del admin server |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Modelo de Groq para las recomendaciones de la radio |
+| `YTDLP_AUTO_UPDATE` | `false` (`true` en la imagen Docker) | Actualiza yt-dlp al arrancar y una vez al día |
+| `LOG_LEVEL` | `debug` | Nivel mínimo de log: `debug`, `info`, `warn`, `error` |
 
 ### Troubleshooting de cookies
 
@@ -351,7 +355,7 @@ Cuando se activa con `/autoplay` o el botón 💿, el bot:
                   ┌────────────────────┼────────────────────┐
                   ▼                    ▼                    ▼
            ┌──────────┐       ┌──────────────┐    ┌────────────────┐
-           │ play-dl  │       │ GuildManager │    │ ensureMessage  │
+           │ yt-dlp   │       │ GuildManager │    │ ensureMessage  │
            │ search/  │       │  .get/create │    │ (interfaz cola)│
            │ metadata │       └──────┬───────┘    └────────────────┘
            └──────────┘              │
