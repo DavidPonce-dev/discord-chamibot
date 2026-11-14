@@ -55,13 +55,15 @@ export const createRadioUseCases = (
       radioTracks: session.queue.radioTracks.length,
     })
 
-    if (toggled.queue.radioTracks.length === 0) {
+    // With tracks waiting the radio has nothing to add yet: playback asks for a recommendation
+    // when the last of them starts
+    if (Queue.needsRadioTrack(toggled.queue)) {
       const recommended = await recommendAndEnqueue(toggled, ports.recommend, ports.logger)
 
       // Re-read: the session may have been destroyed or changed while recommending
       const latest = getSession(guildId)
       if (!latest) return err("no_session")
-      if (latest.prefs.autoplay && latest.queue.radioTracks.length === 0 && recommended.queue.radioTracks.length > 0) {
+      if (latest.prefs.autoplay && Queue.needsRadioTrack(latest.queue) && recommended.queue.radioTracks.length > 0) {
         setSession(guildId, {
           ...latest,
           queue: { ...latest.queue, radioTracks: recommended.queue.radioTracks },

@@ -131,6 +131,9 @@ export const getSize = (q: Queue): number => q.userTracks.length + q.radioTracks
 
 export const isEmpty = (q: Queue): boolean => getSize(q) === 0 && !q.current
 
+// The radio only fills in when nothing is waiting: while users have tracks queued it stays out
+export const needsRadioTrack = (q: Queue): boolean => getSize(q) === 0
+
 export const addRadioTrack = (q: Queue, track: Track): Queue => ({
   ...q,
   radioTracks: [...q.radioTracks, track],

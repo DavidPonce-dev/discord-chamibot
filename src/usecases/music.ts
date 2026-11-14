@@ -215,7 +215,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     onTrackChange(guildId)
     prefetchNextInBackground(guildId)
 
-    if (updated.queue.userTracks.length === 0 && updated.queue.radioTracks.length === 0 && updated.prefs.autoplay) {
+    if (updated.prefs.autoplay && Queue.needsRadioTrack(updated.queue)) {
       ports.logger.debug("music", "startPlayback: cola agotada, poblando radio", { guildId })
       populateRadio(guildId)
         .then(() => onTrackChange(guildId))
@@ -300,7 +300,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
 
   const populateRadio = async (guildId: string): Promise<void> => {
     const session = sessions.get(guildId)
-    if (!session || !session.prefs.autoplay || session.queue.radioTracks.length > 0) return
+    if (!session || !session.prefs.autoplay || !Queue.needsRadioTrack(session.queue)) return
 
     ports.logger.info("radio", "Poblando cola de radio (fin de pista)", {
       guildId,
@@ -310,9 +310,10 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
 
     const recommended = await recommendAndEnqueue(session, ports.recommend, ports.logger)
 
-    // Re-read: the session may have been destroyed or changed while recommending
+    // Re-read: the session may have been destroyed or changed while recommending.
+    // A track queued meanwhile wins: the radio recommends again once the queue runs out
     const latest = sessions.get(guildId)
-    if (!latest || !latest.prefs.autoplay || latest.queue.radioTracks.length > 0) return
+    if (!latest || !latest.prefs.autoplay || !Queue.needsRadioTrack(latest.queue)) return
     if (recommended.queue.radioTracks.length === 0) return
     sessions.set(guildId, {
       ...latest,
