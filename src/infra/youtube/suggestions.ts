@@ -36,6 +36,8 @@ const fetchSuggestions = async (query: string): Promise<string[]> => {
   return parseSuggestionResponse(data)
 }
 
+export const SUGGESTION_CACHE_MAX_ENTRIES = 500
+
 export const createSuggestionProvider = (): {
   suggestions: (query: string) => Promise<readonly AutocompleteChoice[]>
 } => {
@@ -57,7 +59,15 @@ export const createSuggestionProvider = (): {
     }
 
     if (choices.length > 0) {
-      cache.set(q.toLowerCase(), { expiresAt: Date.now() + AUTOCOMPLETE_CACHE_MS, choices })
+      const key = q.toLowerCase()
+      // Re-insert so the Map's order is by freshness, then drop the oldest: every keystroke is a
+      // new key, so without a limit this grew for as long as the process ran
+      cache.delete(key)
+      cache.set(key, { expiresAt: Date.now() + AUTOCOMPLETE_CACHE_MS, choices })
+      if (cache.size > SUGGESTION_CACHE_MAX_ENTRIES) {
+        const oldest = cache.keys().next().value
+        if (oldest !== undefined) cache.delete(oldest)
+      }
     }
     return choices
   }

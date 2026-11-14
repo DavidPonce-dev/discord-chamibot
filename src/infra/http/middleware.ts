@@ -1,9 +1,13 @@
 import type http from "http"
+import { createHash, timingSafeEqual } from "crypto"
 
 export const isValidToken = (req: http.IncomingMessage, adminToken: string): boolean => {
   const url = new URL(req.url!, `http://${req.headers.host}`)
   const token = url.searchParams.get("token")
-  return adminToken !== "" && token === adminToken
+  if (adminToken === "" || token === null) return false
+  // Compare digests so the check takes the same time whatever the guess (and its length) is
+  const digest = (value: string): Buffer => createHash("sha256").update(value).digest()
+  return timingSafeEqual(digest(token), digest(adminToken))
 }
 
 export const isAllowedOrigin = (req: http.IncomingMessage, allowedOrigins: readonly string[]): boolean => {

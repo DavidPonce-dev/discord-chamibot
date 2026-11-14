@@ -205,7 +205,8 @@ export const createPlaywrightBrowser = (
     }
 
     const xvfb = spawnVnc("Xvfb", "Xvfb", [display, "-screen", "0", "1280x720x24"])
-    const x11vnc = spawnVnc("x11vnc", "x11vnc", ["-display", display, "-forever", "-nopw", "-listen", "0.0.0.0", "-rfbport", "5900", "-shared"])
+    // No password: only websockify (same container) may reach it, the admin token guards the rest
+    const x11vnc = spawnVnc("x11vnc", "x11vnc", ["-display", display, "-forever", "-nopw", "-listen", "localhost", "-rfbport", "5900", "-shared"])
     const websockify = spawnVnc("websockify", "websockify", ["--web", "/usr/share/novnc", vncPort, "localhost:5900"])
 
     try {
