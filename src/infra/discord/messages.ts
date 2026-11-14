@@ -44,15 +44,16 @@ const toMessageOptions = (payload: QueuePayload) => ({
   components: payload.components as ActionRowBuilder<ButtonBuilder>[],
 })
 
-// The only writer of the queue message. No queue: a render while another is still in flight for
-// the same guild is skipped (the next tick shows the latest state), so a slow or rate-limited
-// edit never piles up work behind it
+// The only writer of the queue message. No queue: renders requested while another is in flight for
+// the same guild collapse into a single follow-up that reads the latest state, so a slow or
+// rate-limited edit never piles up work behind it, yet a button click is never left unshown
 export const createDiscordNotifier = (
   messages: QueueMessageStore,
   channels: QueueChannelStore,
   logger: LoggerPort,
 ): NotificationPort => {
   const inFlight = new Set<string>()
+  const pending = new Map<string, () => QueuePayload | null>()
   // Bumped by deleteMessage: an edit that started before it must not bring the message back
   const generations = new Map<string, number>()
   const lastRendered = new Map<string, string>()
@@ -109,17 +110,27 @@ export const createDiscordNotifier = (
   }
 
   const render = async (guildId: string, build: () => QueuePayload | null): Promise<void> => {
-    if (inFlight.has(guildId)) return
+    if (inFlight.has(guildId)) {
+      pending.set(guildId, build)
+      return
+    }
     inFlight.add(guildId)
     try {
-      await renderNow(guildId, build)
+      let next: (() => QueuePayload | null) | undefined = build
+      while (next) {
+        pending.delete(guildId)
+        await renderNow(guildId, next)
+        next = pending.get(guildId)
+      }
     } finally {
       inFlight.delete(guildId)
+      pending.delete(guildId)
     }
   }
 
   const deleteMessage = async (guildId: string): Promise<void> => {
     generations.set(guildId, generationOf(guildId) + 1)
+    pending.delete(guildId)
     const msg = messages.get(guildId)
     if (msg) msg.delete().catch(() => {})
     messages.clear(guildId)

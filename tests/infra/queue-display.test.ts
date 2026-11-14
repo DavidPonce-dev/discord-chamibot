@@ -193,7 +193,7 @@ describe("infra/ui/queue-display", () => {
       editReply: vi.fn().mockResolvedValue(undefined),
     })
 
-    it("no edita al instante: el cambio sale en el siguiente tick", async () => {
+    it("edita al instante, sin esperar al tick", async () => {
       const ctx = setup()
       const channel = makeChannel()
       await ctx.display.initializeQueueDisplay("g1", channel as any)
@@ -203,10 +203,32 @@ describe("infra/ui/queue-display", () => {
       ctx.setSessionState({ ...session, playback: { ...session.playback, isPaused: true } })
       const interaction = makeButtonInteraction(player, channel)
       await ctx.display.refreshButtonMessage(interaction as any)
-      expect(player.edit).not.toHaveBeenCalled()
+      expect(player.edit).toHaveBeenCalledTimes(1)
+      expect(pauseEmoji(player.payload)).toBe("▶")
+      // The notifier stays the only writer
       expect(interaction.editReply).not.toHaveBeenCalled()
+    })
 
-      await tick()
+    it("muestra el click aunque haya una edicion del loop en curso", async () => {
+      const ctx = setup()
+      const channel = makeChannel()
+      await ctx.display.initializeQueueDisplay("g1", channel as any)
+      const player = channel.sent[0]
+
+      let release!: () => void
+      player.edit.mockImplementationOnce((p: unknown) => new Promise((r) => { release = () => { player.payload = p; r(player) } }))
+      const session = ctx.getSession()!
+      ctx.setSessionState({ ...session, queue: { ...session.queue, userTracks: session.queue.userTracks.slice(1) } })
+      await vi.advanceTimersByTimeAsync(PROGRESS_UPDATE_INTERVAL_MS)
+
+      const current = ctx.getSession()!
+      ctx.setSessionState({ ...current, playback: { ...current.playback, isPaused: true } })
+      const clicking = ctx.display.refreshButtonMessage(makeButtonInteraction(player, channel) as any)
+      release()
+      await clicking
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(player.edit).toHaveBeenCalledTimes(2)
       expect(pauseEmoji(player.payload)).toBe("▶")
     })
 
@@ -263,7 +285,7 @@ describe("infra/discord/messages (notifier)", () => {
     return { store, notifier, channel }
   }
 
-  it("saltea el render si hay otro en curso, sin encolarlo", async () => {
+  it("agrupa los renders pedidos durante uno en curso en uno solo posterior", async () => {
     const { store, notifier } = setupNotifier()
     const player = makeMessage("c1", {})
     store.messages.set("g1", player as any)
@@ -271,13 +293,15 @@ describe("infra/discord/messages (notifier)", () => {
     let release!: () => void
     player.edit.mockImplementationOnce(() => new Promise<void>((r) => { release = r }))
     const first = notifier.render("g1", () => ({ embeds: ["a"], components: [] }))
-    const skippedBuild = vi.fn(() => ({ embeds: ["b"], components: [] }))
-    await notifier.render("g1", skippedBuild)
+    const supersededBuild = vi.fn(() => ({ embeds: ["b"], components: [] }))
+    await notifier.render("g1", supersededBuild)
+    await notifier.render("g1", () => ({ embeds: ["c"], components: [] }))
     release()
     await first
 
-    expect(skippedBuild).not.toHaveBeenCalled()
-    expect(player.edit).toHaveBeenCalledTimes(1)
+    expect(supersededBuild).not.toHaveBeenCalled()
+    expect(player.edit).toHaveBeenCalledTimes(2)
+    expect(player.payload.embeds).toEqual(["c"])
   })
 
   it("vuelve a renderizar cuando termina el render en curso", async () => {

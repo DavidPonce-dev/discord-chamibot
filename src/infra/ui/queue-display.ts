@@ -102,8 +102,9 @@ export const createQueueDisplay = (deps: QueueDisplayDeps): QueueDisplay => {
       return
     }
 
-    // The change shows on the next tick
     ensureRendering(guildId)
+    // Whoever clicked expects to see the result now, not on the next tick
+    await renderGuild(guildId)
   }
 
   return { ensureRendering, initializeQueueDisplay, refreshButtonMessage } as const
