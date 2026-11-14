@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { createJsonBlacklist } from "@/infra/persistence/blacklist"
+import type { LoggerPort } from "@/domain/ports"
 import fs from "fs"
 import path from "path"
 import os from "os"
@@ -60,5 +61,34 @@ describe("infra/persistence/blacklist", () => {
     fs.writeFileSync(filePath, "not json{{{")
     const bl = createJsonBlacklist(filePath)
     expect(bl.getAll()).toEqual([])
+  })
+
+  describe("persistence", () => {
+    beforeEach(() => { vi.useFakeTimers() })
+    afterEach(() => { vi.useRealTimers() })
+
+    it("persists entries for the next start, creating the directory if needed", () => {
+      const filePath = path.join(tmpDir(), "nested", "bl.json")
+      createJsonBlacklist(filePath).add("g1", "Server One")
+      vi.advanceTimersByTime(2_000)
+
+      expect(createJsonBlacklist(filePath).isBlacklisted("g1")).toBe(true)
+    })
+
+    // In the Docker image the data directory was not writable: the write threw inside a timer,
+    // which is an uncaught exception and took the whole bot down
+    it("does not throw when the file cannot be written, and logs it", () => {
+      const dir = tmpDir()
+      const notADirectory = path.join(dir, "file")
+      fs.writeFileSync(notADirectory, "x")
+      const logger: LoggerPort = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), event: vi.fn() }
+      const bl = createJsonBlacklist(path.join(notADirectory, "sub", "bl.json"), logger)
+
+      bl.add("g1", "Server One")
+
+      expect(() => vi.advanceTimersByTime(2_000)).not.toThrow()
+      expect(bl.isBlacklisted("g1")).toBe(true)
+      expect(logger.error).toHaveBeenCalledWith("blacklist", expect.any(String), expect.objectContaining({ error: expect.any(String) }))
+    })
   })
 })

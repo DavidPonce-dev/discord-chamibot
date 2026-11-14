@@ -77,8 +77,9 @@ RUN npx playwright install chromium \
 RUN node -e "const { chromium } = require('playwright'); console.log('Playwright module loaded')"
 
 # Create directories with proper ownership for non-root user
-RUN mkdir -p /cookies /profile /home/node/.cache && chown -R node:node /cookies /profile /home/node/.cache
+RUN mkdir -p /cookies /profile /app/data /home/node/.cache && chown -R node:node /cookies /profile /app/data /home/node/.cache
 
 ENV NODE_OPTIONS=--no-deprecation
 USER node
-CMD ["npm", "run", "start"]
+# Run node directly: behind npm/sh the SIGTERM of a deploy may never reach the graceful shutdown
+CMD ["node", "dist/index.js"]

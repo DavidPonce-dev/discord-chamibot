@@ -1,17 +1,23 @@
 import fs from "fs"
-import type { BlacklistRepository } from "../../domain/ports"
+import path from "path"
+import type { BlacklistRepository, LoggerPort } from "../../domain/ports"
 import type { BlacklistEntry } from "../../domain/types"
+import { getErrorMessage } from "../../shared/error"
 
-export const createJsonBlacklist = (filePath: string): BlacklistRepository => {
+export const createJsonBlacklist = (filePath: string, logger?: LoggerPort): BlacklistRepository => {
   let entries: BlacklistEntry[] = loadFromFile(filePath)
   let writeTimer: NodeJS.Timeout | null = null
 
   const debouncedSave = (): void => {
     if (writeTimer) clearTimeout(writeTimer)
     writeTimer = setTimeout(() => {
-      const dir = filePath.substring(0, filePath.lastIndexOf("/")) || filePath.substring(0, filePath.lastIndexOf("\\"))
-      if (dir && !fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-      fs.writeFileSync(filePath, JSON.stringify(entries, null, 2), "utf-8")
+      // Runs in a timer: an error thrown here would be an uncaught exception and stop the bot
+      try {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true })
+        fs.writeFileSync(filePath, JSON.stringify(entries, null, 2), "utf-8")
+      } catch (e: unknown) {
+        logger?.error("blacklist", "No se pudo guardar la blacklist", { path: filePath, error: getErrorMessage(e) })
+      }
     }, 1000)
   }
 

@@ -3,6 +3,8 @@ services:
     build: .
     container_name: charmin-charmeleon-bot
     restart: unless-stopped
+    # Reaps the Chromium/ffmpeg/yt-dlp children and forwards signals to node
+    init: true
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${ADMIN_PORT:-3002}/health"]
       interval: 30s
@@ -33,7 +35,9 @@ services:
     volumes:
       - browser-profile:/profile
       - cookies:/cookies
+      - data:/app/data
 
 volumes:
   browser-profile:
   cookies:
+  data:

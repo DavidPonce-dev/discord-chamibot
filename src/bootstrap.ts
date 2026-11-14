@@ -48,7 +48,7 @@ export async function bootstrap(): Promise<void> {
     browserProfile: config.youtube.browserProfile,
   }, logger)
 
-  const blacklist = createJsonBlacklist("data/blacklist.json")
+  const blacklist = createJsonBlacklist("data/blacklist.json", logger)
   const audioUrlCache = createAudioUrlCache()
   const audio = createYtDlpAudio(cookieStore, logger, () => browser.refresh(), audioUrlCache)
   const search = createYouTubeSearch(cookieStore, audioUrlCache)
@@ -124,7 +124,7 @@ export async function bootstrap(): Promise<void> {
 
   botClient = bot
 
-  setupProcessHandlers({ adminServer, cookieScheduler, logger })
+  setupProcessHandlers({ adminServer, cookieScheduler, logger, music, browser, getClient: getBotClient })
 
   logger.info("bot", "Iniciando conexion a Discord...")
   await bot.login(config.discord.token)
