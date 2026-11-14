@@ -1,7 +1,12 @@
-import type { GroqPort } from "../../domain/ports"
+import type { GroqPort, LoggerPort } from "../../domain/ports"
 import type { GroqCandidate, ParsedTrack } from "../../domain/types"
+import { getErrorMessage } from "../../shared/error"
+import { GROQ_RECOMMEND_TIMEOUT_MS, GROQ_PARSE_TIMEOUT_MS } from "../../config/timeouts"
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+const DEFAULT_MODEL = "llama-3.3-70b-versatile"
+
+type GroqClient = Readonly<{ apiKey: string; model: string; logger?: LoggerPort }>
 
 type GroqRequest = {
   model?: string
@@ -11,7 +16,8 @@ type GroqRequest = {
   response_format?: { type: string }
 }
 
-const groqCall = async <T>(apiKey: string, req: GroqRequest, timeoutMs = 8000): Promise<T | null> => {
+const groqCall = async <T>(client: GroqClient, req: GroqRequest, timeoutMs: number): Promise<T | null> => {
+  const { apiKey, model, logger } = client
   if (!apiKey) return null
 
   try {
@@ -21,21 +27,24 @@ const groqCall = async <T>(apiKey: string, req: GroqRequest, timeoutMs = 8000): 
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        ...req,
-      }),
+      body: JSON.stringify({ model, ...req }),
       signal: AbortSignal.timeout(timeoutMs),
     })
 
-    if (!response.ok) return null
+    // Failures used to be silent: a revoked key or a retired model just looked like "no suggestions"
+    if (!response.ok) {
+      const body = await response.text().catch(() => "")
+      logger?.warn("groq", "Groq rechazo la peticion", { status: response.status, model, body: body.slice(0, 200) })
+      return null
+    }
 
     const data = await response.json() as { choices: { message: { content: string } }[] }
     const content = data.choices?.[0]?.message?.content
     if (!content) return null
 
     return JSON.parse(content) as T
-  } catch {
+  } catch (e: unknown) {
+    logger?.warn("groq", "Fallo la llamada a Groq", { model, error: getErrorMessage(e) })
     return null
   }
 }
@@ -64,8 +73,8 @@ Rules:
 ${recentArtists}
 ${genreContext}
 - Do NOT suggest the original track
-- Return ONLY a valid JSON array of objects with keys "artist" and "name"
-- Example: [{"artist": "Band Name", "name": "Song Title"}]
+- Return ONLY a valid JSON object with a "tracks" key: a list of objects with keys "artist" and "name"
+- Example: {"tracks": [{"artist": "Band Name", "name": "Song Title"}]}
 
 Track: "${song}" by ${artist}`
 }
@@ -80,7 +89,9 @@ Rules:
 
 Title: ${title}`
 
-export const createGroqAdapter = (apiKey: string): GroqPort => {
+export const createGroqAdapter = (apiKey: string, logger?: LoggerPort, model: string = DEFAULT_MODEL): GroqPort => {
+  const client: GroqClient = { apiKey, model, logger }
+
   const recommend = async (
     artist: string,
     song: string,
@@ -89,18 +100,18 @@ export const createGroqAdapter = (apiKey: string): GroqPort => {
     artistHistory: readonly string[],
     genreTags: readonly string[],
   ): Promise<readonly GroqCandidate[]> => {
-    const result = await groqCall<unknown>(apiKey, {
+    const result = await groqCall<unknown>(client, {
       messages: [{ role: "user", content: buildRecommendPrompt(artist, song, limit, artistHistory, genreTags) }],
       temperature: 0.3,
       max_tokens: 300,
       response_format: { type: "json_object" },
-    })
+    }, GROQ_RECOMMEND_TIMEOUT_MS)
 
     if (!result) return []
 
     const raw = Array.isArray(result)
       ? result
-      : (result as Record<string, unknown>).suggestions ?? (result as Record<string, unknown>).tracks ?? []
+      : (result as Record<string, unknown>).tracks ?? (result as Record<string, unknown>).suggestions ?? []
     const candidates = Array.isArray(raw) ? raw : []
 
     return candidates
@@ -113,12 +124,12 @@ export const createGroqAdapter = (apiKey: string): GroqPort => {
   }
 
   const parseTitle = async (title: string): Promise<ParsedTrack | null> => {
-    return groqCall<ParsedTrack>(apiKey, {
+    return groqCall<ParsedTrack>(client, {
       messages: [{ role: "user", content: buildParsePrompt(title) }],
       temperature: 0.1,
       max_tokens: 100,
       response_format: { type: "json_object" },
-    }, 5000)
+    }, GROQ_PARSE_TIMEOUT_MS)
   }
 
   return { recommend, parseTitle } as const

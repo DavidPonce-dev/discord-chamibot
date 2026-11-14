@@ -54,7 +54,7 @@ export async function bootstrap(): Promise<void> {
   const search = createYouTubeSearch(cookieStore, audioUrlCache)
 
   const lastfm = createLastFmAdapter(config.lastfm.apiKey)
-  const groq = createGroqAdapter(config.groq.apiKey)
+  const groq = createGroqAdapter(config.groq.apiKey, logger, config.groq.model)
   const recommend = createRadioService(lastfm, groq, search, logger)
 
   const voice = createDiscordVoice()

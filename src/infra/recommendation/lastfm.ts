@@ -1,18 +1,22 @@
 import { LastFMTrack, LastFMArtist } from "lastfm-ts-api"
 import type { LastFmPort } from "../../domain/ports"
 import type { LastFmSimilarTrack, LastFmSimilarArtist, LastFmSearchResult, LastFmTag } from "../../domain/types"
+import { LASTFM_TIMEOUT_MS } from "../../config/timeouts"
+
+// The client has no timeout by default: a request that hangs would leave the radio waiting forever
+const REQUEST_CONFIG = { timeout: LASTFM_TIMEOUT_MS }
 
 export const createLastFmAdapter = (apiKey: string): LastFmPort => {
   let trackApi: LastFMTrack | null = null
   let artistApi: LastFMArtist | null = null
 
   const getTrackApi = (): LastFMTrack => {
-    if (!trackApi) trackApi = new LastFMTrack(apiKey)
+    if (!trackApi) trackApi = new LastFMTrack(apiKey, undefined, undefined, REQUEST_CONFIG)
     return trackApi
   }
 
   const getArtistApi = (): LastFMArtist => {
-    if (!artistApi) artistApi = new LastFMArtist(apiKey)
+    if (!artistApi) artistApi = new LastFMArtist(apiKey, undefined, undefined, REQUEST_CONFIG)
     return artistApi
   }
 

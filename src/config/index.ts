@@ -37,6 +37,8 @@ export const config = {
   },
   groq: {
     apiKey: process.env.GROQ_API_KEY ?? "",
+    // Groq retires models regularly: overridable without a new build
+    model: process.env.GROQ_MODEL || undefined,
   },
   admin: {
     token: process.env.ADMIN_TOKEN ?? "",
