@@ -25,14 +25,29 @@ export const createRoutes = (
 ): {
   vncState: { active: boolean }
   handlers: Record<string, RouteHandler>
+  syncVncState: () => void
 } => {
   const { music, admin, cookie } = deps
 
   const vncState = { active: false }
   const setupState = { busy: false }
 
+  // The login pauses the cookie scheduler: whatever ends it has to resume it, exactly once
+  const endVncSession = (): boolean => {
+    if (!vncState.active) return false
+    vncState.active = false
+    cookieScheduler?.resume()
+    return true
+  }
+
+  // The login browser can also go away on its own (window closed inside VNC, crash)
+  const syncVncState = (): void => {
+    if (vncState.active && !setupState.busy && !cookie.isBrowserActive()) endVncSession()
+  }
+
   const handlers: Record<string, RouteHandler> = {
     "GET /api/status": async (_req, res) => {
+      syncVncState()
       const validation = cookie.validate()
       json(res, 200, {
         cookiesValid: validation.isValid,
@@ -87,9 +102,7 @@ export const createRoutes = (
     },
 
     "POST /api/cookies/setup/stop": async (_req, res) => {
-      if (vncState.active) {
-        vncState.active = false
-        cookieScheduler?.resume()
+      if (endVncSession()) {
         json(res, 200, { message: "VNC stopped" })
       } else {
         json(res, 400, { error: "No active VNC session" })
@@ -104,6 +117,7 @@ export const createRoutes = (
     "POST /api/browser/close": async (_req, res) => {
       const extractResult = await cookie.extract()
       await cookie.close()
+      endVncSession()
       json(res, 200, { message: "Browser closed", cookieExtract: extractResult })
     },
 
@@ -158,5 +172,5 @@ export const createRoutes = (
     },
   }
 
-  return { vncState, handlers }
+  return { vncState, handlers, syncVncState }
 }

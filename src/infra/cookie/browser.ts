@@ -21,29 +21,12 @@ export const createPlaywrightBrowser = (
   fs.mkdirSync(config.cookieDir, { recursive: true, mode: 0o700 })
   fs.mkdirSync(config.browserProfile, { recursive: true, mode: 0o700 })
 
-  const waitForProfileFree = async (timeoutMs = 10000): Promise<void> => {
-    const lockFiles = ["SingletonLock", "SingletonCookie", "SingletonSocket"]
-    const start = Date.now()
-
-    while (Date.now() - start < timeoutMs) {
-      const hasLocks = lockFiles.some(file =>
-        fs.existsSync(path.join(config.browserProfile, file))
-      )
-      if (!hasLocks) return
-
-      for (const file of lockFiles) {
-        const lockPath = path.join(config.browserProfile, file)
-        try {
-          const stat = fs.statSync(lockPath)
-          if (Date.now() - stat.mtimeMs > 5000) fs.unlinkSync(lockPath)
-        } catch {}
-      }
-      await new Promise(r => setTimeout(r, 500))
-    }
-
-    for (const file of lockFiles) {
-      const lockPath = path.join(config.browserProfile, file)
-      try { fs.unlinkSync(lockPath) } catch {}
+  // Only called while this process has no browser open, and nothing else uses the profile, so any
+  // lock found is stale (unclean exit, previous container). They are symlinks to "<hostname>-<pid>"
+  // that dangle by then: existsSync/statSync follow the link and never see them, rmSync does
+  const waitForProfileFree = async (): Promise<void> => {
+    for (const file of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
+      try { fs.rmSync(path.join(config.browserProfile, file), { force: true }) } catch {}
     }
   }
 

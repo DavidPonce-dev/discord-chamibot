@@ -39,7 +39,7 @@ export const createAdminServer = (
     adminPageHtml = "<html><body>Admin page not found</body></html>"
   }
 
-  const { vncState, handlers } = createRoutes(deps, adminPageHtml, allowedOrigins, cookieScheduler)
+  const { vncState, handlers, syncVncState } = createRoutes(deps, adminPageHtml, allowedOrigins, cookieScheduler)
 
   const start = (): void => {
     if (server) return
@@ -58,6 +58,9 @@ export const createAdminServer = (
       const method = req.method
 
       if (pathname === "/health" && method === "GET") {
+        // The container healthcheck hits this every 30 s, so a login browser that went away
+        // is noticed even when nobody has the admin panel open
+        syncVncState()
         const validation = cookie.validate()
         json(res, 200, {
           status: "ok",

@@ -144,4 +144,73 @@ describe("infra/http/routes", () => {
     await handlers["GET /api/blacklist"](createMockReq(), res, new URL("http://localhost/api/blacklist"))
     expect(admin.getBlacklist).toHaveBeenCalled()
   })
+
+  // The VNC login pauses the cookie scheduler: every way of ending the login has to resume it,
+  // or the cookies stop being refreshed until the next restart
+  describe("VNC login and the cookie scheduler", () => {
+    const setupWithScheduler = () => {
+      const cookie = createMockCookie()
+      const scheduler = { pause: vi.fn(), resume: vi.fn() }
+      const blacklist = { isBlacklisted: vi.fn(), getAll: vi.fn().mockReturnValue([]), add: vi.fn(), remove: vi.fn() }
+      const routes = createRoutes(
+        { music: createMockMusic(), admin: createMockAdmin(), cookie, blacklist, logger: mockLogger },
+        "<html></html>",
+        [],
+        scheduler,
+      )
+      return { ...routes, cookie, scheduler }
+    }
+    const call = async (handlers: ReturnType<typeof setupWithScheduler>["handlers"], route: string) => {
+      const res = createMockRes()
+      await handlers[route](createMockReq(), res, new URL("http://localhost/"))
+      return res
+    }
+
+    it("pauses the scheduler while the VNC login is open", async () => {
+      const { handlers, vncState, scheduler } = setupWithScheduler()
+      await call(handlers, "POST /api/cookies/setup")
+      expect(vncState.active).toBe(true)
+      expect(scheduler.pause).toHaveBeenCalledTimes(1)
+      expect(scheduler.resume).not.toHaveBeenCalled()
+    })
+
+    it("resumes the scheduler when the browser is closed from the panel", async () => {
+      const { handlers, vncState, scheduler } = setupWithScheduler()
+      await call(handlers, "POST /api/cookies/setup")
+
+      await call(handlers, "POST /api/browser/close")
+
+      expect(vncState.active).toBe(false)
+      expect(scheduler.resume).toHaveBeenCalledTimes(1)
+    })
+
+    it("resumes the scheduler when the login browser was closed on its own", async () => {
+      const { handlers, vncState, scheduler, cookie } = setupWithScheduler()
+      await call(handlers, "POST /api/cookies/setup")
+      vi.mocked(cookie.isBrowserActive).mockReturnValue(false)
+
+      const res = await call(handlers, "GET /api/status")
+
+      expect(res._data.vncActive).toBe(false)
+      expect(vncState.active).toBe(false)
+      expect(scheduler.resume).toHaveBeenCalledTimes(1)
+    })
+
+    it("resumes the scheduler only once per login", async () => {
+      const { handlers, scheduler, syncVncState } = setupWithScheduler()
+      await call(handlers, "POST /api/cookies/setup")
+
+      await call(handlers, "POST /api/cookies/setup/stop")
+      await call(handlers, "POST /api/browser/close")
+      syncVncState()
+
+      expect(scheduler.resume).toHaveBeenCalledTimes(1)
+    })
+
+    it("does not touch the scheduler when closing a browser outside a VNC login", async () => {
+      const { handlers, scheduler } = setupWithScheduler()
+      await call(handlers, "POST /api/browser/close")
+      expect(scheduler.resume).not.toHaveBeenCalled()
+    })
+  })
 })

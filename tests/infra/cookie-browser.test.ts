@@ -80,6 +80,58 @@ describe("infra/cookie/browser refresh", () => {
   })
 })
 
+describe("infra/cookie/browser profile locks", () => {
+  let dir: string
+  let profileDir: string
+  const LOCKS = ["SingletonLock", "SingletonCookie", "SingletonSocket"]
+  const create = () => createPlaywrightBrowser({ cookieDir: dir, cookieFile: path.join(dir, "youtube-cookies.txt"), browserProfile: profileDir }, logger)
+  const canSymlink = (() => {
+    const probe = path.join(os.tmpdir(), `symlink-probe-${process.pid}`)
+    try {
+      fs.symlinkSync("target", probe)
+      fs.rmSync(probe, { force: true })
+      return true
+    } catch {
+      return false
+    }
+  })()
+  // lstat, unlike existsSync, sees a symlink whose target is gone
+  const lockExists = (name: string): boolean => {
+    try { fs.lstatSync(path.join(profileDir, name)); return true } catch { return false }
+  }
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "cookies-"))
+    profileDir = path.join(dir, "profile")
+    profileCookies = [cookie("SID"), cookie("YSC")]
+  })
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }) })
+
+  // Nothing else uses the profile once this process has no browser open, so a leftover lock is
+  // always stale: waiting for it to age only delayed every refresh
+  it("removes leftover locks right away instead of waiting for them to age", async () => {
+    const browser = create()
+    for (const name of LOCKS) fs.writeFileSync(path.join(profileDir, name), "")
+
+    const result = await browser.refresh()
+
+    expect(result.success).toBe(true)
+    expect(LOCKS.filter(lockExists)).toEqual([])
+  }, 2_000)
+
+  // Chromium's real locks are symlinks to "<hostname>-<pid>", which dangle after an unclean exit:
+  // a lock left by the previous container makes Chromium refuse to open the profile
+  it.skipIf(!canSymlink)("removes the dangling symlink locks left by a previous container", async () => {
+    const browser = create()
+    for (const name of LOCKS) fs.symlinkSync("old-container-123", path.join(profileDir, name))
+
+    const result = await browser.refresh()
+
+    expect(result.success).toBe(true)
+    expect(LOCKS.filter(lockExists)).toEqual([])
+  })
+})
+
 describe("infra/cookie/browser session across restarts", () => {
   let dir: string
   let cookieFile: string
