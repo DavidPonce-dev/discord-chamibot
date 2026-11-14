@@ -10,6 +10,8 @@ import { buildYtDlpArgs, spawnYtDlp, USER_AGENT, AUDIO_FORMAT } from "./ytdlp"
 import { createAudioUrlCache, type AudioUrlCache } from "./audio-url-cache"
 import { formatTime } from "../../shared/format"
 
+const FFMPEG_STDERR_TAIL_CHARS = 2_000
+
 export const createYtDlpAudio = (
   cookieStore: CookieStorePort,
   logger: LoggerPort,
@@ -125,6 +127,9 @@ export const createYtDlpAudio = (
       })
 
       const ffmpegArgs = [
+        // Without these FFmpeg writes a progress line to stderr twice a second for the whole track
+        "-nostats",
+        "-loglevel", "warning",
         "-reconnect", "1",
         "-reconnect_streamed", "1",
         "-reconnect_delay_max", "5",
@@ -163,9 +168,11 @@ export const createYtDlpAudio = (
         bytesWritten += data.length
       })
 
+      // Only the tail is kept: it bounds memory and the cost of scanning it on every chunk,
+      // and the last lines are the ones that explain a failure
       let ffmpegStderr = ""
       ffmpeg.stderr?.on("data", (data: Buffer) => {
-        ffmpegStderr += data.toString()
+        ffmpegStderr = (ffmpegStderr + data.toString()).slice(-FFMPEG_STDERR_TAIL_CHARS)
         if (!streamFailedByGuild.get(guildId) && isCookieError(ffmpegStderr)) {
           streamFailedByGuild.set(guildId, true)
           invalidateCookieCache()
@@ -181,14 +188,14 @@ export const createYtDlpAudio = (
         logger.debug("audio", "FFmpeg cerrado", {
           code,
           bytesWritten,
-          stderr: ffmpegStderr.slice(0, 2000),
+          stderr: ffmpegStderr,
         })
         // A killed process can close after its replacement started: don't drop the new one
         if (ffmpegProcesses.get(guildId) === ffmpeg) ffmpegProcesses.delete(guildId)
         if (code && code !== 0) {
           // Don't reuse a stream URL that just failed (expired, 403, ...)
           audioCache.invalidateAudioUrl(audioUrl)
-          const stderr = ffmpegStderr.slice(0, 2000)
+          const stderr = ffmpegStderr
           if (isCookieError(stderr)) {
             logger.warn("audio", "FFmpeg fallo por posible error de cookies, refrescando para el siguiente track")
             streamFailedByGuild.set(guildId, true)
