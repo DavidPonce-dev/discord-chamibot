@@ -5,22 +5,14 @@ import type { CookieStorePort } from "@/domain/ports"
 
 vi.mock("@/infra/youtube/ytdlp", () => ({
   searchYtDlp: vi.fn(),
+  listYtDlpPlaylist: vi.fn(),
   buildYtDlpArgs: vi.fn(),
   spawnYtDlp: vi.fn(),
   AUDIO_FORMAT: "bestaudio",
   USER_AGENT: "test-agent",
 }))
 
-vi.mock("play-dl", () => ({
-  default: {
-    search: vi.fn(),
-    video_info: vi.fn(),
-    playlist_info: vi.fn(),
-  },
-}))
-
-import { searchYtDlp } from "@/infra/youtube/ytdlp"
-import play from "play-dl"
+import { searchYtDlp, listYtDlpPlaylist, buildYtDlpArgs, spawnYtDlp } from "@/infra/youtube/ytdlp"
 
 const mockCookieStore = (filePath: string | null): CookieStorePort => ({
   read: () => null,
@@ -29,17 +21,22 @@ const mockCookieStore = (filePath: string | null): CookieStorePort => ({
   filePath: () => filePath,
 })
 
+// The single-video path spawns yt-dlp for the video's metadata
+const mockVideoInfo = (info: Record<string, unknown>) => {
+  vi.mocked(buildYtDlpArgs).mockImplementation((base: string[]) => [...base])
+  vi.mocked(spawnYtDlp).mockResolvedValue({ code: 0, stdout: JSON.stringify(info), stderr: "" })
+}
+
 afterEach(() => {
   vi.resetAllMocks()
   vi.unstubAllGlobals()
 })
 
 describe("infra/youtube/search", () => {
-  it("strips leading emoji and falls back to play-dl when yt-dlp search is empty", async () => {
-    vi.mocked(searchYtDlp).mockResolvedValue([])
-    vi.mocked(play.search).mockResolvedValueOnce([
-      { id: "vid1", url: "https://youtube.com/watch?v=vid1", title: "Fallback Song", durationRaw: "3:30" },
-    ] as never)
+  it("strips leading emoji and retries with a flat search when the full one is empty", async () => {
+    vi.mocked(searchYtDlp)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "vid1", url: "https://youtube.com/watch?v=vid1", title: "Fallback Song", duration: 210 }] as never)
 
     const search = createYouTubeSearch(mockCookieStore(null))
     const result = await search.resolveQuery("\u{1F50E} discipline king crimson")
@@ -79,15 +76,96 @@ describe("infra/youtube/search", () => {
     expect(cache.get("https://youtube.com/watch?v=a1")).toBe(audioUrl)
   })
 
-  it("returns 'Sin resultados' when both sources fail", async () => {
+  it("returns 'Sin resultados' when yt-dlp finds nothing", async () => {
     vi.mocked(searchYtDlp).mockResolvedValue([])
-    vi.mocked(play.search).mockRejectedValueOnce(new Error("network"))
 
     const search = createYouTubeSearch(mockCookieStore(null))
     const result = await search.resolveQuery("queen")
 
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("Sin resultados")
+  })
+
+  describe("playlists", () => {
+    const entries = [
+      { id: "p1", url: "https://www.youtube.com/watch?v=p1", title: "Peso Pluma - Bellakeo", duration: 235, channel: "Peso Pluma", playlistTitle: "Popular Music Videos" },
+      { id: "p2", url: "https://www.youtube.com/watch?v=p2", title: "Arcangel - FN8", duration: 650, channel: "Arcangel", playlistTitle: "Popular Music Videos" },
+    ]
+
+    it("queues every video of a playlist URL", async () => {
+      vi.mocked(listYtDlpPlaylist).mockResolvedValueOnce(entries as never)
+
+      const search = createYouTubeSearch(mockCookieStore(null))
+      const result = await search.resolveQuery("https://www.youtube.com/playlist?list=PL123")
+
+      expect(listYtDlpPlaylist).toHaveBeenCalledWith("https://www.youtube.com/playlist?list=PL123", 50, expect.anything())
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.value.playlistTitle).toBe("Popular Music Videos")
+        expect(result.value.tracks).toEqual([
+          { url: "https://www.youtube.com/watch?v=p1", title: "Peso Pluma - Bellakeo", duration: "3:55", id: "p1", thumbnail: "https://img.youtube.com/vi/p1/hqdefault.jpg", channel: "Peso Pluma" },
+          { url: "https://www.youtube.com/watch?v=p2", title: "Arcangel - FN8", duration: "10:50", id: "p2", thumbnail: "https://img.youtube.com/vi/p2/hqdefault.jpg", channel: "Arcangel" },
+        ])
+      }
+    })
+
+    it("queues the playlist when the URL is a video opened inside one", async () => {
+      vi.mocked(listYtDlpPlaylist).mockResolvedValueOnce(entries as never)
+
+      const search = createYouTubeSearch(mockCookieStore(null))
+      const result = await search.resolveQuery("https://www.youtube.com/watch?v=p1&list=PL123")
+
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.tracks).toHaveLength(2)
+    })
+
+    it("falls back to the video itself when the playlist can't be listed", async () => {
+      vi.mocked(listYtDlpPlaylist).mockResolvedValueOnce([])
+      mockVideoInfo({ id: "p1", title: "Only This One", duration: 200 })
+
+      const search = createYouTubeSearch(mockCookieStore(null))
+      const result = await search.resolveQuery("https://www.youtube.com/watch?v=p1&list=PL123")
+
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.tracks.map(t => t.title)).toEqual(["Only This One"])
+    })
+
+    // Copying a link while YouTube autoplays a "Mix" adds list=RD...: the user means that one video
+    it("plays just the video when the list is an auto-generated mix", async () => {
+      mockVideoInfo({ id: "p1", title: "Just This Song", duration: 200 })
+
+      const search = createYouTubeSearch(mockCookieStore(null))
+      const result = await search.resolveQuery("https://www.youtube.com/watch?v=p1&list=RDp1&start_radio=1")
+
+      expect(listYtDlpPlaylist).not.toHaveBeenCalled()
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.value.tracks.map(t => t.title)).toEqual(["Just This Song"])
+    })
+
+    it("reports an error when a playlist-only URL can't be listed", async () => {
+      vi.mocked(listYtDlpPlaylist).mockResolvedValueOnce([])
+
+      const search = createYouTubeSearch(mockCookieStore(null))
+      const result = await search.resolveQuery("https://www.youtube.com/playlist?list=PL123")
+
+      expect(result.ok).toBe(false)
+    })
+  })
+
+  it("reports an error instead of throwing on a malformed URL", async () => {
+    const search = createYouTubeSearch(mockCookieStore(null))
+    const result = await search.resolveQuery("http://")
+    expect(result.ok).toBe(false)
+  })
+
+  it("reports an error when the video info can't be read", async () => {
+    vi.mocked(buildYtDlpArgs).mockImplementation((base: string[]) => [...base])
+    vi.mocked(spawnYtDlp).mockResolvedValue({ code: 1, stdout: "", stderr: "ERROR: Video unavailable" })
+
+    const search = createYouTubeSearch(mockCookieStore(null))
+    const result = await search.resolveQuery("https://www.youtube.com/watch?v=gone")
+
+    expect(result.ok).toBe(false)
   })
 
   it("searchVideos uses the in-process web search without spawning yt-dlp", async () => {

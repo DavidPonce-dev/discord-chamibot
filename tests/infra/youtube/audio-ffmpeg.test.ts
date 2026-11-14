@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { EventEmitter } from "events"
 import { PassThrough } from "stream"
+import fs from "fs"
+import os from "os"
+import path from "path"
 import type * as ChildProcess from "child_process"
 import type { CookieStorePort, LoggerPort } from "@/domain/ports"
 
@@ -91,5 +94,31 @@ describe("infra/youtube/audio FFmpeg stream", () => {
     // What matters when diagnosing is the last thing FFmpeg said, not the first 2000 characters
     expect(stderr).toContain("5XX Server Error")
     expect(stderr.length).toBeLessThanOrEqual(4_000)
+  })
+
+  // The header was cached until a stream failed, so a scheduled refresh kept sending old cookies
+  it("envia las cookies nuevas despues de que el archivo se renueva", async () => {
+    const cookieLine = (value: string) => `.youtube.com\tTRUE\t/\tTRUE\t0\tSID\t${value}\n`
+    const headersOf = (call: number): string => {
+      const args = vi.mocked(spawn).mock.calls[call][1] as string[]
+      return args[args.indexOf("-headers") + 1]
+    }
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "audio-cookies-"))
+    const file = path.join(dir, "cookies.txt")
+    fs.writeFileSync(file, cookieLine("old"))
+    fs.utimesSync(file, new Date(1_000_000_000), new Date(1_000_000_000))
+    const audio = createYtDlpAudio({ ...cookieStore, filePath: () => file }, logger)
+
+    fakeFfmpeg()
+    await audio.createFromAudioUrl("g1", AUDIO_URL)
+    expect(headersOf(0)).toContain("SID=old")
+
+    fs.writeFileSync(file, cookieLine("new"))
+    fs.utimesSync(file, new Date(2_000_000_000), new Date(2_000_000_000))
+    fakeFfmpeg()
+    await audio.createFromAudioUrl("g1", AUDIO_URL)
+    expect(headersOf(1)).toContain("SID=new")
+
+    fs.rmSync(dir, { recursive: true, force: true })
   })
 })

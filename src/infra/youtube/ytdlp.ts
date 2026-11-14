@@ -1,7 +1,7 @@
 import { spawn } from "child_process"
 import fs from "fs"
 import type { CookieStorePort } from "../../domain/ports"
-import { YTDL_SEARCH_TIMEOUT_MS, YTDL_TIMEOUT_MS } from "../../config/timeouts"
+import { YTDL_RESOLVE_TIMEOUT_MS, YTDL_SEARCH_TIMEOUT_MS, YTDL_TIMEOUT_MS } from "../../config/timeouts"
 
 export const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
@@ -66,6 +66,7 @@ export type YtDlpSearchEntry = Readonly<{
   artist?: string
   album?: string
   audioUrl?: string
+  playlistTitle?: string
 }>
 
 const isGoogleVideoUrl = (url: string): boolean => /^https:\/\/[^/]*googlevideo\.com\//.test(url)
@@ -93,12 +94,28 @@ export function parseYtDlpSearchOutput(stdout: string): YtDlpSearchEntry[] {
         artist: typeof d.artist === "string" ? d.artist : typeof d.album_artist === "string" ? d.album_artist : undefined,
         album: typeof d.album === "string" ? d.album : undefined,
         audioUrl,
+        playlistTitle: typeof d.playlist_title === "string" ? d.playlist_title : undefined,
       })
     } catch {
       // skip malformed line
     }
   }
   return entries
+}
+
+// The videos of a playlist, without resolving each one (flat): one yt-dlp call for the whole list
+export async function listYtDlpPlaylist(
+  url: string,
+  limit: number,
+  cookieStore: CookieStorePort,
+): Promise<YtDlpSearchEntry[]> {
+  // --yes-playlist comes after the default --no-playlist, so it wins for "watch?v=...&list=..." URLs
+  const args = buildYtDlpArgs(["--dump-json"], cookieStore, ["--flat-playlist", "--yes-playlist", "--playlist-end", String(limit)])
+  args.push(url)
+
+  const result = await spawnYtDlp(args, YTDL_RESOLVE_TIMEOUT_MS)
+  if (result.code !== 0 || !result.stdout.trim()) return []
+  return parseYtDlpSearchOutput(result.stdout)
 }
 
 export type YtDlpSearchType = "video" | "playlist"

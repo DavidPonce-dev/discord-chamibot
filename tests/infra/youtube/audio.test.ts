@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
-import { Readable } from "stream"
 import { createYtDlpAudio } from "@/infra/youtube/audio"
 import type { CookieStorePort, LoggerPort } from "@/domain/ports"
 
@@ -10,14 +9,7 @@ vi.mock("@/infra/youtube/ytdlp", () => ({
   AUDIO_FORMAT: "bestaudio",
 }))
 
-vi.mock("play-dl", () => ({
-  default: {
-    stream: vi.fn(),
-  },
-}))
-
 import { spawnYtDlp } from "@/infra/youtube/ytdlp"
-import play from "play-dl"
 
 const mockCookieStore = (filePath: string | null): CookieStorePort => ({
   read: () => null,
@@ -84,7 +76,7 @@ describe("infra/youtube/audio getAudioUrl", () => {
     expect(spawnYtDlp).toHaveBeenCalledTimes(3)
   })
 
-  it("does not retry or fall back to play-dl when the video is unavailable", async () => {
+  it("does not retry when the video is unavailable", async () => {
     vi.mocked(spawnYtDlp).mockResolvedValue({ code: 1, stdout: "", stderr: "ERROR: [youtube] abc123: Video unavailable\n" })
 
     const audio = createYtDlpAudio(mockCookieStore(null), mockLogger)
@@ -93,20 +85,27 @@ describe("infra/youtube/audio getAudioUrl", () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toContain("Video unavailable")
     expect(spawnYtDlp).toHaveBeenCalledTimes(1)
-    expect(play.stream).not.toHaveBeenCalled()
   })
 
-  it("falls back to play-dl stream when yt-dlp cannot resolve the audio URL", async () => {
-    vi.mocked(spawnYtDlp).mockResolvedValue({ code: -1, stdout: "", stderr: "ERROR: [youtube] abc123: The page needs to be reloaded.\n" })
-    vi.mocked(play.stream).mockResolvedValueOnce({
-      stream: Readable.from([]),
-      type: "ogg/opus",
-    } as never)
+  it("returns the error when yt-dlp cannot resolve the audio URL", async () => {
+    vi.mocked(spawnYtDlp).mockResolvedValue({ code: -1, stdout: "", stderr: "Network timeout\n" })
 
     const audio = createYtDlpAudio(mockCookieStore(null), mockLogger)
     const result = await audio.createResource("guild1", "https://youtube.com/watch?v=abc123")
 
-    expect(result.ok).toBe(true)
-    expect(play.stream).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toContain("Network timeout")
+  })
+
+  // Each refresh launches Chromium: once per track is enough to know whether it helps
+  it("refreshes the cookies at most once while retrying the same track", async () => {
+    vi.mocked(spawnYtDlp).mockResolvedValue(reloadError)
+    const refresh = vi.fn().mockResolvedValue({ success: true })
+
+    const audio = createYtDlpAudio(mockCookieStore(null), mockLogger, refresh)
+    const result = await audio.getAudioUrl("https://youtube.com/watch?v=abc123")
+
+    expect(result.ok).toBe(false)
+    expect(refresh).toHaveBeenCalledTimes(1)
   })
 })

@@ -21,7 +21,6 @@
     "dotenv": "^16.4.7",
     "http-proxy": "^1.18.1",
     "lastfm-ts-api": "^2.6.2",
-    "play-dl": "^1.9.7",
     "playwright": "^1.60.0"
   },
   "devDependencies": {

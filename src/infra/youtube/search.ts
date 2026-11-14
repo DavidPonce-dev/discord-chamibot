@@ -1,15 +1,16 @@
-import play from "play-dl"
 import type { TrackSearchPort, CookieStorePort } from "../../domain/ports"
 import { withCookieRetry } from "../../domain/ports"
 import { ok, err, type Result } from "../../shared/result"
 import type { ResolveResult, ResolvedTrack, AutocompleteChoice, VideoSearchResult } from "../../domain/types"
-import { buildYtDlpArgs, spawnYtDlp, searchYtDlp, AUDIO_FORMAT } from "./ytdlp"
+import { buildYtDlpArgs, spawnYtDlp, searchYtDlp, listYtDlpPlaylist, AUDIO_FORMAT } from "./ytdlp"
 import { isDirectAudioUrl, type AudioUrlCache } from "./audio-url-cache"
 import { searchYouTubeWeb } from "./web-search"
 import { formatTime } from "../../shared/format"
 import { sanitizeYouTubeUrl, extractVideoId, youtubeThumbnail } from "../../domain/track-parser"
 import { YTDL_RESOLVE_TIMEOUT_MS, AUTOCOMPLETE_FALLBACK_TIMEOUT_MS } from "../../config/timeouts"
 import { createSuggestionProvider } from "./suggestions"
+
+const MAX_PLAYLIST_TRACKS = 50
 
 const resolveWithYtDlp = async (
   url: string,
@@ -63,50 +64,40 @@ export const createYouTubeSearch = (
     const isUrl = query.startsWith("http://") || query.startsWith("https://")
 
     if (isUrl) {
-      const parsed = new URL(query)
-      if (parsed.searchParams.has("list") || parsed.pathname.includes("/playlist")) {
-        try {
-          const list = await play.playlist_info(query, { incomplete: true })
-          const videos = await list.all_videos()
-          const tracks = videos.slice(0, 50).map((v): ResolvedTrack => ({
+      let parsed: URL
+      try {
+        parsed = new URL(query)
+      } catch {
+        return err("URL invalida")
+      }
+
+      const listId = parsed.searchParams.get("list")
+      const hasVideo = parsed.searchParams.has("v")
+      // "RD..." lists are the endless mixes YouTube generates around a video: a link copied while
+      // one is playing means that video, not fifty more
+      const isAutoMix = hasVideo && (listId?.startsWith("RD") ?? false)
+      if ((listId || parsed.pathname.includes("/playlist")) && !isAutoMix) {
+        const entries = await listYtDlpPlaylist(query, MAX_PLAYLIST_TRACKS, cookieStore)
+        if (entries.length > 0) {
+          const tracks = entries.map((v): ResolvedTrack => ({
             url: v.url ?? `https://youtube.com/watch?v=${v.id}`,
             title: v.title ?? "Unknown",
-            duration: v.durationRaw,
+            duration: v.duration !== undefined ? formatTime(v.duration) : undefined,
             id: v.id,
             thumbnail: v.id ? youtubeThumbnail(v.id) : undefined,
+            channel: v.channel,
           }))
-          return ok({ tracks, playlistTitle: list.title ?? undefined })
-        } catch {
-          // fallback: treat as single video
+          return ok({ tracks, playlistTitle: entries[0].playlistTitle })
         }
+        // A playlist that can't be listed: play the video the link points at, if any
+        if (!hasVideo) return err("No se pudo obtener la playlist")
       }
 
       const isChannel = parsed.pathname.includes("/channel/") || parsed.pathname.startsWith("/@")
       if (!isChannel) {
-        const cleanUrl = sanitizeYouTubeUrl(query)
-        const id = extractVideoId(cleanUrl)
-
-        const ytDlpResult = await resolveWithYtDlp(cleanUrl, cookieStore, audioCache)
-        if (ytDlpResult.ok) {
-          return ok({ tracks: [ytDlpResult.value] })
-        }
-
-        try {
-          const info = await play.video_info(cleanUrl)
-          const vid = info.video_details
-          const vidId = vid.id ?? id
-          return ok({
-            tracks: [{
-              url: cleanUrl,
-              title: vid.title ?? "Unknown",
-              duration: vid.durationRaw,
-              id: vidId ?? undefined,
-              thumbnail: vidId ? youtubeThumbnail(vidId) : undefined,
-            }],
-          })
-        } catch {
-          return err("No se pudo obtener info del video")
-        }
+        const ytDlpResult = await resolveWithYtDlp(sanitizeYouTubeUrl(query), cookieStore, audioCache)
+        if (ytDlpResult.ok) return ok({ tracks: [ytDlpResult.value] })
+        return err("No se pudo obtener info del video")
       }
     }
 
@@ -139,23 +130,7 @@ export const createYouTubeSearch = (
       })
     }
 
-    try {
-      const playResults = await play.search(cleanQuery, { limit: 1, source: { youtube: "video" } })
-      const video = playResults[0]
-      if (!video) return err("Sin resultados")
-      const id = video.id
-      return ok({
-        tracks: [{
-          url: video.url ?? `https://youtube.com/watch?v=${id}`,
-          title: video.title ?? "Unknown",
-          duration: video.durationRaw,
-          id,
-          thumbnail: id ? youtubeThumbnail(id) : undefined,
-        }],
-      })
-    } catch {
-      return err("Sin resultados")
-    }
+    return err("Sin resultados")
   }
 
   const autocomplete = async (query: string): Promise<readonly AutocompleteChoice[]> => {
