@@ -60,6 +60,9 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
   const streamRetries = new Map<string, number>()
   const MAX_RADIO_REFILLS_AFTER_FAILURE = 3
   const radioRefillsAfterFailure = new Map<string, number>()
+  const creatingSession = new Map<string, Promise<Result<GuildSession, "voice_join_failed">>>()
+  // Guilds whose current track is ending because of a skip, not because it finished
+  const skipped = new Set<string>()
 
   const onTrackChange = (guildId: string): void => {
     callbacks?.onTrackChange?.(guildId)
@@ -81,8 +84,38 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
       sessions.delete(guildId)
       streamRetries.delete(guildId)
       radioRefillsAfterFailure.delete(guildId)
+      skipped.delete(guildId)
       ports.notify.deleteMessage(guildId).catch(() => {})
     }
+  }
+
+  // Joining takes seconds: a second /p arriving meanwhile must wait for the same session
+  // instead of joining again and overwriting the first one's queue
+  const ensureSession = (
+    guildId: string,
+    voiceChannelId: string,
+    adapterCreator: unknown,
+  ): Promise<Result<GuildSession, "voice_join_failed">> => {
+    const existing = sessions.get(guildId)
+    if (existing) return Promise.resolve(ok(existing))
+    const pending = creatingSession.get(guildId)
+    if (pending) return pending
+
+    const creation = (async (): Promise<Result<GuildSession, "voice_join_failed">> => {
+      const joined = await ports.voice.join(guildId, voiceChannelId, adapterCreator)
+      if (!joined.ok) {
+        ports.voice.destroy(guildId)
+        return err("voice_join_failed")
+      }
+      ports.player.subscribeToConnection(guildId)
+      ports.player.onIdle(guildId, handleIdle)
+      ports.player.onError(guildId, handlePlayerError)
+      const session = Session.createSession(guildId, voiceChannelId)
+      sessions.set(guildId, session)
+      return ok(session)
+    })().finally(() => { creatingSession.delete(guildId) })
+    creatingSession.set(guildId, creation)
+    return creation
   }
 
   const startPlayback = async (guildId: string): Promise<void> => {
@@ -161,6 +194,8 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     }
 
     radioRefillsAfterFailure.delete(guildId)
+    // A skip pressed while nothing was playing has no track to end: don't let it hit this one
+    skipped.delete(guildId)
     ports.player.play(guildId, resourceResult.value)
     const playing = Session.setPlaying(latest, track)
     const updated = track.requestedBy !== "radio"
@@ -184,7 +219,9 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     const session = sessions.get(guildId)
     if (!session || session.playback.seeking || session.playback.isPaused) return
 
-    if (ports.audio.consumeStreamFailure(guildId) && session.queue.current?.url && (streamRetries.get(guildId) ?? 0) < MAX_STREAM_RETRIES) {
+    const wasSkipped = skipped.delete(guildId)
+    const streamFailed = ports.audio.consumeStreamFailure(guildId)
+    if (streamFailed && !wasSkipped && session.queue.current?.url && (streamRetries.get(guildId) ?? 0) < MAX_STREAM_RETRIES) {
       streamRetries.set(guildId, (streamRetries.get(guildId) ?? 0) + 1)
       ports.logger.warn("music", "Stream fallo (posible 403), reintentando misma pista", {
         guildId,
@@ -204,7 +241,9 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     streamRetries.delete(guildId)
     const finished = session.queue.current
     const base = finished ? Session.onTrackFinished(session, finished, extractArtist) : session
-    const queued = finished ? Queue.applyLoop(base.queue, finished) : base.queue
+    // Skipping must leave a track that loops on itself, otherwise there is no way past it
+    const repeatsItself = wasSkipped && base.queue.loopMode === "one"
+    const queued = finished && !repeatsItself ? Queue.applyLoop(base.queue, finished) : base.queue
     sessions.set(guildId, Session.setStopped({ ...base, queue: queued }))
 
     await startPlayback(guildId)
@@ -320,15 +359,11 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     const resolved = await ports.search.resolveQuery(query)
     if (!resolved.ok) return err(resolved.error)
 
-    let session = getSession(guildId)
-    if (!session) {
-      const joined = await ports.voice.join(guildId, voiceChannelId, adapterCreator)
-      if (!joined.ok) return err("voice_join_failed")
-      ports.player.subscribeToConnection(guildId)
-      ports.player.onIdle(guildId, handleIdle)
-      ports.player.onError(guildId, handlePlayerError)
-      session = Session.createSession(guildId, voiceChannelId)
-    }
+    const ensured = await ensureSession(guildId, voiceChannelId, adapterCreator)
+    if (!ensured.ok) return err(ensured.error)
+    // Re-read: another /p waiting on the same join may have queued its track already
+    const session = getSession(guildId)
+    if (!session) return err("no_session")
 
     const tracks = resolved.value.tracks.map((t: ResolvedTrack) => toTrack(t, userId))
     const newQueue = tracks.length > 1
@@ -348,6 +383,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     if (!session) return err("no_session")
     // The idle handler ignores paused sessions, so clear the pause before stopping
     if (session.playback.isPaused) sessions.set(guildId, Session.setResumed(session))
+    if (session.playback.isPlaying) skipped.add(guildId)
     ports.audio.killProcess(guildId)
     ports.player.stop(guildId)
     return ok(undefined)
@@ -410,6 +446,8 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
       return err("seek_failed")
     }
 
+    // The idle event of a skip pressed mid-seek was ignored, so its mark was never consumed
+    skipped.delete(guildId)
     ports.player.play(guildId, resource.value)
     const playing = Session.setPlaying({ ...latest, prefetchedUrl: null }, current)
     sessions.set(guildId, {

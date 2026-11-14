@@ -7,6 +7,7 @@ import type { SearchUseCases } from "../../usecases/search"
 import type { LoggerPort } from "../../domain/ports"
 import { createCommandHandlers } from "./commands"
 import { handleButton } from "./buttons"
+import { createVoiceWatcher } from "./voice-watch"
 import { getErrorMessage } from "../../shared/error"
 import { editTemporary } from "../../shared/messages"
 
@@ -71,20 +72,25 @@ export const createBot = (deps: BotDeps): Client => {
     })
   })
 
+  const voiceWatcher = createVoiceWatcher({
+    music,
+    logger,
+    // Count from the voice states: a member missing from the cache still counts as a listener,
+    // so a cache miss can never make the bot leave people who are listening
+    countHumans: (guildId, channelId) =>
+      client.guilds.cache.get(guildId)?.voiceStates.cache.filter(
+        (state) => state.channelId === channelId && state.id !== client.user?.id && !state.member?.user.bot,
+      ).size ?? 0,
+  })
+
   client.on("voiceStateUpdate", (oldState, newState) => {
-    if (newState.channelId && !oldState.channelId) {
-      logger.event("voice", "Usuario entro a canal de voz", {
-        user: newState.member?.user.username ?? "unknown",
-        channel: newState.channel?.name ?? "unknown",
-        guild: newState.guild.name,
-      })
-    } else if (oldState.channelId && !newState.channelId) {
-      logger.event("voice", "Usuario salio de canal de voz", {
-        user: oldState.member?.user.username ?? "unknown",
-        channel: oldState.channel?.name ?? "unknown",
-        guild: oldState.guild.name,
-      })
-    }
+    if (oldState.channelId === newState.channelId) return
+    voiceWatcher.onVoiceStateUpdate({
+      guildId: newState.guild.id,
+      isSelf: newState.id === client.user?.id,
+      oldChannelId: oldState.channelId,
+      newChannelId: newState.channelId,
+    })
   })
 
   client.on("interactionCreate", async (interaction) => {

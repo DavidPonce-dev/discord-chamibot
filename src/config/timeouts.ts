@@ -10,6 +10,8 @@ export const AUTOCOMPLETE_CACHE_MS = 30_000
 export const LASTFM_TIMEOUT_MS = 8_000
 export const GROQ_RECOMMEND_TIMEOUT_MS = 8_000
 export const GROQ_PARSE_TIMEOUT_MS = 5_000
+// How long the bot stays in a voice channel with no listeners before ending the session
+export const EMPTY_CHANNEL_LEAVE_MS = 60_000
 // Cookie session watchdog: how often to check for SID/PSID, and the max wait between failed recoveries
 export const COOKIE_AUTH_CHECK_INTERVAL_MS = 10 * 60_000
 export const COOKIE_RECOVERY_MAX_BACKOFF_MS = 3 * 60 * 60_000
