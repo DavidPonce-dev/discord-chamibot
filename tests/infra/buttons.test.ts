@@ -171,4 +171,69 @@ describe("infra/discord/buttons", () => {
     expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining("sesion"), ephemeral: true }))
     expect(interaction.editReply).not.toHaveBeenCalled()
   })
+
+  // The player can be up to one render tick behind the queue: a button built for one track
+  // must not act on whatever track took its position in the meantime
+  describe("track buttons bound to a track id", () => {
+    const sessionWithIds = () => ({
+      playback: { isPaused: false },
+      queue: {
+        current: null,
+        userTracks: [{ title: "A", url: "ua", requestedBy: "u1", id: "aaa" }, { title: "B", url: "ub", requestedBy: "u1", id: "bbb" }],
+        radioTracks: [{ title: "R", url: "ur", requestedBy: "radio", id: "rrr" }],
+      },
+    })
+
+    it("acts when the track at that position is still the one on the button", async () => {
+      const bundle = createMockBundle()
+      bundle.music.getSession = vi.fn().mockReturnValue(sessionWithIds() as any)
+      await handleButton(createMockInteraction(`${BUTTON_PREFIXES.queueDelete}1:bbb`) as any, bundle)
+      expect(bundle.queue.removeTrack).toHaveBeenCalledWith("g1", 2)
+    })
+
+    it("does not delete another track when the queue moved since the player was drawn", async () => {
+      const bundle = createMockBundle()
+      bundle.music.getSession = vi.fn().mockReturnValue(sessionWithIds() as any)
+      // The button was drawn for "aaa" at position 1, but "bbb" is there now
+      await handleButton(createMockInteraction(`${BUTTON_PREFIXES.queueDelete}1:aaa`) as any, bundle)
+      expect(bundle.queue.removeTrack).not.toHaveBeenCalled()
+      expect(bundle.refreshMessage).toHaveBeenCalled()
+    })
+
+    it("does not move or reshuffle a different track either", async () => {
+      const bundle = createMockBundle()
+      bundle.music.getSession = vi.fn().mockReturnValue(sessionWithIds() as any)
+      await handleButton(createMockInteraction(`${BUTTON_PREFIXES.queueUp}1:aaa`) as any, bundle)
+      await handleButton(createMockInteraction(`${BUTTON_PREFIXES.queueDown}0:bbb`) as any, bundle)
+      await handleButton(createMockInteraction(`${BUTTON_PREFIXES.queueRadioShuffle}2:old`) as any, bundle)
+      expect(bundle.queue.moveUp).not.toHaveBeenCalled()
+      expect(bundle.queue.moveDown).not.toHaveBeenCalled()
+      expect(bundle.radio.reshuffleRadio).not.toHaveBeenCalled()
+    })
+
+    it("reshuffles the radio track when it is still the one on the button", async () => {
+      const bundle = createMockBundle()
+      bundle.music.getSession = vi.fn().mockReturnValue(sessionWithIds() as any)
+      await handleButton(createMockInteraction(`${BUTTON_PREFIXES.queueRadioShuffle}2:rrr`) as any, bundle)
+      expect(bundle.radio.reshuffleRadio).toHaveBeenCalledWith("g1", 2)
+    })
+  })
+
+  // After deferUpdate, editReply edits the player message itself: the error text stayed on it forever
+  it("reports errors privately instead of writing them on the player", async () => {
+    const bundle = createMockBundle()
+    bundle.queue.shuffleQueue = vi.fn(() => { throw new Error("boom") })
+    const interaction = createMockInteraction(BUTTON_PREFIXES.queuePlaybackShuffle)
+    await handleButton(interaction as any, bundle)
+    expect(interaction.editReply).not.toHaveBeenCalled()
+    expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining("Error"), ephemeral: true }))
+  })
+
+  it("reports unknown buttons privately instead of writing on the player", async () => {
+    const bundle = createMockBundle()
+    const interaction = createMockInteraction("q_unknown_action")
+    await handleButton(interaction as any, bundle)
+    expect(interaction.editReply).not.toHaveBeenCalled()
+    expect(interaction.followUp).toHaveBeenCalledWith(expect.objectContaining({ ephemeral: true }))
+  })
 })

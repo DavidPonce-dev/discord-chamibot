@@ -45,6 +45,16 @@ describe("infra/ui/queue-embed", () => {
     expect(thumb(track({ thumbnail: "https://img.youtube.com/vi/stored/hqdefault.jpg", id: "other" }))).toBe("https://img.youtube.com/vi/stored/hqdefault.jpg")
   })
 
+  it("shows the loop mode while one is active", () => {
+    const withLoop = (loopMode: GuildSession["queue"]["loopMode"]) => {
+      const session = playing(track({ title: "Daft Punk - One More Time" }))
+      return fields({ ...session, queue: { ...session.queue, loopMode } })
+    }
+    expect(withLoop("one")["\u{1F501} Repeticion"]).toBe("Tema actual")
+    expect(withLoop("all")["\u{1F501} Repeticion"]).toBe("Toda la cola")
+    expect(withLoop("none")["\u{1F501} Repeticion"]).toBeUndefined()
+  })
+
   describe("describeNext", () => {
     const base = createSession("g1", "v1")
     const withQueue = (queue: Partial<GuildSession["queue"]>, autoplay = false): GuildSession =>

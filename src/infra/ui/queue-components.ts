@@ -3,7 +3,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from "discord.js"
-import type { GuildSession } from "../../domain/types"
+import type { GuildSession, Track } from "../../domain/types"
 import * as Queue from "../../domain/queue"
 import { BUTTON_PREFIXES, TRACKS_PER_PAGE, RADIO_MARK } from "../../config/ui"
 import { paginate } from "../../shared/format"
@@ -20,6 +20,10 @@ function truncateLabel(text: string, max: number): string {
   if (text.length <= max) return text
   return text.slice(0, max - 1) + "…"
 }
+
+// The track id travels in the custom id so the handler can tell when the queue moved under the button
+const trackButtonId = (prefix: string, idx: number, track: Track): string =>
+  track.id ? `${prefix}${idx}:${track.id}` : `${prefix}${idx}`
 
 // One row per track: TRACKS_PER_PAGE + nav + playback must stay within Discord's 5 rows per message
 export function buildTrackRows(session: GuildSession, page: number): ActionRowBuilder<ButtonBuilder>[] {
@@ -42,7 +46,7 @@ export function buildTrackRows(session: GuildSession, page: number): ActionRowBu
     if (isRadio) {
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(`${BUTTON_PREFIXES.queueRadioShuffle}${idx}`)
+          .setCustomId(trackButtonId(BUTTON_PREFIXES.queueRadioShuffle, idx, t))
           .setEmoji("\u{1F504}")
           .setStyle(ButtonStyle.Success)
           .setDisabled(isReshuffling),
@@ -58,16 +62,16 @@ export function buildTrackRows(session: GuildSession, page: number): ActionRowBu
       const canMoveDown = idx < allTracks.length - 1
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(`${BUTTON_PREFIXES.queueDelete}${idx}`)
+          .setCustomId(trackButtonId(BUTTON_PREFIXES.queueDelete, idx, t))
           .setEmoji("\u{1F5D1}")
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
-          .setCustomId(`${BUTTON_PREFIXES.queueUp}${idx}`)
+          .setCustomId(trackButtonId(BUTTON_PREFIXES.queueUp, idx, t))
           .setEmoji("\u2B06")
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(!canMoveUp),
         new ButtonBuilder()
-          .setCustomId(`${BUTTON_PREFIXES.queueDown}${idx}`)
+          .setCustomId(trackButtonId(BUTTON_PREFIXES.queueDown, idx, t))
           .setEmoji("\u2B07")
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(!canMoveDown),

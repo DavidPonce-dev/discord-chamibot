@@ -3,6 +3,8 @@ import type { MusicUseCases } from "../../usecases/music"
 import type { QueueUseCases } from "../../usecases/queue"
 import type { RadioUseCases } from "../../usecases/radio"
 import type { LoggerPort } from "../../domain/ports"
+import type { GuildSession } from "../../domain/types"
+import * as Queue from "../../domain/queue"
 import { BUTTON_PREFIXES } from "../../config/ui"
 import { getErrorMessage } from "../../shared/error"
 import { visibleQueuePage } from "../ui/queue-components"
@@ -15,8 +17,16 @@ type ButtonBundle = Readonly<{
   logger: LoggerPort
 }>
 
-const extractIndex = (customId: string, prefix: string): number =>
-  parseInt(customId.slice(prefix.length), 10)
+// "<prefix><index>" or "<prefix><index>:<trackId>" (see trackButtonId)
+const parseTrackButton = (customId: string, prefix: string): { index: number; trackId: string | null } => {
+  const [index, ...id] = customId.slice(prefix.length).split(":")
+  return { index: parseInt(index, 10), trackId: id.length > 0 ? id.join(":") : null }
+}
+
+// The player can be a render tick behind the queue: only act if the track at that position is
+// still the one the button was drawn for
+const isSameTrack = (session: GuildSession | null, index: number, trackId: string | null): boolean =>
+  trackId === null || (session !== null && Queue.getAllTracks(session.queue)[index]?.id === trackId)
 
 export const handleButton = async (
   interaction: ButtonInteraction,
@@ -49,8 +59,8 @@ export const handleButton = async (
     ] as const) {
       if (customId.startsWith(prefix)) {
         if (!await requireSession()) return
-        const idx = extractIndex(customId, prefix)
-        actionFn(guildId, idx)
+        const { index, trackId } = parseTrackButton(customId, prefix)
+        if (isSameTrack(music.getSession(guildId), index, trackId)) actionFn(guildId, index)
         await refreshMessage(interaction)
         return
       }
@@ -59,8 +69,8 @@ export const handleButton = async (
     // Radio shuffle (index-based)
     if (customId.startsWith(BUTTON_PREFIXES.queueRadioShuffle)) {
       if (!await requireSession()) return
-      const idx = extractIndex(customId, BUTTON_PREFIXES.queueRadioShuffle)
-      await radio.reshuffleRadio(guildId, idx)
+      const { index, trackId } = parseTrackButton(customId, BUTTON_PREFIXES.queueRadioShuffle)
+      if (isSameTrack(music.getSession(guildId), index, trackId)) await radio.reshuffleRadio(guildId, index)
       await refreshMessage(interaction)
       return
     }
@@ -118,15 +128,10 @@ export const handleButton = async (
     }
 
     logger.warn("button", "Accion no reconocida", { user, guildId, customId })
-    await interaction.editReply({ content: "Accion no reconocida" }).catch(() => {})
+    // After deferUpdate, editReply would write on the player message itself: answer privately
+    await interaction.followUp({ content: "Accion no reconocida", ephemeral: true }).catch(() => {})
   } catch (e: unknown) {
     logger.error("button", "Error en boton", { user, guildId, customId, error: getErrorMessage(e) })
-    try {
-      if (interaction.replied || interaction.deferred) {
-        await interaction.editReply("Error al ejecutar la accion")
-      } else {
-        await interaction.reply({ content: "Error al ejecutar la accion", ephemeral: true })
-      }
-    } catch {}
+    await interaction.followUp({ content: "Error al ejecutar la accion", ephemeral: true }).catch(() => {})
   }
 }

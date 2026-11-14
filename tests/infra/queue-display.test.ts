@@ -353,6 +353,47 @@ describe("infra/discord/messages (notifier)", () => {
     expect(store.messages.get("g1")).toBeUndefined()
   })
 
+  const discordError = (code: number, message: string): Error => Object.assign(new Error(message), { code })
+
+  it("recrea el mensaje cuando Discord informa por codigo que ya no existe", async () => {
+    const { store, notifier, channel } = setupNotifier()
+    const player = makeMessage("c1", {})
+    // discord.js puts the API error code in `code`, not in the message text
+    player.edit.mockRejectedValueOnce(discordError(10008, "No existe"))
+    store.messages.set("g1", player as any)
+
+    await notifier.render("g1", () => ({ embeds: ["x"], components: [] }))
+    expect(channel.send).toHaveBeenCalledTimes(1)
+    expect(store.messages.get("g1")).toBe(channel.sent[0])
+  })
+
+  it("deja de insistir cuando pierde el acceso al canal", async () => {
+    const { store, notifier, channel } = setupNotifier()
+    const player = makeMessage("c1", {})
+    player.edit.mockRejectedValue(discordError(50001, "Missing Access"))
+    store.messages.set("g1", player as any)
+
+    await notifier.render("g1", () => ({ embeds: ["x"], components: [] }))
+    await notifier.render("g1", () => ({ embeds: ["y"], components: [] }))
+    await notifier.render("g1", () => ({ embeds: ["z"], components: [] }))
+
+    // Otherwise the 5 s render loop retries (and logs) forever against a channel it can't use
+    expect(player.edit).toHaveBeenCalledTimes(1)
+    expect(channel.send).not.toHaveBeenCalled()
+    expect(store.channels.get("g1")).toBeUndefined()
+  })
+
+  it("deja de insistir cuando no tiene permiso para enviar en el canal", async () => {
+    const { store, notifier, channel } = setupNotifier()
+    channel.send.mockRejectedValue(discordError(50013, "Missing Permissions"))
+
+    await notifier.render("g1", () => ({ embeds: ["x"], components: [] }))
+    await notifier.render("g1", () => ({ embeds: ["y"], components: [] }))
+
+    expect(channel.send).toHaveBeenCalledTimes(1)
+    expect(store.channels.get("g1")).toBeUndefined()
+  })
+
   it("loguea cuando no puede enviar el mensaje", async () => {
     const { notifier, channel } = setupNotifier()
     channel.send.mockRejectedValueOnce(new Error("Missing Permissions"))

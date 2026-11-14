@@ -58,9 +58,29 @@ export const createDiscordNotifier = (
   const generations = new Map<string, number>()
   const lastRendered = new Map<string, string>()
 
-  const DELETED_MESSAGE_CODES = [10008, 50001, 10004]
-  const isMessageDeletedError = (msg: string): boolean =>
-    DELETED_MESSAGE_CODES.some(code => msg.includes(String(code))) || msg.includes("Unknown Message")
+  // discord.js reports the API error code in `code`; the message text carries only its description
+  const errorCode = (e: unknown): number | null => {
+    const code = (e as { code?: unknown } | null)?.code
+    return typeof code === "number" ? code : null
+  }
+  const UNKNOWN_MESSAGE_CODE = 10008
+  const isMessageDeletedError = (e: unknown): boolean =>
+    errorCode(e) === UNKNOWN_MESSAGE_CODE || getErrorMessage(e).includes("Unknown Message")
+  // Unknown Channel, Unknown Guild, Missing Access, Missing Permissions
+  const LOST_CHANNEL_CODES: readonly number[] = [10003, 10004, 50001, 50013]
+  const isLostChannelError = (e: unknown): boolean => {
+    const code = errorCode(e)
+    return code !== null && LOST_CHANNEL_CODES.includes(code)
+  }
+
+  // The channel can't be used anymore: forget it so the render loop stops retrying every tick.
+  // The next /p sets a channel again
+  const forgetChannel = (guildId: string, e: unknown): void => {
+    logger.warn("notify", "Sin acceso al canal del reproductor, se deja de actualizar", { guildId, error: getErrorMessage(e).slice(0, 300) })
+    messages.clear(guildId)
+    channels.clear(guildId)
+    lastRendered.delete(guildId)
+  }
 
   const generationOf = (guildId: string): number => generations.get(guildId) ?? 0
 
@@ -80,10 +100,13 @@ export const createDiscordNotifier = (
         lastRendered.set(guildId, serialized)
         return
       } catch (e: unknown) {
-        const msg = getErrorMessage(e)
-        if (!isMessageDeletedError(msg)) {
+        if (isLostChannelError(e)) {
+          if (generationOf(guildId) === generation) forgetChannel(guildId, e)
+          return
+        }
+        if (!isMessageDeletedError(e)) {
           // A rejected edit leaves the message showing the previous state: make it visible
-          logger.warn("notify", "Discord rechazo la edicion del mensaje de cola", { guildId, error: msg.slice(0, 300) })
+          logger.warn("notify", "Discord rechazo la edicion del mensaje de cola", { guildId, error: getErrorMessage(e).slice(0, 300) })
           return
         }
       }
@@ -105,6 +128,10 @@ export const createDiscordNotifier = (
       messages.set(guildId, sent)
       lastRendered.set(guildId, serialized)
     } catch (e: unknown) {
+      if (isLostChannelError(e) && generationOf(guildId) === generation) {
+        forgetChannel(guildId, e)
+        return
+      }
       logger.warn("notify", "No se pudo enviar el mensaje de cola", { guildId, error: getErrorMessage(e).slice(0, 300) })
     }
   }

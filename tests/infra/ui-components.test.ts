@@ -184,3 +184,28 @@ describe("infra/ui/embeds", () => {
     })
   })
 })
+
+describe("infra/ui/queue-components track button ids", () => {
+  const customIds = (session: GuildSession) =>
+    buildTrackRows(session, 1).flatMap(row => row.components.map(c => c.data.custom_id))
+
+  // The handler compares this id with the track currently at that position
+  it("ties the action buttons to the track they were drawn for", () => {
+    const session = createSession("g1", "v1")
+    const queue = {
+      ...session.queue,
+      userTracks: [{ ...makeTrack("User Song"), id: "abc_-123" }],
+      radioTracks: [{ ...makeTrack("Radio Song", "radio"), id: "xyz" }],
+    }
+    const ids = customIds({ ...session, queue })
+    expect(ids).toContain(`${BUTTON_PREFIXES.queueDelete}0:abc_-123`)
+    expect(ids).toContain(`${BUTTON_PREFIXES.queueUp}0:abc_-123`)
+    expect(ids).toContain(`${BUTTON_PREFIXES.queueDown}0:abc_-123`)
+    expect(ids).toContain(`${BUTTON_PREFIXES.queueRadioShuffle}1:xyz`)
+  })
+
+  it("keeps the plain position when the track has no id", () => {
+    const session = sessionWithTracks(1)
+    expect(customIds(session)).toContain(`${BUTTON_PREFIXES.queueDelete}0`)
+  })
+})

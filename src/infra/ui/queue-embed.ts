@@ -1,12 +1,18 @@
 import { escapeMarkdown } from "discord.js"
-import type { GuildSession, Track } from "../../domain/types"
+import type { GuildSession, LoopMode, Track } from "../../domain/types"
 import { parseDuration, buildProgressBar, formatTime } from "../../shared/format"
 import { createBaseEmbed } from "./base-embed"
 import { getPosition } from "../../domain/session"
 import { displayTitle, trackNames, trackThumbnail } from "../../domain/track-parser"
 import { RADIO_MARK } from "../../config/ui"
 
-const requesterLabel = (track: Track): string =>
+const LOOP_LABELS: Record<LoopMode, string | null> = {
+  none: null,
+  one: "Tema actual",
+  all: "Toda la cola",
+}
+
+const requesterLabel =(track: Track): string =>
   track.requestedBy === "radio" ? `${RADIO_MARK} Radio` : track.requestedBy
 
 // What plays after the current track, mirroring Queue.dequeue: user queue first, then radio
@@ -47,6 +53,10 @@ export function buildQueueContent(session: GuildSession, _page: number): ReturnT
       { name: "Transcurrido", value: formatTime(pos), inline: true },
       { name: "⏭ Siguiente", value: describeNext(session), inline: false },
     )
+
+    // /l answers silently: this is the only place the active mode is visible
+    const loopLabel = LOOP_LABELS[session.queue.loopMode]
+    if (loopLabel) fields.push({ name: "\u{1F501} Repeticion", value: loopLabel, inline: false })
   }
 
   const embed = createBaseEmbed()
