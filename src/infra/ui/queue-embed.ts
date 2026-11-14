@@ -25,7 +25,7 @@ export const describeNext = (session: GuildSession): string => {
   return `${RADIO_MARK} Buscando recomendación…`
 }
 
-export function buildQueueContent(session: GuildSession, _page: number): ReturnType<typeof createBaseEmbed> {
+export function buildQueueContent(session: GuildSession): ReturnType<typeof createBaseEmbed> {
   const current = session.queue.current
 
   const fields: { name: string; value: string; inline: boolean }[] = []

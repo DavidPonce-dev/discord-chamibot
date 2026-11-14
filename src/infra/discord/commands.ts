@@ -1,5 +1,5 @@
 import type { ChatInputCommandInteraction, GuildTextBasedChannel } from "discord.js"
-import type { MusicUseCases } from "../../usecases/music"
+import type { MusicUseCases, PlayError } from "../../usecases/music"
 import type { QueueUseCases } from "../../usecases/queue"
 import type { RadioUseCases } from "../../usecases/radio"
 import type { AdminUseCases } from "../../usecases/admin"
@@ -22,7 +22,14 @@ type UseCaseBundle = Readonly<{
 
 type CommandHandlerFn = (interaction: ChatInputCommandInteraction, guildId: string, userId: string) => Promise<void>
 
-const requireVoiceChannel = (interaction: ChatInputCommandInteraction): string | null => {
+const PLAY_ERROR_MESSAGES: Record<PlayError, string> = {
+  deploying: "Actualizando servicio, proba de nuevo en unos minutos",
+  not_found: "No encontre ese tema. Proba con otro nombre o con el link del video",
+  voice_join_failed: "No pude entrar al canal de voz. Revisa que tenga permiso para conectarme y hablar",
+  no_session: "La sesion termino mientras se agregaba el tema. Proba de nuevo",
+}
+
+const requireVoiceChannel =(interaction: ChatInputCommandInteraction): string | null => {
   const member = interaction.guild?.members.cache.get(interaction.user.id)
   return member?.voice.channel?.id ?? null
 }
@@ -60,7 +67,7 @@ export const createCommandHandlers = (bundle: UseCaseBundle): Record<string, Com
       const result = await music.play(query, guildId, userId, voiceChannelId, adapterCreator)
       if (!result.ok) {
         logger.error("command", "Error en /p", { query, error: result.error })
-        await interaction.editReply("Error al procesar el tema")
+        await interaction.editReply(PLAY_ERROR_MESSAGES[result.error])
         return
       }
 

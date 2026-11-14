@@ -99,10 +99,10 @@ export const createRadioUseCases = (
     try {
       const excludeIds = [
         ...(session.queue.current?.id ? [session.queue.current.id] : []),
-        ...session.last5Ids,
+        ...session.recentIds,
       ]
 
-      const result = await ports.recommend.findRelated(searchTitle, session.last5Tracks, {
+      const result = await ports.recommend.findRelated(searchTitle, session.recentTitles, {
         shouldSwitch: session.sameArtistStreak >= ARTIST_ROTATION_LIMIT,
         currentArtist: session.currentArtist,
         artistHistory: session.artistHistory,

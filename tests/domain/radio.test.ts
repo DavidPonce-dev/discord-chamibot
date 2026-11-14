@@ -211,7 +211,7 @@ describe("domain/radio - RadioEngine", () => {
     expect(result!.track.id).toBe("pick1")
   })
 
-  it("recommendAndEnqueue builds excludeIds from current track and last5Ids", async () => {
+  it("recommendAndEnqueue builds excludeIds from current track and recentIds", async () => {
     const findRelated = vi.fn().mockResolvedValue({
       track: { title: "Next", url: "https://youtube.com/watch?v=next", id: "next" },
       canonicalTitle: "Artist - Next",
@@ -220,7 +220,7 @@ describe("domain/radio - RadioEngine", () => {
     const base = createSession("g1", "v1")
     const session = {
       ...base,
-      last5Ids: ["played1", "played2"],
+      recentIds: ["played1", "played2"],
       queue: { ...base.queue, current: { title: "Current", url: "u", requestedBy: "u", id: "cur1" } },
     }
 

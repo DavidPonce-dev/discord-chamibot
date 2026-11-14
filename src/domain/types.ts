@@ -43,15 +43,14 @@ export type GuildSession = Readonly<{
   prefs: GuildPrefs
   voiceChannelId: string | null
   queuePage: number
-  last5Tracks: readonly string[]
-  last5Ids: readonly string[]
+  recentTitles: readonly string[]
+  recentIds: readonly string[]
   prefetchedUrl: { trackUrl: string; audioUrl: string } | null
   artistHistory: readonly string[]
   sameArtistStreak: number
   currentArtist: string | null
   radioBaseTitle: string | null
   reshufflingRadioIndex: number | null
-  destroyed: boolean
 }>
 
 export type BlacklistEntry = Readonly<{

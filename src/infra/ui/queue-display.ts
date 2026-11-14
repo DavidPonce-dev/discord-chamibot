@@ -27,7 +27,7 @@ export type QueueDisplay = Readonly<{
 const buildQueuePayload = (session: GuildSession): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } => {
   // The stored page can be past the end after the queue shrinks: render the clamped one
   const { page, totalPages } = paginate(Queue.getAllTracks(session.queue), session.queuePage, TRACKS_PER_PAGE)
-  const embed = buildQueueContent(session, page)
+  const embed = buildQueueContent(session)
 
   const rows = buildTrackRows(session, page)
   const navRow = buildNavRow(page, totalPages)

@@ -11,7 +11,7 @@ const playing = (current: Track, extra: Partial<GuildSession> = {}): GuildSessio
 }
 
 const fields = (session: GuildSession) =>
-  Object.fromEntries((buildQueueContent(session, 1).data.fields ?? []).map(f => [f.name, f.value]))
+  Object.fromEntries((buildQueueContent(session).data.fields ?? []).map(f => [f.name, f.value]))
 
 describe("infra/ui/queue-embed", () => {
   it("shows the identified song and artist instead of the raw upload title", () => {
@@ -38,7 +38,7 @@ describe("infra/ui/queue-embed", () => {
   })
 
   it("derives the thumbnail from the video id or URL when the track has none", () => {
-    const thumb = (t: Track) => buildQueueContent(playing(t), 1).data.thumbnail?.url
+    const thumb = (t: Track) => buildQueueContent(playing(t)).data.thumbnail?.url
     expect(thumb(track({ id: "abc123DEF45" }))).toBe("https://img.youtube.com/vi/abc123DEF45/hqdefault.jpg")
     expect(thumb(track({ url: "https://www.youtube.com/watch?v=xyz987ABC12" }))).toBe("https://img.youtube.com/vi/xyz987ABC12/hqdefault.jpg")
     expect(thumb(track({ url: "https://youtu.be/K0HSD_i2DvA?si=abc" }))).toBe("https://img.youtube.com/vi/K0HSD_i2DvA/hqdefault.jpg")

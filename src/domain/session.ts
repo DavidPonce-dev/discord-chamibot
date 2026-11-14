@@ -1,5 +1,6 @@
 import type { GuildSession, Track } from "./types"
 import { emptyQueue } from "./queue"
+import { RADIO_HISTORY_LIMIT } from "../config/radio"
 
 export const createSession = (guildId: string, voiceChannelId: string): GuildSession => ({
   guildId,
@@ -18,15 +19,14 @@ export const createSession = (guildId: string, voiceChannelId: string): GuildSes
   },
   voiceChannelId,
   queuePage: 1,
-  last5Tracks: [],
-  last5Ids: [],
+  recentTitles: [],
+  recentIds: [],
   prefetchedUrl: null,
   artistHistory: [],
   sameArtistStreak: 0,
   currentArtist: null,
   radioBaseTitle: null,
   reshufflingRadioIndex: null,
-  destroyed: false,
 })
 
 export const getPosition = (s: GuildSession): number => {
@@ -44,8 +44,8 @@ export const onTrackFinished = (
   extractArtistFn: (title: string) => string,
 ): GuildSession => {
   const normalizedTitle = finished.title.toLowerCase()
-  const last5 = [normalizedTitle, ...s.last5Tracks].slice(0, 5)
-  const last5Ids = finished.id ? [finished.id, ...s.last5Ids].slice(0, 5) : s.last5Ids
+  const recentTitles = [normalizedTitle, ...s.recentTitles].slice(0, RADIO_HISTORY_LIMIT)
+  const recentIds = finished.id ? [finished.id, ...s.recentIds].slice(0, RADIO_HISTORY_LIMIT) : s.recentIds
 
   const artist = finished.artist || extractArtistFn(finished.title)
   let streak = s.sameArtistStreak
@@ -64,8 +64,8 @@ export const onTrackFinished = (
 
   return {
     ...s,
-    last5Tracks: last5,
-    last5Ids,
+    recentTitles,
+    recentIds,
     sameArtistStreak: streak,
     currentArtist: current,
     artistHistory: history,

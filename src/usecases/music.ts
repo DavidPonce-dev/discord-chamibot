@@ -7,13 +7,16 @@ import * as Session from "../domain/session"
 import { youtubeThumbnail, extractArtist, parseTitle } from "../domain/track-parser"
 import { recommendAndEnqueue } from "../domain/radio"
 import { SEEK_SETTLE_DELAY_MS } from "../config/timeouts"
+import { RADIO_HISTORY_LIMIT } from "../config/radio"
 
 type MusicUseCasesCallbacks = Readonly<{
   onTrackChange?: (guildId: string) => void
 }>
 
+export type PlayError = "deploying" | "not_found" | "voice_join_failed" | "no_session"
+
 export type MusicUseCases = Readonly<{
-  play: (query: string, guildId: string, userId: string, voiceChannelId: string, adapterCreator: unknown) => Promise<Result<readonly Track[], string>>
+  play: (query: string, guildId: string, userId: string, voiceChannelId: string, adapterCreator: unknown) => Promise<Result<readonly Track[], PlayError>>
   skip: (guildId: string) => Result<void, "no_session">
   pause: (guildId: string) => Result<void, "no_session" | "already_paused">
   resume: (guildId: string) => Result<void, "no_session" | "not_paused">
@@ -60,6 +63,8 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
   const streamRetries = new Map<string, number>()
   const MAX_RADIO_REFILLS_AFTER_FAILURE = 3
   const radioRefillsAfterFailure = new Map<string, number>()
+  // Below this a retried stream just starts over: there is nothing worth skipping
+  const MIN_RESUME_POSITION_SEC = 5
   const creatingSession = new Map<string, Promise<Result<GuildSession, "voice_join_failed">>>()
   // Guilds whose current track is ending because of a skip, not because it finished
   const skipped = new Set<string>()
@@ -118,7 +123,8 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     return creation
   }
 
-  const startPlayback = async (guildId: string): Promise<void> => {
+  // `resumeAt` (seconds) starts the track from that position instead of the beginning
+  const startPlayback = async (guildId: string, resumeAt?: number): Promise<void> => {
     const session = sessions.get(guildId)
     if (!session || session.playback.isPlaying || starting.has(guildId)) return
 
@@ -144,9 +150,9 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     starting.add(guildId)
     let resourceResult: Awaited<ReturnType<typeof ports.audio.createResource>>
     try {
-      resourceResult = prefetched
-        ? await ports.audio.createFromAudioUrl(guildId, prefetched.audioUrl)
-        : await ports.audio.createResource(guildId, track.url)
+      if (resumeAt !== undefined) resourceResult = await ports.audio.createResource(guildId, track.url, resumeAt)
+      else if (prefetched) resourceResult = await ports.audio.createFromAudioUrl(guildId, prefetched.audioUrl)
+      else resourceResult = await ports.audio.createResource(guildId, track.url)
     } finally {
       starting.delete(guildId)
     }
@@ -170,7 +176,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
         ...latest,
         prefetchedUrl: null,
         queue: { ...latest.queue, current: null },
-        last5Ids: track.id ? [track.id, ...latest.last5Ids].slice(0, 5) : latest.last5Ids,
+        recentIds: track.id ? [track.id, ...latest.recentIds].slice(0, RADIO_HISTORY_LIMIT) : latest.recentIds,
       })
       const afterFailure = sessions.get(guildId)!
       if (afterFailure.prefs.autoplay && Queue.isEmpty(afterFailure.queue)) {
@@ -197,7 +203,11 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     // A skip pressed while nothing was playing has no track to end: don't let it hit this one
     skipped.delete(guildId)
     ports.player.play(guildId, resourceResult.value)
-    const playing = Session.setPlaying(latest, track)
+    const started = Session.setPlaying(latest, track)
+    // Keep the progress bar where the track really is when it was resumed mid-way
+    const playing = resumeAt === undefined
+      ? started
+      : { ...started, playback: { ...started.playback, playbackStart: Date.now() - resumeAt * 1000 } }
     const updated = track.requestedBy !== "radio"
       ? { ...playing, radioBaseTitle: null, prefetchedUrl: null }
       : { ...playing, prefetchedUrl: null }
@@ -229,12 +239,15 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
         track: session.queue.current.title,
       })
       const current = session.queue.current
+      // The stream died mid-track (expired URL, 403): pick up where it was, not from 0:00
+      const position = Session.getPosition(session)
       sessions.set(guildId, Session.setStopped({
         ...session,
         prefetchedUrl: null,
         queue: Queue.addNext(session.queue, current),
       }))
-      await startPlayback(guildId)
+      if (position >= MIN_RESUME_POSITION_SEC) await startPlayback(guildId, position)
+      else await startPlayback(guildId)
       return
     }
 
@@ -254,7 +267,7 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     if (!after.playback.isPlaying && after.prefs.autoplay && Queue.isEmpty(after.queue)) {
       ports.logger.info("radio", "Pista finalizada, generando siguiente tema de radio", {
         guildId,
-        last5Count: after.last5Tracks.length,
+        historyCount: after.recentTitles.length,
       })
       onTrackChange(guildId)
       populateRadio(guildId)
@@ -291,8 +304,8 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
 
     ports.logger.info("radio", "Poblando cola de radio (fin de pista)", {
       guildId,
-      searchTitle: session.radioBaseTitle ?? session.queue.current?.title ?? session.last5Tracks[0] ?? null,
-      last5Count: session.last5Tracks.length,
+      searchTitle: session.radioBaseTitle ?? session.queue.current?.title ?? session.recentTitles[0] ?? null,
+      historyCount: session.recentTitles.length,
     })
 
     const recommended = await recommendAndEnqueue(session, ports.recommend, ports.logger)
@@ -353,11 +366,18 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     userId: string,
     voiceChannelId: string,
     adapterCreator: unknown,
-  ): Promise<Result<readonly Track[], string>> => {
+  ): Promise<Result<readonly Track[], PlayError>> => {
     if (deployMode) return err("deploying")
 
     const resolved = await ports.search.resolveQuery(query)
-    if (!resolved.ok) return err(resolved.error)
+    if (!resolved.ok || resolved.value.tracks.length === 0) {
+      ports.logger.warn("music", "No se pudo resolver la busqueda", {
+        guildId,
+        query,
+        error: resolved.ok ? "sin temas" : resolved.error,
+      })
+      return err("not_found")
+    }
 
     const ensured = await ensureSession(guildId, voiceChannelId, adapterCreator)
     if (!ensured.ok) return err(ensured.error)

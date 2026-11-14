@@ -24,8 +24,7 @@ describe("domain/session", () => {
       expect(session.playback.isPlaying).toBe(false)
       expect(session.prefs.autoplay).toBe(false)
       expect(session.prefs.lastfmUsername).toBeNull()
-      expect(session.destroyed).toBe(false)
-      expect(session.last5Ids).toHaveLength(0)
+      expect(session.recentIds).toHaveLength(0)
       expect(session.prefetchedUrl).toBeNull()
     })
   })
@@ -49,22 +48,22 @@ describe("domain/session", () => {
   })
 
   describe("onTrackFinished", () => {
-    it("actualiza last5Tracks", () => {
+    it("actualiza recentTitles", () => {
       const session = createSession("g1", "v1")
       const result = onTrackFinished(session, makeTrack({ title: "Song A" }), () => "Artist")
-      expect(result.last5Tracks).toContain("song a")
+      expect(result.recentTitles).toContain("song a")
     })
 
-    it("agrega el id de la pista a last5Ids", () => {
+    it("agrega el id de la pista a recentIds", () => {
       const session = createSession("g1", "v1")
       const result = onTrackFinished(session, makeTrack({ id: "vid-123" }), () => "Artist")
-      expect(result.last5Ids).toContain("vid-123")
+      expect(result.recentIds).toContain("vid-123")
     })
 
-    it("no agrega last5Ids si la pista no tiene id", () => {
+    it("no agrega recentIds si la pista no tiene id", () => {
       const session = createSession("g1", "v1")
       const result = onTrackFinished(session, makeTrack({ id: undefined }), () => "Artist")
-      expect(result.last5Ids).toHaveLength(0)
+      expect(result.recentIds).toHaveLength(0)
     })
 
     it("incrementa streak si mismo artista", () => {

@@ -7,12 +7,7 @@ export const createRadioService = (
   search: TrackSearchPort,
   logger: LoggerPort,
 ): MusicRecommendPort => {
-  const engine = createRadioEngine({
-    lastfm,
-    groq,
-    search,
-    logger,
-  } as any)
+  const engine = createRadioEngine({ lastfm, groq, search, logger })
 
   return {
     findRelated: engine.findRelated,
