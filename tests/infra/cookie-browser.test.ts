@@ -2,17 +2,33 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import fs from "fs"
 import os from "os"
 import path from "path"
+import type * as ChildProcess from "child_process"
 import type { LoggerPort } from "@/domain/ports"
 
+type FakeCookie = { name: string; value: string; domain: string; path: string; secure: boolean; expires: number; httpOnly: boolean }
+
 // Cookies the fake browser profile "has" in each test
-let profileCookies: { name: string; value: string; domain: string; path: string; secure: boolean; expires: number; httpOnly: boolean }[] = []
+let profileCookies: FakeCookie[] = []
+
+// Like Chromium, the fake persistent context keeps its cookies inside the profile directory,
+// so they survive a restart and are lost when the profile is wiped
+const PROFILE_COOKIES = "fake-cookies.json"
+const readProfileCookies = (profileDir: string): FakeCookie[] => {
+  try { return JSON.parse(fs.readFileSync(path.join(profileDir, PROFILE_COOKIES), "utf-8")) } catch { return profileCookies }
+}
+
+// resetProfile runs `pkill -9 -f chrome`: never let it touch real processes
+vi.mock("child_process", async (importOriginal) => ({
+  ...(await importOriginal<typeof ChildProcess>()),
+  execSync: vi.fn(),
+}))
 
 vi.mock("playwright", () => ({
   chromium: {
-    launchPersistentContext: vi.fn(async () => ({
+    launchPersistentContext: vi.fn(async (profileDir: string) => ({
       on: vi.fn(),
       close: vi.fn(async () => {}),
-      cookies: vi.fn(async () => profileCookies),
+      cookies: vi.fn(async () => readProfileCookies(profileDir)),
       newPage: vi.fn(async () => ({
         goto: vi.fn(async () => {}),
         waitForTimeout: vi.fn(async () => {}),
@@ -61,5 +77,53 @@ describe("infra/cookie/browser refresh", () => {
     const result = await create().refresh()
     expect(result.success).toBe(false)
     expect(fs.readFileSync(cookieFile, "utf-8")).toContain("\tYSC\t")
+  })
+})
+
+describe("infra/cookie/browser session across restarts", () => {
+  let dir: string
+  let cookieFile: string
+  let profileDir: string
+  // Each call is a fresh process start (deploy/restart) on the same persistent volumes
+  const start = () => createPlaywrightBrowser({ cookieDir: dir, cookieFile, browserProfile: profileDir }, logger)
+  // Simulates the VNC login from the admin panel: Google stores the session in the profile
+  const loginInProfile = () => {
+    fs.writeFileSync(path.join(profileDir, PROFILE_COOKIES), JSON.stringify([cookie("SID"), cookie("__Secure-3PSID"), cookie("YSC")]))
+  }
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "cookies-"))
+    cookieFile = path.join(dir, "youtube-cookies.txt")
+    profileDir = path.join(dir, "profile")
+    // A profile with no stored session only yields anonymous cookies
+    profileCookies = [cookie("YSC"), cookie("VISITOR_INFO1_LIVE")]
+  })
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }) })
+
+  it("keeps the Google session after a restart, so the scheduled refresh succeeds", async () => {
+    start()
+    loginInProfile()
+    expect((await start().refresh()).success).toBe(true)
+
+    const result = await start().refresh()
+    expect(result).toMatchObject({ success: true, isLoggedIn: true })
+    expect(fs.readFileSync(cookieFile, "utf-8")).toContain("\tSID\t")
+  })
+
+  it("reproduces the prod error: wiping the profile on startup logs Google out", async () => {
+    start()
+    loginInProfile()
+    expect((await start().refresh()).success).toBe(true)
+
+    // What bootstrap used to do on every start ("Reiniciando perfil de navegador (deploy limpio)")
+    const restarted = start()
+    await restarted.resetProfile()
+
+    const result = await restarted.refresh()
+    expect(result.success).toBe(false)
+    expect(result.isLoggedIn).toBe(false)
+    expect(result.error).toContain("sin SID/PSID")
+    // The previous session file survives, which is why playback kept working until it expired
+    expect(fs.readFileSync(cookieFile, "utf-8")).toContain("\tSID\t")
   })
 })
