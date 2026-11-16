@@ -58,6 +58,24 @@ describe("domain/track-parser", () => {
       ["Metallica: One (Official Music Video)", "Metallica", "One"],
       // Hyphen inside a name is not a separator
       ["Jay-Z - 99 Problems", "Jay-Z", "99 Problems"],
+      // K-pop uploads: the song is quoted and the artist is repeated in its native script
+      ["MONSTA X 몬스타엑스 'MAGIC' MV", "MONSTA X", "MAGIC"],
+      ["BTS (방탄소년단) 'Dynamite' Official MV", "BTS", "Dynamite"],
+      ["aespa 에스파 ‘Supernova’ MV", "aespa", "Supernova"],
+      ["BLACKPINK - 'How You Like That' M/V", "BLACKPINK", "How You Like That"],
+      ["IVE 아이브 'I AM' MV", "IVE", "I AM"],
+      ['TWICE "LIKEY" M/V', "TWICE", "LIKEY"],
+      ["aespa 에스파 'Black Mamba' MV", "aespa", "Black Mamba"],
+      // 1theK uploads separate artist and song with an underscore
+      ["SUNMI _ Gashina", "SUNMI", "Gashina"],
+      ["[MV] SUNMI(선미) _ Gashina(가시나)", "SUNMI", "Gashina"],
+      // Apostrophes inside names are not quotes
+      ["Guns N' Roses - Sweet Child O' Mine", "Guns N' Roses", "Sweet Child O' Mine"],
+      // Subtitle/translation announcements are not part of the names
+      ["L’Arc~en~Ciel - My Dear + Sub. Español", "L’Arc~en~Ciel", "My Dear"],
+      ["Radwimps - Sparkle Sub Español", "Radwimps", "Sparkle"],
+      ["Kenshi Yonezu - Lemon // Subtitulado al Español", "Kenshi Yonezu", "Lemon"],
+      ["Eve - Kaikai Kitan + Letra en español - Jujutsu Kaisen", "Eve", "Kaikai Kitan"],
     ])("%s", (title, artist, song) => {
       expect(parseTitle(title)).toEqual({ artist, song })
     })
@@ -85,14 +103,24 @@ describe("domain/track-parser", () => {
       expect(parseTitle("La Bachata - MTZ Manuel Turizo | Video Oficial", "Manuel Turizo")).toEqual({ artist: "Manuel Turizo", song: "La Bachata" })
     })
 
+    it("corrige un titulo invertido con aviso de subtitulos", () => {
+      expect(parseTitle("My Dear - L’Arc~en~Ciel + Sub. Español", "L'Arc~en~Ciel")).toEqual({ artist: "L'Arc~en~Ciel", song: "My Dear" })
+    })
+
     it("no cambia un titulo bien formado", () => {
       expect(parseTitle("Miley Cyrus - Flowers (Official Video)", "MILEY")).toEqual({ artist: "Miley Cyrus", song: "Flowers" })
       expect(parseTitle("Daft Punk - One More Time", "Daft Punk")).toEqual({ artist: "Daft Punk", song: "One More Time" })
     })
 
+    it("no toma el sello como artista cuando el titulo trae la cancion entre comillas", () => {
+      expect(parseTitle("MONSTA X 몬스타엑스 'MAGIC' MV", "STARSHIP")).toEqual({ artist: "MONSTA X", song: "MAGIC" })
+    })
+
     it("ignora canales que no son del artista (lyrics, sellos, recopilaciones)", () => {
       expect(parseTitle("Blinding Lights", "7clouds Lyrics")).toEqual({ artist: "", song: "Blinding Lights" })
       expect(parseTitle("Ella Baila Sola", "DEL Records")).toEqual({ artist: "", song: "Ella Baila Sola" })
+      expect(parseTitle("LIKEY", "JYP Entertainment")).toEqual({ artist: "", song: "LIKEY" })
+      expect(parseTitle("SUNMI _ Gashina", "1theK (원더케이)")).toEqual({ artist: "SUNMI", song: "Gashina" })
     })
   })
 

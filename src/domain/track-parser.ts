@@ -1,11 +1,20 @@
-// "Artist - Song | Album", "Artist – Song // Live": the first segment is the artist, the second the song
-const SEGMENT_SEPARATOR = /\s+[-–—|│]\s+|\s+\/\/\s+/
+// "Artist - Song | Album", "Artist – Song // Live", "Artist _ Song" (1theK uploads): the first
+// segment is the artist, the second the song
+const SEGMENT_SEPARATOR = /\s+[-–—|│_]\s+|\s+\/\/\s+/
 // Only used when there is no other separator: "Queen: Bohemian Rhapsody"
 const COLON_SEPARATOR = /^(.+?)\s?:\s(.+)$/
 // Featured artists: "Song ft. X", "Artist feat. X", "Song featuring X"
 const FEATURING = /\s+(?:ft\.?|feat\.?|featuring)\s.*$/i
 // Upload noise left at the end of a segment once brackets are removed
 const TRAILING_NOISE = /\s*\b(?:official\s+(?:music\s+)?(?:video|audio|visualizer)|lyrics?(?:\s+video)?|video\s+oficial|audio\s+oficial|letra|hd|4k)\s*$/i
+// Fan uploads announce subtitles/translations anywhere in the title: "+ Sub. Español", "Subtitulada al español"
+const SUBTITLE_NOISE = /\s*[+&/]*\s*\b(?:sub(?:s|t[ií]tulos|titulad[oa])?\.?|lyrics|letra|traducid[oa]|traducci[oó]n)\s*(?:en\s+|al\s+)?(?:espa[ñn]ol|esp|spanish|ingl[eé]s|english|eng)\b\.?/gi
+
+// K-pop style uploads quote the song: "MONSTA X 몬스타엑스 'MAGIC' MV". The quotes must hug a word
+// boundary so apostrophes ("Guns N' Roses", "Don't") are not taken as quotes
+const QUOTED_SONG = /^(.+?)\s+['‘"“](\S.*?)['’"”](?=\s|$)/
+// Artist name repeated in its native script after the romanized one: "MONSTA X 몬스타엑스"
+const NATIVE_SCRIPT_SUFFIX = /^(.*\p{Script=Latin}.*?)\s+[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\s]+$/u
 
 export type ParsedTitle = Readonly<{ artist: string; song: string }>
 
@@ -17,9 +26,12 @@ const stripFeaturing = (s: string): string => s.replace(FEATURING, "").trim()
 const cleanSegment = (s: string): string => stripFeaturing(s).replace(TRAILING_NOISE, "").trim()
 
 // Channels that upload other artists' music: their name is not the artist
-const NON_ARTIST_CHANNEL = /lyric|letra|karaoke|\bmusic\b|records|hits|\bmix\b|\btv\b|playlist|vibes/i
+const NON_ARTIST_CHANNEL = /lyric|letra|karaoke|\bmusic\b|records|entertainment|\blabels?\b|hits|\bmix\b|\btv\b|playlist|vibes/i
 
 const normalize = (s: string): string => s.toLowerCase().normalize("NFD").replace(/[^\p{L}\p{N}]/gu, "")
+
+// Same name ignoring case, accents, spacing and punctuation ("L’Arc~en~Ciel" vs "L'Arc-en-Ciel")
+export const sameName = (a: string, b: string): boolean => normalize(a) !== "" && normalize(a) === normalize(b)
 
 // "Bad Bunny - Topic", "BadBunnyVEVO", "Bad Bunny Official" -> "Bad Bunny"
 export const artistFromChannel = (channel: string | undefined): string => {
@@ -68,7 +80,14 @@ const parseTitleText = (title: string): ParsedTitle => {
     return { artist: title.slice(0, jpOpen).trim(), song: title.slice(jpOpen + 1, jpClose).trim() }
   }
 
-  const clean = title.replace(/\[.*?\]|\(.*?\)/g, " ").replace(/\s+/g, " ").trim()
+  const clean = title.replace(/\[.*?\]|\(.*?\)/g, " ").replace(SUBTITLE_NOISE, " ").replace(/\s+/g, " ").trim()
+
+  const quoted = clean.match(QUOTED_SONG)
+  if (quoted) {
+    const artist = stripFeaturing(quoted[1].replace(/[\s\-–—|│:]+$/, "")).replace(NATIVE_SCRIPT_SUFFIX, "$1")
+    const song = quoted[2].trim()
+    if (artist && song) return { artist, song }
+  }
 
   // Removing "(Video Oficial)" can leave doubled separators ("Song - - Artist"): drop the leftovers
   const segments = clean
