@@ -120,6 +120,7 @@ export async function bootstrap(): Promise<void> {
     updateUI: queueDisplay.ensureRendering,
     initializeQueueDisplay: queueDisplay.initializeQueueDisplay,
     refreshButtonMessage: queueDisplay.refreshButtonMessage,
+    onChannelMessage: queueDisplay.onChannelMessage,
     blacklistIsBlacklisted: blacklist.isBlacklisted,
     autocompleteSearch: searchUC.autocomplete,
     logger,

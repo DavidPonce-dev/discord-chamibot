@@ -6,6 +6,8 @@ import type { GuildSession, Track } from "@/domain/types"
 import type { LoggerPort } from "@/domain/ports"
 import type { MusicUseCases } from "@/usecases/music"
 import { BUTTON_PREFIXES } from "@/config/ui"
+import { QUEUE_MESSAGE_MAX_AGE_MS } from "@/config/timeouts"
+import { MessageFlags } from "discord.js"
 import { PROGRESS_UPDATE_INTERVAL_MS } from "@/config/timeouts"
 
 const mockLogger: LoggerPort = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), event: vi.fn() }
@@ -323,6 +325,87 @@ describe("infra/discord/messages (notifier)", () => {
     await notifier.render("g1", build)
     await notifier.render("g1", build)
     expect(player.edit).toHaveBeenCalledTimes(1)
+  })
+
+  // Discord throttles edits of old messages, which made the player respond slower over time
+  it("reemplaza el reproductor en vez de editarlo cuando el mensaje es viejo", async () => {
+    vi.useFakeTimers()
+    try {
+      const { store, notifier, channel } = setupNotifier()
+      const player = Object.assign(makeMessage("c1", {}), { createdTimestamp: Date.now() })
+      store.messages.set("g1", player as any)
+
+      await notifier.render("g1", () => ({ embeds: ["a"], components: [] }))
+      expect(player.edit).toHaveBeenCalledTimes(1)
+      expect(channel.send).not.toHaveBeenCalled()
+
+      vi.advanceTimersByTime(QUEUE_MESSAGE_MAX_AGE_MS + 1)
+      await notifier.render("g1", () => ({ embeds: ["b"], components: [] }))
+
+      expect(player.edit).toHaveBeenCalledTimes(1)
+      expect(player.delete).toHaveBeenCalledTimes(1)
+      expect(channel.send).toHaveBeenCalledTimes(1)
+      expect(channel.send).toHaveBeenCalledWith(expect.objectContaining({ flags: MessageFlags.SuppressNotifications }))
+      expect(store.messages.get("g1")).toBe(channel.sent[0])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  describe("reproductor siempre al final del chat", () => {
+    const setupDisplay = () => {
+      const ctx = setupNotifier()
+      const display = createQueueDisplay({
+        music: {} as MusicUseCases, notifier: ctx.notifier,
+        queueMessages: ctx.store.messages, queueChannels: ctx.store.channels, logger: mockLogger,
+      })
+      const player = Object.assign(makeMessage("c1", {}), { id: "1000" })
+      ctx.store.messages.set("g1", player as any)
+      return { ...ctx, display, player }
+    }
+    // Same content on purpose: a paused player must be moved down too
+    const build = () => ({ embeds: ["a"], components: [] })
+
+    it("lo vuelve a publicar cuando alguien escribe debajo", async () => {
+      const { store, notifier, channel, display, player } = setupDisplay()
+      await notifier.render("g1", build)
+
+      display.onChannelMessage("g1", "c1", "1001")
+      await notifier.render("g1", build)
+
+      expect(player.delete).toHaveBeenCalledTimes(1)
+      expect(channel.send).toHaveBeenCalledTimes(1)
+      expect(channel.send).toHaveBeenCalledWith(expect.objectContaining({ flags: MessageFlags.SuppressNotifications }))
+      expect(store.messages.get("g1")).toBe(channel.sent[0])
+    })
+
+    it("ignora mensajes de otros canales y anteriores al reproductor", async () => {
+      const { notifier, channel, display, player } = setupDisplay()
+
+      display.onChannelMessage("g1", "otro", "1001")
+      display.onChannelMessage("g1", "c1", "999")
+      await notifier.render("g1", build)
+
+      expect(player.delete).not.toHaveBeenCalled()
+      expect(channel.send).not.toHaveBeenCalled()
+    })
+
+    it("no lo publica otra vez si no hubo mensajes nuevos", async () => {
+      const { store, notifier, channel, display } = setupDisplay()
+      channel.send.mockImplementationOnce(async (payload: unknown) => {
+        const msg = Object.assign(makeMessage("c1", payload), { id: "1002" })
+        channel.sent.push(msg)
+        return msg
+      })
+
+      display.onChannelMessage("g1", "c1", "1001")
+      await notifier.render("g1", build)
+      await notifier.render("g1", () => ({ embeds: ["b"], components: [] }))
+
+      expect(channel.send).toHaveBeenCalledTimes(1)
+      expect(store.messages.get("g1")?.id).toBe("1002")
+      expect(channel.sent[0].edit).toHaveBeenCalledTimes(1)
+    })
   })
 
   it("recrea el mensaje si un usuario lo borro", async () => {

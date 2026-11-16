@@ -22,6 +22,7 @@ export type QueueDisplay = Readonly<{
   ensureRendering: (guildId: string) => void
   initializeQueueDisplay: (guildId: string, channel: GuildTextBasedChannel | undefined) => Promise<void>
   refreshButtonMessage: (interaction: ButtonInteraction, page?: number) => Promise<void>
+  onChannelMessage: (guildId: string, channelId: string, messageId: string) => void
 }>
 
 const buildQueuePayload = (session: GuildSession): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } => {
@@ -107,5 +108,11 @@ export const createQueueDisplay = (deps: QueueDisplayDeps): QueueDisplay => {
     await renderGuild(guildId)
   }
 
-  return { ensureRendering, initializeQueueDisplay, refreshButtonMessage } as const
+  // Only recorded here: the next tick reposts the player, so a burst of chat costs one repost
+  const onChannelMessage = (guildId: string, channelId: string, messageId: string): void => {
+    if (queueChannels.get(guildId)?.id !== channelId) return
+    queueMessages.noteChannelMessage(guildId, messageId)
+  }
+
+  return { ensureRendering, initializeQueueDisplay, refreshButtonMessage, onChannelMessage } as const
 }

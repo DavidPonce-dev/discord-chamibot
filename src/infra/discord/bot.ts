@@ -20,18 +20,21 @@ type BotDeps = Readonly<{
   updateUI: (guildId: string) => void
   initializeQueueDisplay: (guildId: string, channel: GuildTextBasedChannel | undefined) => Promise<void>
   refreshButtonMessage: (interaction: ButtonInteraction, page?: number) => Promise<void>
+  onChannelMessage: (guildId: string, channelId: string, messageId: string) => void
   blacklistIsBlacklisted: (guildId: string) => boolean
   autocompleteSearch: (query: string) => Promise<readonly { name: string; value: string }[]>
   logger: LoggerPort
 }>
 
 export const createBot = (deps: BotDeps): Client => {
-  const { music, queue, radio, admin, search, updateUI, initializeQueueDisplay, refreshButtonMessage, blacklistIsBlacklisted, autocompleteSearch, logger } = deps
+  const { music, queue, radio, admin, search, updateUI, initializeQueueDisplay, refreshButtonMessage, onChannelMessage, blacklistIsBlacklisted, autocompleteSearch, logger } = deps
 
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildVoiceStates,
+      // Only to know that someone posted below the player; message content is not requested
+      GatewayIntentBits.GuildMessages,
     ],
   })
 
@@ -50,6 +53,16 @@ export const createBot = (deps: BotDeps): Client => {
 
   client.on("error", (error: Error) => {
     logger.error("discord", "Error del cliente Discord", { error: error.message })
+  })
+
+  // discord.js waits out rate limits silently: without this a throttled route just looks like a slow bot
+  client.rest.on("rateLimited", (info) => {
+    logger.warn("discord", "Rate limit de Discord", {
+      method: info.method,
+      route: info.route,
+      retryAfterMs: info.retryAfter,
+      global: info.global,
+    })
   })
 
   client.on("guildCreate", async (guild) => {
@@ -82,6 +95,12 @@ export const createBot = (deps: BotDeps): Client => {
       oldChannelId: oldState.channelId,
       newChannelId: newState.channelId,
     })
+  })
+
+  client.on("messageCreate", (message) => {
+    // The bot's own messages are the player itself or replies that delete themselves in seconds
+    if (!message.guildId || message.author.id === client.user?.id) return
+    onChannelMessage(message.guildId, message.channelId, message.id)
   })
 
   client.on("interactionCreate", async (interaction) => {

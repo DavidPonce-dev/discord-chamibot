@@ -1,3 +1,4 @@
+import { MessageFlags } from "discord.js"
 import type {
   GuildTextBasedChannel,
   Message,
@@ -8,12 +9,20 @@ import type {
 import type { NotificationPort, LoggerPort } from "../../domain/ports"
 import type { QueuePayload } from "../../domain/types"
 import { getErrorMessage } from "../../shared/error"
+import { QUEUE_MESSAGE_MAX_AGE_MS } from "../../config/timeouts"
 
 export type QueueMessageStore = {
   get: (guildId: string) => Message | undefined
   set: (guildId: string, msg: Message) => void
   clear: (guildId: string) => void
+  // Someone else posted in the player's channel
+  noteChannelMessage: (guildId: string, messageId: string) => void
+  // A newer message sits below the player
+  isBuried: (guildId: string) => boolean
 }
+
+// Snowflake ids are decimal and grow with time: the longer, then the lexicographically greater, is newer
+const isNewerId = (a: string, b: string): boolean => a.length !== b.length ? a.length > b.length : a > b
 
 export type QueueChannelStore = {
   get: (guildId: string) => GuildTextBasedChannel | undefined
@@ -24,12 +33,21 @@ export type QueueChannelStore = {
 export const createQueueMessageStore = (): { messages: QueueMessageStore; channels: QueueChannelStore } => {
   const messages = new Map<string, Message>()
   const channels = new Map<string, GuildTextBasedChannel>()
+  const latestChannelMessage = new Map<string, string>()
 
   return {
     messages: {
       get: (guildId: string) => messages.get(guildId),
       set: (guildId: string, msg: Message) => { messages.set(guildId, msg) },
       clear: (guildId: string) => { messages.delete(guildId) },
+      noteChannelMessage: (guildId: string, messageId: string) => { latestChannelMessage.set(guildId, messageId) },
+      // Compared by id, not by arrival order: the event for a message can land while the player is
+      // still being sent
+      isBuried: (guildId: string) => {
+        const player = messages.get(guildId)
+        const latest = latestChannelMessage.get(guildId)
+        return player !== undefined && latest !== undefined && isNewerId(latest, player.id)
+      },
     },
     channels: {
       get: (guildId: string) => channels.get(guildId),
@@ -93,7 +111,12 @@ export const createDiscordNotifier = (
     const serialized = JSON.stringify(payload)
 
     const existing = messages.get(guildId)
-    if (existing && existing.channelId === channel.id) {
+    // Edits of an old message get rate limited, and every render (button clicks included) then
+    // waits behind the throttled one: replace the message instead of editing it
+    const expired = existing !== undefined && Date.now() - existing.createdTimestamp > QUEUE_MESSAGE_MAX_AGE_MS
+    // The player stays at the bottom of the chat: a message can't be moved, only posted again
+    const replace = expired || messages.isBuried(guildId)
+    if (existing && existing.channelId === channel.id && !replace) {
       if (lastRendered.get(guildId) === serialized) return
       try {
         await existing.edit(toMessageOptions(payload))
@@ -111,7 +134,7 @@ export const createDiscordNotifier = (
         }
       }
     } else if (existing) {
-      // The player follows the channel of the latest /p
+      // The player follows the channel of the latest /p, expired or was buried
       existing.delete().catch(() => {})
     }
 
@@ -120,7 +143,10 @@ export const createDiscordNotifier = (
     if (generationOf(guildId) !== generation) return
 
     try {
-      const sent = await channel.send(toMessageOptions(payload))
+      // A repost is housekeeping: it must not ping the channel
+      const sent = await channel.send(replace
+        ? { ...toMessageOptions(payload), flags: MessageFlags.SuppressNotifications }
+        : toMessageOptions(payload))
       if (generationOf(guildId) !== generation) {
         sent.delete().catch(() => {})
         return
