@@ -3,6 +3,8 @@ import type { Mock } from "vitest"
 import { createMusicUseCases } from "@/usecases/music"
 import { createMockPorts } from "./mock-ports"
 import type { Ports } from "@/domain/ports"
+import { ok } from "@/shared/result"
+import { LASTFM_NAME_CHECK_TIMEOUT_MS } from "@/config/timeouts"
 
 describe("usecases/music", () => {
   describe("play", () => {
@@ -23,6 +25,63 @@ describe("usecases/music", () => {
         expect(result.value[0].title).toBe("Test Track")
         expect(result.value[0].requestedBy).toBe("u1")
       }
+    })
+
+    describe("titulos invertidos (cancion - artista)", () => {
+      const reversedTitle = { url: "https://youtube.com/watch?v=x", title: "My Dear - L’Arc~en~Ciel + Sub. Español", id: "x", channel: "FanSubs" }
+      const lastfmHit = { name: "My Dear", artist: "L'Arc~en~Ciel", listeners: 1000, url: "u" }
+      const portsWith = (
+        track: Record<string, string>,
+        searchTrack: (track: string, limit?: number, artist?: string) => Promise<readonly (typeof lastfmHit)[]>,
+      ) => createMockPorts({
+        search: { ...createMockPorts().search, resolveQuery: async () => ok({ tracks: [{ ...reversedTitle, ...track }] }) },
+        lastfm: { ...createMockPorts().lastfm, searchTrack },
+      })
+
+      it("los corrige cuando Last.fm solo conoce el orden invertido", async () => {
+        const music = createMusicUseCases(portsWith({}, async (_track, _limit, artist) => (artist === "My Dear" ? [] : [lastfmHit])))
+        const result = await music.play("my dear", "g1", "u1", "v1", {})
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+          expect(result.value[0]).toMatchObject({ artist: "L'Arc~en~Ciel", song: "My Dear", canonicalTitle: "L'Arc~en~Ciel - My Dear" })
+        }
+      })
+
+      it("no toca un titulo que Last.fm confirma en su orden", async () => {
+        const hit = { ...lastfmHit, name: "L'Arc~en~Ciel", artist: "My Dear" }
+        const music = createMusicUseCases(portsWith({}, async () => [hit, lastfmHit]))
+        const result = await music.play("my dear", "g1", "u1", "v1", {})
+        expect(result.ok).toBe(true)
+        if (result.ok) expect(result.value[0]).toMatchObject({ artist: "My Dear", song: "L’Arc~en~Ciel" })
+      })
+
+      it("no cambia nada si Last.fm no conoce ninguno de los dos ordenes", async () => {
+        const music = createMusicUseCases(portsWith({}, async () => []))
+        const result = await music.play("my dear", "g1", "u1", "v1", {})
+        expect(result.ok).toBe(true)
+        if (result.ok) expect(result.value[0]).toMatchObject({ artist: "My Dear", song: "L’Arc~en~Ciel" })
+      })
+
+      it("no consulta Last.fm si YouTube trae la metadata exacta", async () => {
+        const searchTrack = vi.fn(async () => [lastfmHit])
+        const music = createMusicUseCases(portsWith({ track: "My Dear", artist: "L'Arc~en~Ciel" }, searchTrack))
+        await music.play("my dear", "g1", "u1", "v1", {})
+        expect(searchTrack).not.toHaveBeenCalled()
+      })
+
+      it("no espera a un Last.fm colgado", async () => {
+        vi.useFakeTimers()
+        try {
+          const music = createMusicUseCases(portsWith({}, () => new Promise(() => {})))
+          const pending = music.play("my dear", "g1", "u1", "v1", {})
+          await vi.advanceTimersByTimeAsync(LASTFM_NAME_CHECK_TIMEOUT_MS)
+          const result = await pending
+          expect(result.ok).toBe(true)
+          if (result.ok) expect(result.value[0]).toMatchObject({ artist: "My Dear", song: "L’Arc~en~Ciel" })
+        } finally {
+          vi.useRealTimers()
+        }
+      })
     })
 
     it("adds track to existing session", async () => {

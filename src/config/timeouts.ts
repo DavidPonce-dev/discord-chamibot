@@ -1,5 +1,7 @@
 export const PROGRESS_UPDATE_INTERVAL_MS = 5_000
 export const AUTO_DELETE_MS = 5_000
+// Discord throttles edits of messages older than an hour: the player is reposted before that
+export const QUEUE_MESSAGE_MAX_AGE_MS = 50 * 60_000
 export const SEEK_SETTLE_DELAY_MS = 100
 export const YTDL_TIMEOUT_MS = 30_000
 export const YTDL_RESOLVE_TIMEOUT_MS = 15_000
@@ -10,6 +12,8 @@ export const AUTOCOMPLETE_SUGGEST_TIMEOUT_MS = 1_500
 export const AUTOCOMPLETE_FALLBACK_TIMEOUT_MS = 2_500
 export const AUTOCOMPLETE_CACHE_MS = 30_000
 export const LASTFM_TIMEOUT_MS = 8_000
+// Runs while /p joins the voice channel: short, so a slow Last.fm never delays playback
+export const LASTFM_NAME_CHECK_TIMEOUT_MS = 2_000
 export const GROQ_RECOMMEND_TIMEOUT_MS = 8_000
 export const GROQ_PARSE_TIMEOUT_MS = 5_000
 // Cookie session watchdog: how often to check for SID/PSID, and the max wait between failed recoveries

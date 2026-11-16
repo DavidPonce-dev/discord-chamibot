@@ -25,7 +25,7 @@ export type LastFmPort = Readonly<{
   getSimilarTracks: (artist: string, track: string, limit?: number) => Promise<readonly LastFmSimilarTrack[]>
   getSimilarArtists: (artist: string, limit?: number) => Promise<readonly LastFmSimilarArtist[]>
   getArtistTopTracks: (artist: string, limit?: number) => Promise<readonly LastFmSimilarTrack[]>
-  searchTrack: (track: string, limit?: number) => Promise<readonly LastFmSearchResult[]>
+  searchTrack: (track: string, limit?: number, artist?: string) => Promise<readonly LastFmSearchResult[]>
   getTrackTopTags: (artist: string, track: string) => Promise<readonly LastFmTag[]>
 }>
 

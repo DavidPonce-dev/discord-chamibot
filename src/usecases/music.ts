@@ -4,9 +4,9 @@ import type { Result } from "../shared/result"
 import { ok, err } from "../shared/result"
 import * as Queue from "../domain/queue"
 import * as Session from "../domain/session"
-import { youtubeThumbnail, extractArtist, parseTitle } from "../domain/track-parser"
+import { youtubeThumbnail, extractArtist, parseTitle, sameName } from "../domain/track-parser"
 import { recommendAndEnqueue } from "../domain/radio"
-import { SEEK_SETTLE_DELAY_MS } from "../config/timeouts"
+import { SEEK_SETTLE_DELAY_MS, LASTFM_NAME_CHECK_TIMEOUT_MS } from "../config/timeouts"
 import { RADIO_HISTORY_LIMIT } from "../config/radio"
 
 type MusicUseCasesCallbacks = Readonly<{
@@ -361,6 +361,40 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
     })
   }
 
+  // Fan uploads often title videos "Song - Artist", and their channel gives no hint. Ask Last.fm
+  // which order is a real track and swap the names only when the reversed one is the only match
+  const fixReversedNames = async (track: Track): Promise<Track> => {
+    const { artist, song } = track
+    if (!artist || !song) return track
+
+    const findTrack = async (asArtist: string, asSong: string) => {
+      const hits = await ports.lastfm.searchTrack(asSong, 5, asArtist)
+      return hits.find(h => sameName(h.artist, asArtist) && sameName(h.name, asSong)) ?? null
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timedOut = new Promise<null>(resolve => {
+      timer = setTimeout(() => resolve(null), LASTFM_NAME_CHECK_TIMEOUT_MS)
+    })
+    try {
+      const found = await Promise.race([Promise.all([findTrack(artist, song), findTrack(song, artist)]), timedOut])
+      if (!found) return track
+      const [straight, reversed] = found
+      if (straight || !reversed) return track
+      ports.logger.debug("music", "Titulo invertido corregido con Last.fm", { title: track.title })
+      return {
+        ...track,
+        artist: reversed.artist,
+        song: reversed.name,
+        canonicalTitle: `${reversed.artist} - ${reversed.name}`,
+      }
+    } catch {
+      return track
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   const play = async (
     query: string,
     guildId: string,
@@ -380,13 +414,21 @@ export const createMusicUseCases = (ports: Ports, callbacks?: MusicUseCasesCallb
       return err("not_found")
     }
 
-    const ensured = await ensureSession(guildId, voiceChannelId, adapterCreator)
+    const [first] = resolved.value.tracks
+    // Only single tracks whose names were guessed from the title: YouTube's own metadata is exact,
+    // and a playlist would mean two Last.fm calls per track
+    const namesGuessed = resolved.value.tracks.length === 1 && !(first.track && first.artist)
+    const parsedTracks = resolved.value.tracks.map((t: ResolvedTrack) => toTrack(t, userId))
+
+    const [ensured, tracks] = await Promise.all([
+      ensureSession(guildId, voiceChannelId, adapterCreator),
+      namesGuessed ? Promise.all(parsedTracks.map(fixReversedNames)) : parsedTracks,
+    ])
     if (!ensured.ok) return err(ensured.error)
     // Re-read: another /p waiting on the same join may have queued its track already
     const session = getSession(guildId)
     if (!session) return err("no_session")
 
-    const tracks = resolved.value.tracks.map((t: ResolvedTrack) => toTrack(t, userId))
     const newQueue = tracks.length > 1
       ? Queue.addMultiple(session.queue, tracks)
       : Queue.addTrack(session.queue, tracks[0])

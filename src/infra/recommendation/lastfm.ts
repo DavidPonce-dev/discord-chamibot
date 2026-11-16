@@ -65,9 +65,9 @@ export const createLastFmAdapter = (apiKey: string): LastFmPort => {
     }
   }
 
-  const searchTrack = async (track: string, limit = 5): Promise<readonly LastFmSearchResult[]> => {
+  const searchTrack = async (track: string, limit = 5, artist?: string): Promise<readonly LastFmSearchResult[]> => {
     try {
-      const response = await getTrackApi().search({ track, limit })
+      const response = await getTrackApi().search(artist ? { track, artist, limit } : { track, limit })
       if (!response.results?.trackmatches?.track) return []
       return response.results.trackmatches.track.map((t): LastFmSearchResult => ({
         name: t.name,
